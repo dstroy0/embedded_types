@@ -106,6 +106,21 @@ typedef _Bool embed_bool;
  *          halve every lane on a machine that has more.
  */
 #ifndef EMBED_WORD_BITS
+/**
+ * @brief Set to 0 where the word width was derived here, 1 where the build stated it.
+ *
+ * @note This header is the only place that knows which of the two happened, so it answers rather
+ *       than asking a build to state it a second time. A build that overrode the width and had to
+ *       set this as well would be carrying two copies of one fact, and the copy nobody remembers to
+ *       set is the one that reports the override as a defect.
+ * @note What reads it is any check that the word matches the pointer it would have been derived
+ *       from. That holds only where the derivation ran, and an override says the two differ on
+ *       purpose.
+ * @note Defined on both arms, so #ifdef EMBED_WORD_BITS_WAS_OVERRIDDEN is always true. Test it
+ *       with #if.
+ */
+#define EMBED_WORD_BITS_WAS_OVERRIDDEN 0
+
 #if !defined(UINTPTR_MAX)
 #error "embed_types.h needs UINTPTR_MAX to derive the word width - define EMBED_WORD_BITS instead"
 #elif UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
@@ -117,6 +132,10 @@ typedef _Bool embed_bool;
 #else
 #error "UINTPTR_MAX is not 16, 32 or 64 bits wide - define EMBED_WORD_BITS for this target"
 #endif
+#else
+
+/** @brief Set to 1 where the build stated EMBED_WORD_BITS ahead of this header. */
+#define EMBED_WORD_BITS_WAS_OVERRIDDEN 1
 #endif
 
 /**

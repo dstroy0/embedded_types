@@ -8,12 +8,47 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-Two CTest targets, one per header under test. `EMBEDDED_TYPES_BUILD_TESTS` defaults on when this is
-the top-level project and off when it is consumed by another, so `add_subdirectory` does not build
-suites nobody asked for.
+Three CTest targets, one per header under test. `EMBEDDED_TYPES_BUILD_TESTS` defaults on when this
+is the top-level project and off when it is consumed by another, so `add_subdirectory` does not
+build suites nobody asked for.
 
-There is no test framework. The library is widths and macros, and a dependency pulled in to prove a
-width is a dependency every consumer inherits.
+`test/harness.py` carries each build tree's flags, so running one is a command rather than a
+remembered incantation:
+
+```sh
+python test/harness.py test                     # the library as it ships
+python test/harness.py test --tree build-werror # the same, with every warning an error
+python test/harness.py suites --strict          # every case registered, none behind a conditional
+python test/harness.py cases test/unit/test_embed_types
+```
+
+The suites use [Unity](https://github.com/ThrowTheSwitch/Unity), fetched at `v2.6.1` when this
+directory is configured, and generating a runner needs `ruby` on `PATH`. Both belong to `test/`
+alone. The target a consumer links carries the include directory and the C11 requirement and
+nothing else, so a library that includes these headers inherits no test framework.
+
+## Adding a suite
+
+A suite is a directory under `test/unit/` holding exactly one `.c` of cases and a `CMakeLists.txt`
+that names it:
+
+```cmake
+embedded_types_add_suite(test_embed_something)
+```
+
+Then one `add_subdirectory` line in `test/unit/CMakeLists.txt`. Nothing central holds a list of
+suite names.
+
+A case is `void test_<name>(void)` at file scope. Two shapes make a case silently never run, and
+`harness.py suites --strict` reports both:
+
+- **A definition the generator walks past.** Unity's generator collects `void test_<name>(void)` and
+  nothing else, so a case named anything else is never registered and the suite still passes.
+- **A case defined inside a preprocessor conditional.** The generator reads case names out of the
+  source text and does not see the conditional, so the runner declares and calls the case however it
+  went. Where it went the other way the definition is gone and the suite fails to link. Put the
+  `#if` inside the case body, and report `TEST_IGNORE_MESSAGE` on the arm that cannot measure
+  anything.
 
 ## Where the proof lives
 
@@ -30,6 +65,16 @@ What the suites cover is what a static assertion cannot see:
 - **`EMBED_RAW`.** A word read from an odd address, checked against a `memcpy` of the same bytes.
 - **Dispatch wiring.** A table can satisfy every offset assertion and still be initialized with the
   wrong function in a slot. The suite calls through it.
+- **The byte order.** `EMBED_BIG_ENDIAN` is derived from `__BYTE_ORDER__`; the case measures how the
+  target actually lays a word out in memory and compares. Reading the same macro back would restate
+  the derivation rather than check it.
+- **The feature tests.** `EMBED_HAS_ATTRIBUTE` and `EMBED_HAS_BUILTIN` answer zero for a name
+  nothing defines. One that answered non-zero would answer non-zero for every name, and every
+  attribute wrapper would be emitted on a compiler that rejects it.
+- **The attribute wrappers.** That a marked definition is still a definition and still computes what
+  its body says, and that the alignment and packing attributes reach the type rather than expanding
+  to nothing unnoticed. Where the compiler cannot carry one the case reports `IGNORE`, so a build
+  that measured nothing says so rather than passing.
 
 ## Never test the library with itself
 
@@ -44,9 +89,12 @@ and `memcpy` are the compiler's and the standard's, not this library's.
 ## Formatting
 
 ```sh
-clang-format -i include/*.h test/*.c
+clang-format -i include/*.h test/unit/*/test_*.c
 npm run format
 ```
+
+`unity_runner.c` is generated and is listed in `.clang-format-ignore`. Formatting it by hand is
+undone on the next generation.
 
 120 columns. CI checks and never rewrites: a formatter that rewrites on CI produces commits nobody
 reviewed and races the author's own push. The fix belongs in the working tree.

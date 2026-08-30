@@ -16,31 +16,29 @@
  * @note What runs here is what a static assertion cannot see. A table can satisfy every offset
  *       assertion and still be wired to the wrong functions, because an initializer names members
  *       and the assertions measure positions.
+ * @note EMBED_NARG, EMBED_CAT and EMBED_CALL are declared in embed_compiler_directives.h and are
+ *       exercised here because EMBED_TABLE_LAYOUT is built out of them. test_embed_compiler_
+ *       directives owns them as its header's own machinery.
  */
-#include <stdio.h>
-
 #include "embed_dispatch_layout.h"
 #include "embed_types.h"
 
-/** @brief Counts the checks that did not hold, which becomes the exit status. */
-static int failure_count;
+#include "unity.h"
 
 /**
- * @brief Reports one check and counts it when it does not hold.
+ * @brief Runs before each case, and has nothing to prepare.
  *
- * @param[in] holds_ Condition that is expected to be true.
- * @param[in] what_  String literal naming what was checked, printed on failure.
- * @note A macro rather than a function so the failing text appears at the line that failed.
+ * @note Unity calls this whether or not it does anything, and unity_internals.h declares it. The
+ *       table below is const, so no case can leave state behind for the next one.
  */
-#define CHECK(holds_, what_)                                                                                           \
-    do                                                                                                                 \
-    {                                                                                                                  \
-        if (!(holds_))                                                                                                 \
-        {                                                                                                              \
-            (void)printf("FAIL %s:%d %s\n", __FILE__, __LINE__, what_);                                                \
-            failure_count++;                                                                                           \
-        }                                                                                                              \
-    } while (0)
+void setUp(void)
+{
+}
+
+/** @brief Runs after each case, and has nothing to release. */
+void tearDown(void)
+{
+}
 
 /**
  * @brief Checks that the argument count answers the number of arguments it was handed.
@@ -50,18 +48,19 @@ static int failure_count;
  * @note One, two, twenty-three and twenty-four are the cases that matter: the floor, the step, and
  *       both sides of the ceiling the family stops at.
  */
-static void the_argument_count_answers_the_length_of_the_list(void)
+void test_the_argument_count_answers_the_length_of_the_list(void)
 {
-    CHECK(EMBED_NARG(a) == 1, "one argument counts as one");
-    CHECK(EMBED_NARG(a, b) == 2, "two arguments count as two");
-    CHECK(EMBED_NARG(a, b, c, d, e, f, g, h) == 8, "eight arguments count as eight");
-    CHECK(EMBED_NARG(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w) == 23,
-          "twenty-three arguments count as twenty-three");
-    CHECK(EMBED_NARG(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x) == 24,
-          "twenty-four arguments count as twenty-four");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, EMBED_NARG(a), "one argument counts as one");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, EMBED_NARG(a, b), "two arguments count as two");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(8, EMBED_NARG(a, b, c, d, e, f, g, h), "eight arguments count as eight");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(23, EMBED_NARG(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w),
+                                  "twenty-three arguments count as twenty-three");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(24,
+                                  EMBED_NARG(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x),
+                                  "twenty-four arguments count as twenty-four");
 }
 
-/** @brief A value the paste test reaches only by building its name from two tokens. */
+/** @brief A value the paste case reaches only by building its name from two tokens. */
 #define TEST_PASTED_NAME_7 7
 
 /**
@@ -70,10 +69,11 @@ static void the_argument_count_answers_the_length_of_the_list(void)
  * @note The point of the outer step. Pasting the name of a macro rather than its value is the
  *       failure this shape exists to avoid, and it is what EMBED_TABLE_LAYOUT depends on.
  */
-static void the_paste_joins_a_name_to_an_expanded_count(void)
+void test_the_paste_joins_a_name_to_an_expanded_count(void)
 {
-    CHECK(EMBED_CAT(TEST_PASTED_NAME_, 7) == 7, "a literal suffix pastes");
-    CHECK(EMBED_CAT(TEST_PASTED_NAME_, EMBED_NARG(a, b, c, d, e, f, g)) == 7, "an expanded count pastes");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(7, EMBED_CAT(TEST_PASTED_NAME_, 7), "a literal suffix pastes");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(7, EMBED_CAT(TEST_PASTED_NAME_, EMBED_NARG(a, b, c, d, e, f, g)),
+                                  "an expanded count pastes");
 }
 
 /** @brief The operand block the compound-literal call builds at its call site. */
@@ -102,13 +102,16 @@ static embed_index call_probe(const CallProbeArgs *args)
  * @note The zeroed member is the part worth proving. It is a property of the standard rather than
  *       of a compiler, and a consumer relies on it every time it omits a default.
  */
-static void the_call_passes_named_members_and_zeroes_the_rest(void)
+void test_the_call_passes_named_members_and_zeroes_the_rest(void)
 {
-    CHECK(EMBED_CALL(call_probe, CallProbeArgs, .first = 1u, .second = 1u, .third = 1u) == 7u,
-          "all three members arrive");
-    CHECK(EMBED_CALL(call_probe, CallProbeArgs, .second = 1u) == 2u, "an omitted member is zero");
-    CHECK(EMBED_CALL(call_probe, CallProbeArgs, .third = 1u) == 4u, "only the named member is set");
-    CHECK(EMBED_CALL(call_probe, CallProbeArgs, 1u, 1u, 1u) == 7u, "positional initializers arrive");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(7u, EMBED_CALL(call_probe, CallProbeArgs, .first = 1u, .second = 1u, .third = 1u),
+                                   "all three members arrive");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(2u, EMBED_CALL(call_probe, CallProbeArgs, .second = 1u),
+                                   "an omitted member is zero");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(4u, EMBED_CALL(call_probe, CallProbeArgs, .third = 1u),
+                                   "only the named member is set");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(7u, EMBED_CALL(call_probe, CallProbeArgs, 1u, 1u, 1u),
+                                   "positional initializers arrive");
 }
 
 /** @brief Answers 1, so a caller can tell which slot it reached. */
@@ -161,12 +164,13 @@ EMBED_TABLE_STORAGE ProbeTable probe EMBED_UNUSED = {
  * @note What the static assertions cannot see. They measure where the members sit; an initializer
  *       naming the wrong function satisfies every offset and still dispatches wrongly.
  */
-static void each_member_reaches_the_function_it_names(void)
+void test_each_member_reaches_the_function_it_names(void)
 {
-    CHECK(probe.first() == 1u, "the first member reaches its own function");
-    CHECK(probe.second() == 2u, "the second member reaches its own function");
-    CHECK(probe.third() == 4u, "the third member reaches its own function");
-    CHECK(probe.first() + probe.second() + probe.third() == 7u, "no two members reach the same function");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1u, probe.first(), "the first member reaches its own function");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(2u, probe.second(), "the second member reaches its own function");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(4u, probe.third(), "the third member reaches its own function");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(7u, probe.first() + probe.second() + probe.third(),
+                                   "no two members reach the same function");
 }
 
 /**
@@ -176,29 +180,8 @@ static void each_member_reaches_the_function_it_names(void)
  *       what the static assertion inside EMBED_TABLE_LAYOUT proves at compile time. Repeating it
  *       here catches a build where that assertion was compiled out.
  */
-static void the_table_is_exactly_its_three_pointers(void)
+void test_the_table_is_exactly_its_three_pointers(void)
 {
-    CHECK(sizeof(ProbeTable) == 3u * EMBED_FUNCTION_POINTER_BYTES, "the table is three pointers wide");
-}
-
-/**
- * @brief Runs every case and reports the count that did not hold.
- *
- * @return 0 where every check held, 1 otherwise.
- */
-int main(void)
-{
-    the_argument_count_answers_the_length_of_the_list();
-    the_paste_joins_a_name_to_an_expanded_count();
-    the_call_passes_named_members_and_zeroes_the_rest();
-    each_member_reaches_the_function_it_names();
-    the_table_is_exactly_its_three_pointers();
-
-    if (failure_count != 0)
-    {
-        (void)printf("%d check(s) failed\n", failure_count);
-        return 1;
-    }
-    (void)printf("embed_dispatch_layout: all checks held\n");
-    return 0;
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(3u * EMBED_FUNCTION_POINTER_BYTES, sizeof(ProbeTable),
+                                     "the table is three pointers wide");
 }

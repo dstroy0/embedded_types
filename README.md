@@ -39,30 +39,32 @@ EMBED_TABLE_LAYOUT(ScanNs, length, is_empty);
 
 ## Where things are
 
-|                                                                                  |                                                                                     |
-| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| [`include/embed_types.h`](include/embed_types.h)                                 | the widths, the boolean, the word, the index, the raw-access word, the assertions   |
-| [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h)     | feature probes, the static assertion, attribute wrappers, the call shape, the guards |
-| [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)             | the assertions that pin a table of function pointers to consecutive slots           |
-| [`test/`](test)                                                                  | one suite per header, under CTest, with no test-framework dependency                |
-| [`LICENSES/`](LICENSES)                                                          | the AGPL text, and the two licenses the SPDX expression names                       |
+|                                                                              |                                                                                      |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| [`include/embed_types.h`](include/embed_types.h)                             | the widths, the boolean, the word, the index, the raw-access word, the assertions    |
+| [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | feature probes, the static assertion, attribute wrappers, the call shape, the guards |
+| [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | the assertions that pin a table of function pointers to consecutive slots            |
+| [`test/unit/`](test/unit)                                                    | one Unity suite per header, each its own CTest target                                |
+| [`test/harness.py`](test/harness.py)                                         | suite discovery, Unity runner generation, and the two build trees                    |
+| [`cmake/`](cmake)                                                            | `embedded_types_add_suite()`, which a suite directory calls to declare itself        |
+| [`LICENSES/`](LICENSES)                                                      | the AGPL text, and the two licenses the SPDX expression names                        |
 
 ## What is in it
 
-| | |
-| ----------------------------------------------------- | ------------------------------------------------------------------------ |
-| `embed_u8` … `embed_u64`, `embed_i8` … `embed_i64`    | the exact widths, each pinned by an assertion                            |
-| `embed_bool`, `EMBED_TRUE`, `EMBED_FALSE`             | a truth value that normalizes any nonzero to one                         |
-| `embed_word`, `embed_iword`                           | the machine word, derived from the target rather than stated             |
-| `embed_index`                                         | an offset or a length, never `size_t`                                    |
-| `embed_raw_word`                                      | the word, readable from any address                                      |
-| `EMBED_STATIC_ASSERT`                                 | one spelling, correct in C11 and C23, reaching no header                 |
-| `EMBED_HAS_ATTRIBUTE`, `EMBED_HAS_BUILTIN`            | asks the compiler what it supports, rather than reading its identity     |
-| `EMBED_INLINE`, `EMBED_FLATTEN`, `EMBED_ENUM_PACKED`, `EMBED_ALIGN`, `EMBED_ALIAS`, `EMBED_RAW`, `EMBED_UNUSED`, `EMBED_WEAK` | the attribute wrappers, each stating what its absence costs |
-| `EMBED_CAT`, `EMBED_NARG`, `EMBED_ARG_N`              | token paste and argument count                                           |
-| `EMBED_CALL`                                          | one pointer to a compound literal, rather than a long parameter list      |
-| `EMBED_TABLE_LAYOUT`, `EMBED_TABLE_STORAGE`           | a dispatch table's slots, asserted at compile time                        |
-| `EMBED_BIG_ENDIAN`, `EMBED_FAST_UNALIGNED_LOAD`       | what the compiler states about the target                                |
+|                                                                                                                               |                                                                      |
+| ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `embed_u8` … `embed_u64`, `embed_i8` … `embed_i64`                                                                            | the exact widths, each pinned by an assertion                        |
+| `embed_bool`, `EMBED_TRUE`, `EMBED_FALSE`                                                                                     | a truth value that normalizes any nonzero to one                     |
+| `embed_word`, `embed_iword`                                                                                                   | the machine word, derived from the target rather than stated         |
+| `embed_index`                                                                                                                 | an offset or a length, never `size_t`                                |
+| `embed_raw_word`                                                                                                              | the word, readable from any address                                  |
+| `EMBED_STATIC_ASSERT`                                                                                                         | one spelling, correct in C11 and C23, reaching no header             |
+| `EMBED_HAS_ATTRIBUTE`, `EMBED_HAS_BUILTIN`                                                                                    | asks the compiler what it supports, rather than reading its identity |
+| `EMBED_INLINE`, `EMBED_FLATTEN`, `EMBED_ENUM_PACKED`, `EMBED_ALIGN`, `EMBED_ALIAS`, `EMBED_RAW`, `EMBED_UNUSED`, `EMBED_WEAK` | the attribute wrappers, each stating what its absence costs          |
+| `EMBED_CAT`, `EMBED_NARG`, `EMBED_ARG_N`                                                                                      | token paste and argument count                                       |
+| `EMBED_CALL`                                                                                                                  | one pointer to a compound literal, rather than a long parameter list |
+| `EMBED_TABLE_LAYOUT`, `EMBED_TABLE_STORAGE`                                                                                   | a dispatch table's slots, asserted at compile time                   |
+| `EMBED_BIG_ENDIAN`, `EMBED_FAST_UNALIGNED_LOAD`                                                                               | what the compiler states about the target                            |
 
 ## The two things it refuses to guess
 
@@ -86,6 +88,19 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+Or through the harness, which carries each build tree's flags so running one is a command rather
+than a remembered incantation:
+
+```sh
+python test/harness.py test                     # the library as it ships
+python test/harness.py test --tree build-werror # the same, with every warning an error
+python test/harness.py suites --strict          # every case registered, none behind a conditional
+```
+
+Configuring fetches [Unity](https://github.com/ThrowTheSwitch/Unity) at `v2.6.1`, and generating a
+suite's runner needs `ruby` on `PATH`. Both are this directory's dependencies alone — the target a
+consumer links carries the include directory and the C11 requirement and nothing else.
+
 Consuming it:
 
 ```cmake
@@ -99,9 +114,13 @@ its diagnostics onto a caller is deciding something that is not its own.
 
 ## Status
 
-0.1.0, pre-1.0, so names may change. Two suites, green under
-`-Wall -Wextra -Wpedantic -Wshadow -Wconversion -Wsign-conversion -Wcast-align -Wcast-qual
--Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith -Wvla -Werror`.
+0.1.0, pre-1.0, so names may change. Three suites and 26 cases, green under
+`-Wall -Wextra -Wpedantic -Wshadow -Wcast-align -Wcast-qual -Wstrict-prototypes -Wpointer-arith
+-Wvla -Werror`.
+
+The suites drop `-Wconversion`, `-Wsign-conversion` and `-Wmissing-prototypes` from the set the
+library itself is compiled under, and `CMakeLists.txt` documents which of Unity's shapes each one
+cannot survive. The headers still meet the full set in every consumer that carries it.
 
 ## Licensing
 

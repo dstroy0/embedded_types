@@ -73,9 +73,32 @@ set(EMBEDDED_TYPES_WARNINGS
     $<$<C_COMPILER_ID:MSVC>:/W4>
     $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:MSVC>>:/WX>)
 
+# The suites take the same set with three flags removed, each for a reason the framework imposes:
+#
+#   -Wconversion       Unity's assertion macros widen and compare their operands inside the macro
+#   -Wsign-conversion  body, so the cast is attributed to the case's own line. Both fire on every
+#                      TEST_ASSERT_EQUAL_* over a type narrower than int, which is most of what this
+#                      library declares. A pragma per site would hide a real narrowing among them.
+#   -Wmissing-prototypes
+#                      a case is `void test_<name>(void)` at file scope with nothing declaring it.
+#                      The generated unity_runner.c is what declares and calls it, and the case's
+#                      own translation unit never sees that file.
+#
+# Everything else stays on, -Wpedantic included. The library itself is still compiled under the full
+# set by every consumer that carries it, and by the suites that include it.
+set(EMBEDDED_TYPES_TEST_WARNINGS
+    $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic;-Wshadow;-Wcast-align;-Wcast-qual;-Wstrict-prototypes;-Wpointer-arith;-Wvla>
+    $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:GNU,Clang,AppleClang>>:-Werror>
+    $<$<C_COMPILER_ID:MSVC>:/W4>
+    $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:MSVC>>:/WX>)
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+# embedded_types_add_suite() lives in cmake/ rather than in test/, so a consumer that vendors this
+# tree gets the function with the module path it already sets rather than with a path into test/.
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 if(EMBEDDED_TYPES_BUILD_TESTS)
   enable_testing()

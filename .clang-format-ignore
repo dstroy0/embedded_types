@@ -1,6 +1,7 @@
-# Nothing in this repository is generated, so nothing is exempt from the formatter.
+# Unity's generator writes these, and one is rewritten on every build whose cases changed.
+# Formatting it by hand is undone on the next generation, and formatting it in CI reports a dirty
+# tree on every build that regenerates one.
 #
-# The file is kept because the exemption it exists to record is one a repository acquires rather
-# than starts with: a generated header formatted by hand is undone on the next generator run, and
-# formatted in CI it reports a dirty tree on every build that regenerates it. Add the path here when
-# that happens, not a formatter suppression at the site.
+# This is the only exemption. Add a path here when a generator acquires another output, rather than
+# a formatter suppression at the site.
+test/**/unity_runner.c
