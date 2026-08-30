@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: embedded_types
+abstract: >-
+  Fixed widths, a machine word, and the compile-time machinery a C11 embedded
+  library is written in. The exact widths are named once, the machine word is
+  derived from the target's pointer width and refuses to guess where it cannot,
+  and the machinery every library above would otherwise define for itself lives
+  here: a static assertion, feature probes that ask the compiler rather than
+  reading its identity, the attribute wrappers, the unaligned-access word, and
+  the assertions that pin a dispatch table's members to consecutive slots. Header
+  only, nothing allocated, nothing run at startup.
+type: software
+authors:
+  - given-names: Douglas
+    family-names: Quigg
+    email: dquigg123@gmail.com
+    alias: dstroy0
+repository-code: "https://github.com/dstroy0/embedded_types"
+url: "https://github.com/dstroy0/embedded_types"
+license: AGPL-3.0-or-later
+version: 0.1.0
+date-released: "2026-08-30"
+keywords:
+  - types
+  - fixed-width
+  - word
+  - static-assert
+  - attributes
+  - portability
+  - unaligned
+  - dispatch-table
+  - header-only
+  - embedded
+  - c11

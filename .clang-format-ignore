@@ -1,0 +1,6 @@
+# Nothing in this repository is generated, so nothing is exempt from the formatter.
+#
+# The file is kept because the exemption it exists to record is one a repository acquires rather
+# than starts with: a generated header formatted by hand is undone on the next generator run, and
+# formatted in CI it reports a dirty tree on every build that regenerates it. Add the path here when
+# that happens, not a formatter suppression at the site.
