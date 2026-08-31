@@ -11,16 +11,16 @@
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-08-30
  *
- * @note Reaches <stdint.h> rather than embed_types.h. The header under test declares no width of
+ * @note This reaches <stdint.h> and not embed_types.h. The header under test declares no width of
  *       its own, and a suite that borrowed embed_types.h could fail for a defect in either one.
- * @note An attribute wrapper expands to nothing where its attribute is unavailable, which costs
- *       speed or a diagnostic and never correctness. A case for one of those is guarded on
- *       EMBED_HAS_ATTRIBUTE and reports TEST_IGNORE on the other arm, so a build that cannot carry
- *       the attribute says so in the run rather than passing a case that measured nothing.
- * @note Unity's generator reads case names out of the source text and does not see a preprocessor
- *       conditional, so every #if here sits inside a case body. A case defined inside one would be
- *       called by the runner on the arm where its definition is gone, and the suite would fail to
- *       link.
+ * @note An attribute wrapper expands to nothing where its attribute is unavailable. That costs
+ *       speed or a diagnostic, never correctness. A case for one of those is guarded on
+ *       EMBED_HAS_ATTRIBUTE and calls TEST_IGNORE_MESSAGE on the other arm. Unity marks the case
+ *       ignored, and a case that measured nothing does not count as a pass.
+ * @note Unity's generator reads case names out of the source text and does not evaluate a
+ *       preprocessor conditional, so every #if here sits inside a case body. A case defined inside
+ *       one would be called by the runner on the arm where its definition is gone, and the suite
+ *       would fail to link.
  */
 #include <stdint.h>
 #include <string.h>
@@ -30,28 +30,28 @@
 #include "unity.h"
 
 /**
- * @brief Asserts EMBED_GNU_ATTRIBUTES carries a value rather than only a definition.
+ * @brief Asserts EMBED_GNU_ATTRIBUTES holds a value and not only a definition.
  *
  * @note The header defines it on both arms so that #if always has a number. An arm that failed to
- *       define it would make #if read 0 and switch off every attribute in a build that supports
- *       them, which nothing else diagnoses.
+ *       define it would make #if evaluate 0 and switch off every attribute in a build that
+ *       supports them. Nothing else diagnoses that.
  */
 EMBED_STATIC_ASSERT(EMBED_GNU_ATTRIBUTES == 0 || EMBED_GNU_ATTRIBUTES == 1, "EMBED_GNU_ATTRIBUTES must be 0 or 1");
 
-/** @brief Asserts EMBED_BIG_ENDIAN carries a value, for the reason EMBED_GNU_ATTRIBUTES describes. */
+/** @brief Asserts EMBED_BIG_ENDIAN holds a value, for the reason given on EMBED_GNU_ATTRIBUTES. */
 EMBED_STATIC_ASSERT(EMBED_BIG_ENDIAN == 0 || EMBED_BIG_ENDIAN == 1, "EMBED_BIG_ENDIAN must be 0 or 1");
 
-/** @brief Asserts EMBED_FAST_UNALIGNED_LOAD carries a value, for the same reason. */
+/** @brief Asserts EMBED_FAST_UNALIGNED_LOAD holds a value, for the reason given on EMBED_GNU_ATTRIBUTES. */
 EMBED_STATIC_ASSERT(EMBED_FAST_UNALIGNED_LOAD == 0 || EMBED_FAST_UNALIGNED_LOAD == 1,
                     "EMBED_FAST_UNALIGNED_LOAD must be 0 or 1");
 
 /**
- * @brief What EMBED_HAS_BUILTIN answered for a name no compiler defines.
+ * @brief Records what EMBED_HAS_BUILTIN evaluated to for a name no compiler defines, as 1 or 0.
  *
- * @note Recorded here because __has_builtin is a preprocessor operator. Evaluating it in the
- *       preprocessor and carrying the answer down as a literal is what lets a case compare it.
- * @note Zero on both arms of the header: __has_builtin reports 0 for a name it does not know, and
- *       the fallback is 0 outright.
+ * @note __has_builtin is a preprocessor operator and a case body cannot evaluate one. The #if below
+ *       evaluates it and leaves a literal a case can compare against.
+ * @note EMBED_HAS_BUILTIN is 0 on both of its arms for this name. __has_builtin expands to 0 for a
+ *       name that is not a builtin, and the fallback arm expands to 0 whatever it is handed.
  */
 #if EMBED_HAS_BUILTIN(embed_probe_not_a_builtin)
 #define TEST_UNKNOWN_BUILTIN_ANSWER 1
@@ -61,12 +61,12 @@ EMBED_STATIC_ASSERT(EMBED_FAST_UNALIGNED_LOAD == 0 || EMBED_FAST_UNALIGNED_LOAD 
 #endif
 
 /**
- * @brief What EMBED_HAS_ATTRIBUTE answered for a name no compiler defines.
+ * @brief Records what EMBED_HAS_ATTRIBUTE evaluated to for a name no compiler defines, as 1 or 0.
  *
- * @note Recorded for the reason TEST_UNKNOWN_BUILTIN_ANSWER describes.
- * @warning Only the arm where __has_attribute exists can be checked. The header's fallback answers
- *          EMBED_GNU_ATTRIBUTES for every name asked about, so it cannot tell an unknown attribute
- *          from a known one, and the case that reads this is guarded to match.
+ * @note Recorded for the reason given on TEST_UNKNOWN_BUILTIN_ANSWER.
+ * @warning Only the arm where __has_attribute is defined carries a checkable value. The fallback
+ *          arm expands to EMBED_GNU_ATTRIBUTES for every name it is handed. An unknown attribute is
+ *          indistinguishable from a known one there. The case reading this is guarded to match.
  */
 #if defined(__has_attribute)
 #if EMBED_HAS_ATTRIBUTE(embed_probe_not_an_attribute)
@@ -85,74 +85,76 @@ EMBED_STATIC_ASSERT(EMBED_FAST_UNALIGNED_LOAD == 0 || EMBED_FAST_UNALIGNED_LOAD 
 /**
  * @brief A one-byte enum, declared to prove EMBED_ENUM_PACKED reaches the compiler.
  *
- * @note Its range needs a single byte, so a size of one is the attribute being honored and a size
- *       of int is the attribute being ignored. A compiler may accept it and then disregard it,
- *       which no #if can see.
+ * @note Its range needs a single byte, and test_a_packed_enum_takes_the_width_its_range_needs
+ *       checks for that width. Without the attribute the enum takes int's width. A compiler may
+ *       also accept the attribute and disregard it, and no #if distinguishes that case.
  */
 typedef enum EMBED_ENUM_PACKED
 {
     TEST_PACKED_ENUM_MIN = 0,   /**< Low end of the probe range. */
-    TEST_PACKED_ENUM_MAX = 255, /**< High end, the largest value one byte holds. */
+    TEST_PACKED_ENUM_MAX = 255, /**< High end, the largest value eight bits hold. */
 } PackedEnumProbe;
 
 /**
  * @brief A word whose alignment EMBED_ALIGN raised above its natural one.
  *
- * @note Sixteen rather than eight, so the answer cannot be the natural alignment of any type this
- *       file declares and a raise that vanished is visible.
+ * @note Sixteen bytes. The widest type this file declares is four bytes wide and aligns to four,
+ *       and nothing else here aligns to sixteen. A reported alignment of sixteen came from the
+ *       attribute.
  */
 typedef uint32_t RaisedAlignmentProbe EMBED_ALIGN(16);
 
 /**
  * @brief A word whose alignment EMBED_ALIGN lowered to one byte.
  *
- * @note The direction embed_types.h depends on. A lower that vanished leaves the type at its
- *       natural alignment while the code still reads it from any address.
+ * @note embed_types.h depends on this direction. EMBED_RAW lowers a word to alignment one there.
+ *       Where the attribute expands to nothing the type keeps its natural alignment, and the code
+ *       still reads it from any address.
  */
 typedef uint32_t LoweredAlignmentProbe EMBED_ALIGN(1);
 
 /**
  * @brief A word carrying both halves of EMBED_RAW, readable from any address.
  *
- * @note The alignment permits the address and the aliasing permits the bytes another type owns.
- *       Either alone leaves the read undefined, which is why the header spells the pair once.
+ * @note The alignment attribute permits the address. The aliasing attribute permits reading bytes
+ *       another type owns. Either one alone leaves the read undefined, and EMBED_RAW carries both.
  */
 typedef uint32_t RawProbeWord EMBED_RAW;
 
 /**
- * @brief Doubles its operand, so a caller can tell the body ran.
+ * @brief Doubles its operand.
  *
- * @param[in] value Operand to double.
- * @return          Twice value.
- * @note Marked EMBED_INLINE, which requires inlining rather than asking for it. What a case can see
- *       is that the marked definition is still a definition and its body still runs; whether the
- *       call was inlined is not observable from the language.
+ * @param[in] operand Value to double.
+ * @return            Twice operand.
+ * @note Marked EMBED_INLINE. That macro is static inline, plus the always_inline attribute where
+ *       the compiler has it. A case can check that the marked definition is still a definition and
+ *       that its body still runs. Whether the call was inlined is not observable from the language.
  */
-EMBED_INLINE uint32_t inline_probe_doubled(uint32_t value)
+EMBED_INLINE uint32_t inline_probe_doubled(uint32_t operand)
 {
-    return value * 2u;
+    return operand * 2u;
 }
 
 /**
- * @brief Quadruples its operand by calling the inline helper twice.
+ * @brief Quadruples its operand by calling inline_probe_doubled twice.
  *
- * @param[in] value Operand to quadruple.
- * @return          Four times value.
- * @note Marked EMBED_FLATTEN, which asks that the bodies it calls be inlined into it. As with
- *       EMBED_INLINE the result is the only observable part, and it must not change.
+ * @param[in] operand Value to quadruple.
+ * @return            Four times operand.
+ * @note Marked EMBED_FLATTEN. GCC and clang inline the bodies this function calls into it. A case
+ *       checks the result here, as it does for EMBED_INLINE, and the result must not change.
  */
-static EMBED_FLATTEN uint32_t flatten_probe_quadrupled(uint32_t value)
+static EMBED_FLATTEN uint32_t flatten_probe_quadrupled(uint32_t operand)
 {
-    return inline_probe_doubled(inline_probe_doubled(value));
+    return inline_probe_doubled(inline_probe_doubled(operand));
 }
 
 /**
  * @brief Declares the weak default ahead of its definition.
  *
- * @return 7, which is what a build supplying no replacement reaches.
- * @note The attribute goes on the declaration rather than the definition. A weak declaration that
- *       follows its own definition is diagnosed by GCC and ignored by some releases, so the order
- *       here is the one that holds everywhere.
+ * @return 7, the value a build that supplies no replacement reaches.
+ * @note The attribute sits on the declaration. GCC diagnoses a weak declaration that follows its
+ *       own definition, and the attribute has no effect there. Putting it first works on GCC and
+ *       clang alike.
  */
 EMBED_WEAK uint32_t weak_probe_default(void);
 
@@ -166,9 +168,9 @@ EMBED_BEGIN_DECLS
 /**
  * @brief Declared between the two linkage guards, to prove they leave a C declaration alone.
  *
- * @return 5, so a caller can tell the definition below is what it reached.
- * @note Both guards expand to nothing in C, which is what this checks. The extern "C" arm belongs
- *       to a C++ consumer's compiler and is not reachable from a C suite.
+ * @return 5, the value a case compares against to confirm the call reached this definition.
+ * @note Both guards expand to nothing in C. This suite compiles as C, so the extern "C" arm is
+ *       never selected here.
  */
 static uint32_t guarded_probe_entry(void);
 
@@ -182,18 +184,18 @@ static uint32_t guarded_probe_entry(void)
 /**
  * @brief A table defined, marked EMBED_UNUSED, and deliberately never named again.
  *
- * @note The only shape that exercises the marker. An object a case reads is referenced, and the
- *       suppression it carries would then be doing nothing. A clean build of this file is the
- *       whole result.
+ * @note A case that read this table would reference it, and a referenced object raises no
+ *       unused-variable warning for the marker to suppress. Nothing here checks the marker at run
+ *       time. The suite compiles without a diagnostic for this definition.
  */
 static const uint32_t unreferenced_probe_table[] EMBED_UNUSED = {1u, 2u, 4u};
 
 /**
- * @brief A file-scope value the diagnostic case deliberately shadows.
+ * @brief A file-scope value that test_the_diagnostic_bracket_bounds_a_suppression shadows.
  *
- * @note Declared for that case alone. Shadowing an object the suite already has would make the
- *       warning depend on what else the file happens to declare, and the case reads this one
- *       before shadowing it so the outer name is not itself unreferenced.
+ * @note This object exists for that case. Shadowing an object the suite already uses would make
+ *       the warning depend on what else the file declares. The case reads this value before
+ *       shadowing it, and that read keeps the outer name referenced.
  */
 static const uint32_t shadowed_probe_value = 11u;
 
@@ -206,11 +208,12 @@ typedef struct
 } CallProbeArgs;
 
 /**
- * @brief Sums the three members so a caller can see which of them arrived.
+ * @brief Sums the three members under distinct weights.
  *
  * @param[in] args Operand block built by the caller [BORROWS].
- * @return         first plus twice second plus four times third, which no two inputs share.
- * @note The weights make the answer name which members were set, rather than only their total.
+ * @return         first plus twice second plus four times third.
+ * @note The weights are 1, 2 and 4. With each member set to 0 or 1, the sum identifies exactly
+ *       which members the caller named. An unweighted total would not.
  */
 static uint32_t call_probe(const CallProbeArgs *args)
 {
@@ -220,8 +223,8 @@ static uint32_t call_probe(const CallProbeArgs *args)
 /**
  * @brief Runs before each case, and has nothing to prepare.
  *
- * @note Unity calls this whether or not it does anything, and unity_internals.h declares it. Every
- *       case here reads types, macros and const objects, so there is nothing to reset.
+ * @note Unity calls this before every case, and a suite has to define it. Every case here reads
+ *       types, macros and const objects, and none of those carries state to reset.
  */
 void setUp(void)
 {
@@ -235,10 +238,8 @@ void tearDown(void)
 /**
  * @brief Checks that each feature gate holds one of the two values it is documented to hold.
  *
- * @note The same claim the file-scope assertions above make, reached without going through
- *       EMBED_STATIC_ASSERT. A build where that macro was compiled out still reports the gates
- *       here, which is the reason test_embed_dispatch_layout re-measures its table size at run
- *       time.
+ * @note The file-scope assertions above check the same three gates at compile time. This case
+ *       checks them again at run time. The suite's report then lists them alongside every other case.
  */
 void test_every_feature_gate_carries_a_value_of_zero_or_one(void)
 {
@@ -251,11 +252,11 @@ void test_every_feature_gate_carries_a_value_of_zero_or_one(void)
 /**
  * @brief Checks that the static assertion is a declaration at block scope and that the dialect is C11.
  *
- * @note The file-scope form is proved by the assertions above compiling. The block-scope form is
- *       the one a consumer writes inside a function, and it has to take its trailing semicolon and
- *       leave one declaration rather than two.
- * @note The header raises #error below C11, so a build that reached this line is C11 or later and
- *       whichever spelling it selected exists.
+ * @note The assertions above prove the file-scope form by compiling. A consumer writes the
+ *       block-scope form inside a function, where the expansion plus the semicolon written at the
+ *       call site has to form one valid declaration.
+ * @note The header raises #error below C11. A build that reached this line is therefore C11 or
+ *       later, and whichever keyword EMBED_STATIC_ASSERT expands to is available.
  */
 void test_the_static_assertion_compiles_at_file_and_block_scope(void)
 {
@@ -265,33 +266,33 @@ void test_the_static_assertion_compiles_at_file_and_block_scope(void)
 }
 
 /**
- * @brief Checks that the feature tests answer zero for a name no compiler defines.
+ * @brief Checks that the feature tests evaluate to zero for a name no compiler defines.
  *
- * @note What makes the wrappers a question rather than a guess. A test that answered non-zero for
- *       an invented name would answer non-zero for every name, and every attribute below would be
- *       emitted on a compiler that rejects it.
- * @note The attribute half runs only where __has_attribute exists. The header's fallback answers
- *       EMBED_GNU_ATTRIBUTES whatever it is asked about, which is the warning on the macro rather
- *       than a defect a case can find.
+ * @note A feature test that returned non-zero for an invented name would return non-zero for every
+ *       name. Every attribute below would then be emitted on a compiler that does not support it.
+ * @note The attribute half runs only where __has_attribute is defined. The fallback arm expands to
+ *       EMBED_GNU_ATTRIBUTES for every name it is handed. The header documents that as a warning
+ *       on EMBED_HAS_ATTRIBUTE, and no case can find a defect there.
  */
-void test_the_feature_tests_answer_zero_for_a_name_nothing_defines(void)
+void test_the_feature_tests_evaluate_to_zero_for_an_unknown_name(void)
 {
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, TEST_UNKNOWN_BUILTIN_ANSWER, "an unknown builtin answers 0");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, TEST_UNKNOWN_BUILTIN_ANSWER, "an unknown builtin evaluates to 0");
 #if defined(__has_attribute)
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, TEST_UNKNOWN_ATTRIBUTE_ANSWER, "an unknown attribute answers 0");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, TEST_UNKNOWN_ATTRIBUTE_ANSWER, "an unknown attribute evaluates to 0");
 #endif
 }
 
 /**
- * @brief Checks that the endian answer agrees with how the target lays a word out in memory.
+ * @brief Checks that EMBED_BIG_ENDIAN agrees with how the target lays a word out in memory.
  *
- * @note The bytes are the independent side. EMBED_BIG_ENDIAN is derived from __BYTE_ORDER__, and
- *       reading the same macro back would restate the derivation rather than check it.
- * @note The first two assertions hold on every target. Answering 0 where the compiler states no
- *       order is the header's documented safe direction, so a big-endian part whose compiler is
- *       silent is not a failure and only the guarded assertion below can ask for agreement.
+ * @note The byte layout is measured here independently. EMBED_BIG_ENDIAN comes from __BYTE_ORDER__,
+ *       and reading that macro back would restate the derivation instead of checking it.
+ * @note The first two assertions hold on every target. The header falls to 0 where the compiler
+ *       defines neither __BYTE_ORDER__ nor __ORDER_BIG_ENDIAN__, and that is its documented safe
+ *       direction. A big-endian part built with such a compiler is not a failure here. The third
+ *       assertion is guarded on those two macros for that reason.
  */
-void test_the_endian_answer_agrees_with_the_bytes_of_a_word(void)
+void test_the_endian_flag_agrees_with_the_bytes_of_a_word(void)
 {
     const uint32_t probe_value = 1u;
     uint8_t as_bytes[sizeof(uint32_t)];
@@ -307,19 +308,20 @@ void test_the_endian_answer_agrees_with_the_bytes_of_a_word(void)
                               "EMBED_BIG_ENDIAN is never 1 where the low byte comes first");
 #if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__)
     TEST_ASSERT_EQUAL_INT_MESSAGE(EMBED_BIG_ENDIAN, bytes_are_big_endian,
-                                  "where the compiler states an order, the macro is that order");
+                                  "EMBED_BIG_ENDIAN matches the byte layout");
 #endif
 }
 
 /**
- * @brief Checks that the argument count answers the number of arguments it was handed.
+ * @brief Checks that EMBED_NARG evaluates to the number of arguments it was handed.
  *
  * @note Each expectation is the literal number of items written on the same line, counted by hand.
  *       Deriving it from EMBED_NARG would compare the macro with itself.
- * @note One, two, twenty-three and twenty-four are the cases that matter: the floor, the step, and
- *       both sides of the ceiling the family stops at.
+ * @note The five lengths are one, two, eight, twenty-three and twenty-four. One is the shortest
+ *       list EMBED_NARG covers and twenty-four is the longest. Twenty-three sits one below the
+ *       longest, and two and eight fall in between.
  */
-void test_the_argument_count_answers_the_length_of_the_list(void)
+void test_the_argument_count_matches_the_length_of_the_list(void)
 {
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, EMBED_NARG(a), "one argument counts as one");
     TEST_ASSERT_EQUAL_INT_MESSAGE(2, EMBED_NARG(a, b), "two arguments count as two");
@@ -334,9 +336,9 @@ void test_the_argument_count_answers_the_length_of_the_list(void)
 /**
  * @brief Checks that the two-step paste joins a name to an expanded count.
  *
- * @note The point of the outer step. ## suppresses expansion of its own operands, so a caller
- *       pasting a macro's value rather than its name has to go through EMBED_CAT, and that is what
- *       the dispatch layout family selects its arity with.
+ * @note ## suppresses expansion of its own operands. EMBED_CAT expands its arguments first and
+ *       then pastes the results. A caller whose operand is itself a macro needs that order. The
+ *       dispatch layout family selects its arity through it.
  */
 void test_the_paste_joins_a_name_to_an_expanded_count(void)
 {
@@ -346,10 +348,10 @@ void test_the_paste_joins_a_name_to_an_expanded_count(void)
 }
 
 /**
- * @brief Checks that the call shape passes named members and zeroes the ones left out.
+ * @brief Checks that EMBED_CALL passes named members and zeroes the ones left out.
  *
- * @note The zeroed member is the part worth proving. It is a property of the standard rather than
- *       of a compiler, and a consumer relies on it every time it omits a default.
+ * @note C zero initializes any member a compound literal's initializer does not name. That comes
+ *       from the language, and a consumer relies on it every time it omits a default.
  */
 void test_the_call_passes_named_members_and_zeroes_the_rest(void)
 {
@@ -364,11 +366,11 @@ void test_the_call_passes_named_members_and_zeroes_the_rest(void)
 }
 
 /**
- * @brief Checks that the inline and flattened helpers still compute what their bodies say.
+ * @brief Checks that inline_probe_doubled and flatten_probe_quadrupled compute what their bodies
+ *        define.
  *
- * @note Both attributes cost speed and never correctness, so the result is the whole contract. A
- *       wrapper that expanded to something the compiler misread would show up here as an answer
- *       rather than as a build failure.
+ * @note Neither attribute changes what the bodies compute. Both affect inlining and nothing else,
+ *       and this case checks the two results, ten and twenty.
  */
 void test_the_inline_and_flattened_helpers_run_their_bodies(void)
 {
@@ -379,9 +381,9 @@ void test_the_inline_and_flattened_helpers_run_their_bodies(void)
 /**
  * @brief Checks that a packed enum is the one byte its range needs.
  *
- * @note The assertion embed_types.h makes about its own probe enum, made here against the wrapper
- *       rather than against a type built on it. A failure means every enum a consumer declares
- *       widens to int and any offset computed from a struct holding one is wrong.
+ * @note embed_types.h asserts the same width on its own probe enum. This case checks
+ *       EMBED_ENUM_PACKED directly on a type declared here. A failure means the attribute did not
+ *       reach the compiler, and every enum a consumer declares would widen to int.
  */
 void test_a_packed_enum_takes_the_width_its_range_needs(void)
 {
@@ -396,15 +398,15 @@ void test_a_packed_enum_takes_the_width_its_range_needs(void)
 /**
  * @brief Checks that the alignment attribute raises alignment and lowers it.
  *
- * @note Both directions, because the header uses both. The raise is what an object needs before a
- *       use that assumes it; the lower to one is half of EMBED_RAW and is what makes a read from an
- *       odd address defined.
+ * @note EMBED_ALIGN is used in both directions in this library. Raising an object's alignment
+ *       matters where later code assumes it. Lowering it to one is half of EMBED_RAW, and
+ *       embed_types.h needs that for a read at an odd address.
  */
 void test_the_alignment_attribute_raises_and_lowers(void)
 {
 #if EMBED_HAS_ATTRIBUTE(aligned)
-    TEST_ASSERT_EQUAL_size_t_MESSAGE(16u, _Alignof(RaisedAlignmentProbe), "a raise to sixteen reaches the type");
-    TEST_ASSERT_EQUAL_size_t_MESSAGE(1u, _Alignof(LoweredAlignmentProbe), "a lower to one reaches the type");
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(16u, _Alignof(RaisedAlignmentProbe), "the raised type aligns to sixteen");
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(1u, _Alignof(LoweredAlignmentProbe), "the lowered type aligns to one");
 #else
     TEST_IGNORE_MESSAGE("EMBED_HAS_ATTRIBUTE(aligned) is 0 here, so EMBED_ALIGN expands to nothing");
 #endif
@@ -413,11 +415,11 @@ void test_the_alignment_attribute_raises_and_lowers(void)
 /**
  * @brief Checks that a word carrying EMBED_RAW reads correctly from an odd address.
  *
- * @note The expectation is assembled with memcpy over the same bytes, which is defined at any
- *       address and does not depend on byte order.
- * @note Guarded on the alignment half of EMBED_RAW. Where that attribute is absent the type is the
- *       plain word and the read below would be undefined rather than wrong, which is not something
- *       a case can report.
+ * @note memcpy assembles the expectation over the same bytes. A copy through memcpy is defined at
+ *       any address and does not depend on byte order.
+ * @note This case is guarded on EMBED_HAS_ATTRIBUTE(aligned). Without that attribute the type is
+ *       the plain word, and the read below would be undefined. Undefined behavior gives a case
+ *       nothing to assert against.
  */
 void test_a_raw_word_reads_from_an_odd_address(void)
 {
@@ -429,26 +431,26 @@ void test_a_raw_word_reads_from_an_odd_address(void)
     (void)memcpy(&expected, &bytes[1], sizeof(expected));
     TEST_ASSERT_EQUAL_HEX32_MESSAGE(expected, *at_one, "a raw word at offset one matches the bytes it covers");
 #else
-    TEST_IGNORE_MESSAGE("EMBED_HAS_ATTRIBUTE(aligned) is 0 here, so a read at an odd address is undefined");
+    TEST_IGNORE_MESSAGE("EMBED_HAS_ATTRIBUTE(aligned) is 0 here, the read would be undefined");
 #endif
 }
 
 /**
  * @brief Checks that the diagnostic bracket suppresses a warning and stringizes its pragma text.
  *
- * @note The inner declaration shadows shadowed_probe_value, which -Wshadow reports and the suite is
- *       compiled with. The bracket is what lets it compile, so a bracket that reached the compiler
- *       wrongly fails this build rather than passing a case that measured nothing.
- * @note EMBED_DIAGNOSTIC_STRING is the only part a case can read back. _Pragma takes a string
- *       literal, so the text the ignore macro builds has to come out with the warning name still
+ * @note The inner declaration shadows shadowed_probe_value. EMBED_DIAGNOSTIC_IGNORE("-Wshadow")
+ *       suppresses the warning a compiler raises for that shadowing, and the bracket keeps the
+ *       suppression to those lines.
+ * @note EMBED_DIAGNOSTIC_STRING is the part a case can read back. _Pragma takes a string literal,
+ *       and the text EMBED_DIAGNOSTIC_IGNORE builds has to come out with the warning name still
  *       quoted inside it.
- * @note The pop is proved by the outer scope still diagnosing. Nothing below the bracket shadows
- *       anything, so a suppression left in force would not be visible here; what it would silence
- *       is the rest of the translation unit, which is the reason the bracket is written as a pair.
+ * @note Nothing below the bracket shadows anything, and a suppression left in force would not show
+ *       up in this case. It would silence the rest of the translation unit instead.
+ *       EMBED_DIAGNOSTIC_PUSH and EMBED_DIAGNOSTIC_POP are written as a pair for that reason.
  */
 void test_the_diagnostic_bracket_bounds_a_suppression(void)
 {
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(11u, shadowed_probe_value, "the file-scope value is what an outer read reaches");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(11u, shadowed_probe_value, "the outer read reaches the file-scope value");
 
     {
         EMBED_DIAGNOSTIC_PUSH
@@ -456,7 +458,7 @@ void test_the_diagnostic_bracket_bounds_a_suppression(void)
         const uint32_t shadowed_probe_value = 3u;
         EMBED_DIAGNOSTIC_POP
 
-        TEST_ASSERT_EQUAL_UINT_MESSAGE(3u, shadowed_probe_value, "the inner declaration is the one in scope");
+        TEST_ASSERT_EQUAL_UINT_MESSAGE(3u, shadowed_probe_value, "the inner declaration shadows the outer one");
     }
 
     TEST_ASSERT_EQUAL_STRING_MESSAGE("GCC diagnostic ignored \"-Wpadded\"",
@@ -467,21 +469,19 @@ void test_the_diagnostic_bracket_bounds_a_suppression(void)
 /**
  * @brief Checks that the weak default links as itself where nothing replaces it.
  *
- * @note Half of what the attribute promises. The other half is a strong definition of the same
- *       name overriding this one, which needs a second translation unit that a one-file suite does
- *       not have.
+ * @note This case covers one half of EMBED_WEAK. The other half is a strong definition of the same
+ *       name overriding the weak one, and that needs a definition in another translation unit.
  */
 void test_the_weak_default_links_as_itself(void)
 {
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(7u, weak_probe_default(), "the weak definition is what the call reached");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(7u, weak_probe_default(), "the call reached the weak definition");
 }
 
 /**
  * @brief Checks that the linkage guards leave a C declaration reachable.
  *
- * @note Both expand to nothing in C, so what could go wrong is a stray brace rather than a wrong
- *       answer. The call is what proves the declaration between them survived to name this
- *       definition.
+ * @note The call below reaches this definition through the declaration between the guards. A
+ *       defect in either guard would leave a stray brace, and the compiler catches that.
  */
 void test_the_declaration_guards_leave_a_c_declaration_intact(void)
 {
@@ -491,9 +491,9 @@ void test_the_declaration_guards_leave_a_c_declaration_intact(void)
 /**
  * @brief Records that a definition marked EMBED_UNUSED and never referenced compiled quietly.
  *
- * @note Passes on the strength of the build. The marker suppresses a diagnostic, so the result is
- *       an absence, and naming unreferenced_probe_table here to check it would reference it and
- *       remove the condition the marker exists for.
+ * @note This case passes whenever the suite builds. The marker suppresses a diagnostic, and a
+ *       suppressed diagnostic leaves nothing for a case to read. Naming unreferenced_probe_table
+ *       here would reference it and remove the condition the marker exists for.
  */
 void test_an_unreferenced_marked_definition_compiles_quietly(void)
 {

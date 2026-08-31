@@ -6,14 +6,15 @@
  */
 /**
  * @file embed_compiler_directives.h
- * @brief Preprocessor definitions, declaring no type and defining no function.
+ * @brief Compiler feature checks, attribute wrappers, diagnostic pragmas, argument counting, and
+ *        target flags.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-08-30
  *
- * @note Carries no linkage guard of its own. It defines EMBED_BEGIN_DECLS, so it cannot be wrapped
- *       in one, and it declares nothing a C++ compiler would mangle.
- * @note A consumer aliases these under its own prefix rather than defining its own copies. Two
- *       libraries in one build then reach the same definition instead of each carrying a variant.
+ * @note This header has no extern "C" guard of its own because it defines that guard, as
+ *       EMBED_BEGIN_DECLS. Everything here is a macro, and macros have no linkage to mangle.
+ * @note If your library uses this one, alias these macros under your own prefix. Do not copy them
+ *       into your own tree. Copies drift when this header changes.
  */
 #ifndef EMBED_COMPILER_DIRECTIVES_H
 #define EMBED_COMPILER_DIRECTIVES_H
@@ -23,10 +24,10 @@
 /**
  * @brief Set to 1 where __GNUC__ or __clang__ is defined, 0 otherwise.
  *
- * @note EMBED_HAS_ATTRIBUTE answers with this where __has_attribute is missing. A compiler old
- *       enough to lack __has_attribute may still accept the GNU attributes, so answering 0 there
- *       would switch off every attribute in this header on a compiler that supports them.
- * @note Defined on both arms, so #ifdef EMBED_GNU_ATTRIBUTES is always true. Test it with #if.
+ * @note EMBED_HAS_ATTRIBUTE falls back to this value when __has_attribute is missing. A compiler
+ *       old enough to lack __has_attribute usually still accepts the GNU attributes, and a 0 here
+ *       would turn all of them off.
+ * @note This is always defined, as 0 or 1. Check it with #if. #ifdef is true either way.
  */
 #if defined(__GNUC__) || defined(__clang__)
 #define EMBED_GNU_ATTRIBUTES 1
@@ -40,11 +41,11 @@
  *
  * @param[in] attribute_ Attribute name, as passed to __has_attribute.
  * @return               The value __has_attribute gives for attribute_.
- * @note Every attribute wrapper below is gated on this rather than on a compiler test, so a build
- *       is asked what it supports instead of being guessed at from its identity.
+ * @note Every attribute macro below goes through this. Asking the compiler whether it supports an
+ *       attribute is more reliable than checking which compiler it is.
  * @warning Expands to EMBED_GNU_ATTRIBUTES where __has_attribute is undefined, ignoring attribute_.
- *          That answer is the same for every attribute asked about, so a compiler without
- *          __has_attribute either gets all of them or none.
+ *          Every attribute then gets the same answer. A compiler without __has_attribute gets all
+ *          of them or none.
  */
 #if defined(__has_attribute)
 #define EMBED_HAS_ATTRIBUTE(attribute_) __has_attribute(attribute_)
@@ -58,9 +59,11 @@
  *
  * @param[in] builtin_ Builtin name, as passed to __has_builtin.
  * @return             The value __has_builtin gives for builtin_.
- * @warning Expands to 0 where __has_builtin is undefined, ignoring builtin_. Unlike the attribute
- *          test there is no fallback worth guessing, since a builtin that is absent fails to
- *          compile rather than being ignored.
+ * @note This is the builtin-side version of EMBED_HAS_ATTRIBUTE. Gate a builtin with it the same
+ *       way you would gate an attribute.
+ * @warning Without __has_builtin this expands to 0 and ignores builtin_. The fallback is 0 because
+ *          a missing builtin fails to compile. A missing attribute is only ignored, which is why
+ *          EMBED_HAS_ATTRIBUTE can fall back to a guess.
  */
 #if defined(__has_builtin)
 #define EMBED_HAS_BUILTIN(builtin_) __has_builtin(builtin_)
@@ -70,27 +73,25 @@
 #endif
 
 /**
- * @brief Expands to a two-operand static assertion in whichever spelling the C dialect provides.
+ * @brief Expands to a two-operand static assertion.
  *
  * @param[in] cond_ Constant expression passed through unchanged.
  * @param[in] msg_  Message operand passed through unchanged.
- * @note A consumer states what the build must prove rather than testing it at run time, so this is
- *       reached from every file carrying a width or a layout claim. Spelling it once keeps the
- *       question here.
- * @note static_assert where __STDC_VERSION__ reaches 202311L, which is the revision that made it a
- *       keyword. _Static_assert otherwise, which is the C11 spelling this library is written to.
- * @note Neither arm reaches <assert.h>. Each spelling is a keyword in the revision that selects it,
- *       so a consumer inherits no header it did not ask for.
- * @note The expansion carries no trailing semicolon. Both spellings take one as part of their own
- *       grammar, so a use site writes it and the result is one declaration rather than a
- *       declaration followed by an empty one.
- * @warning #error before C11, where neither spelling exists. Left to expand, the name would parse
- *          as a function declaration with an implicit int and every assertion in the build would
- *          check nothing while appearing to.
+ * @note This gives one name for the assertion across C11, C23, and C++. Every file here that
+ *       claims a width or a layout uses it.
+ * @note C++ and C23 get static_assert, which is a keyword in both. Everything else gets
+ *       _Static_assert, the C11 keyword.
+ * @note The __cplusplus arm is not optional. No C++ compiler defines __STDC_VERSION__, and without
+ *       that arm the #error below fires on every C++ build.
+ * @note Neither arm includes <assert.h>. Both names are keywords in the revision that picks them.
+ * @note The expansion has no trailing semicolon. Write one at the call site.
+ * @warning #error below C11, where neither keyword exists. Without it the name would parse as a
+ *          function declaration returning implicit int, and every assertion in the build would
+ *          compile and check nothing.
  */
-#if !defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L
+#if !defined(__cplusplus) && (!defined(__STDC_VERSION__) || __STDC_VERSION__ < 201112L)
 #error "embedded_types needs C11 or later - no earlier revision has a static assertion"
-#elif __STDC_VERSION__ >= 202311L
+#elif defined(__cplusplus) || __STDC_VERSION__ >= 202311L
 #define EMBED_STATIC_ASSERT(cond_, msg_) static_assert(cond_, msg_)
 #else
 
@@ -100,10 +101,9 @@
 /**
  * @brief Expands to extern "C" { where __cplusplus is defined.
  *
- * @note This library is C. The guard is here so a C++ caller can include a C header and reach the
- *       symbols by their unmangled names, which is a property of the consumer's compiler rather
- *       than of anything declared here.
- * @warning The expansion contains an unmatched {; EMBED_END_DECLS supplies the }.
+ * @note This library is C. A C++ translation unit that includes these headers needs the guard to
+ *       reach the symbols by their unmangled names.
+ * @warning The expansion leaves a { open. EMBED_END_DECLS closes it.
  * @note Expands to nothing where __cplusplus is undefined.
  */
 #ifdef __cplusplus
@@ -115,7 +115,7 @@
 #define EMBED_END_DECLS }
 #else
 
-/** @brief Expands to nothing where __cplusplus is undefined, so no brace is opened and none is owed. */
+/** @brief Expands to nothing where __cplusplus is undefined. No brace is opened on this arm. */
 #define EMBED_BEGIN_DECLS
 
 /** @brief Expands to nothing where __cplusplus is undefined. */
@@ -128,8 +128,8 @@
  * @param[in] left_  Left operand of ##.
  * @param[in] right_ Right operand of ##.
  * @return           The single token formed by joining left_ and right_.
- * @note The inner half of the two-step paste. ## suppresses expansion of its own operands, so a
- *       caller pasting a macro's value rather than its name has to go through EMBED_CAT.
+ * @note EMBED_CAT calls this. ## does not expand its own operands, and EMBED_CAT expands them
+ *       before handing them here. Call EMBED_CAT when either operand is itself a macro.
  */
 #define EMBED_CAT_(left_, right_) left_##right_
 
@@ -139,9 +139,10 @@
  * @param[in] left_  Left operand, forwarded to EMBED_CAT_.
  * @param[in] right_ Right operand, forwarded to EMBED_CAT_.
  * @return           The single token formed by joining left_ and right_.
- * @note The outer half. Its arguments expand before substitution, so a count arrives as a number
- *       and EMBED_CAT_ pastes that rather than the name of the macro that produced it.
- * @note Builds a macro name from a count, which is how the dispatch layout family selects its arity.
+ * @note This expands its arguments first, then EMBED_CAT_ pastes the results. A macro operand
+ *       reaches EMBED_CAT_ as its value.
+ * @note EMBED_TABLE_LAYOUT uses this to build an EMBED_TABLE_SLOTS_<n> name from EMBED_NARG's
+ *       count.
  */
 #define EMBED_CAT(left_, right_) EMBED_CAT_(left_, right_)
 
@@ -150,6 +151,8 @@
  *
  * @param[in] ... The list to count.
  * @return        The number of arguments, for one to twenty-four arguments.
+ * @note Counting the arguments turns an arity into a number EMBED_CAT can paste into a macro name.
+ *       The preprocessor has no loop.
  * @warning An empty list gives 1. The preprocessor cannot tell an empty argument from a missing one.
  * @warning Twenty-five or more arguments make EMBED_ARG_N select an argument instead of a constant.
  */
@@ -161,8 +164,8 @@
  *
  * @param[in] ... The list from EMBED_NARG, followed by the constants 24 down to 0.
  * @return        The value EMBED_ARG_N selects.
- * @note Called by EMBED_NARG. The indirection is what lets the caller's list expand before the
- *       selection happens.
+ * @note EMBED_NARG calls this. Going through one more macro expands the caller's list before
+ *       EMBED_ARG_N picks a slot from it.
  */
 #define EMBED_NARG_(...) EMBED_ARG_N(__VA_ARGS__)
 
@@ -170,12 +173,12 @@
  * @brief Expands to its twenty-fifth argument.
  *
  * @param[in] slot1_    Arguments one through twenty-four, discarded.
- * @param[in] selected_ The twenty-fifth argument, which is the one returned.
+ * @param[in] selected_ The twenty-fifth argument.
  * @param[in] ...       Arguments beyond the twenty-fifth, discarded.
  * @return              selected_.
- * @note How the count is taken. EMBED_NARG hands the caller's list followed by 24 down to 0, so the
- *       list shifts the constants along and whichever one lands in the twenty-fifth slot is the
- *       number of arguments the caller passed.
+ * @note EMBED_NARG appends the constants 24 down to 0 after the caller's list. The caller's
+ *       arguments push those constants to the right. Whichever one lands twenty-fifth is how many
+ *       arguments the caller passed.
  */
 #define EMBED_ARG_N(slot1_, slot2_, slot3_, slot4_, slot5_, slot6_, slot7_, slot8_, slot9_, slot10_, slot11_, slot12_, \
                     slot13_, slot14_, slot15_, slot16_, slot17_, slot18_, slot19_, slot20_, slot21_, slot22_, slot23_, \
@@ -189,11 +192,14 @@
  * @param[in] ArgsType_ Type of the compound literal.
  * @param[in] ...       Initializers for the compound literal.
  * @return              The value entry_ returns.
- * @note A long argument list is passed in as many registers as it has and spills the rest; one
- *       pointer to a block the caller already laid out is one register whatever the arity.
- * @note A member the initializer does not name is zero initialized, and a compound literal in
- *       argument position lives to the end of the enclosing block, so the entry may hold the
- *       pointer for the whole call. Both are properties of the standard rather than of a compiler.
+ * @note One pointer costs one register at any arity. A long parameter list fills the registers and
+ *       spills the rest onto the stack.
+ * @note C zero initializes any member the initializer does not name. A compound literal in argument
+ *       position lives until the end of the enclosing block, so entry_ may hold the pointer for the
+ *       whole call.
+ * @note Use this from C only. Compound literals are not C++ in any revision. GNU C++ accepts one as
+ *       an extension. Its lifetime there ends at the full-expression. That breaks the [BORROWS]
+ *       contract below. No header here expands this macro. A C++ build never sees the expansion.
  * @warning entry_ receives the address of the literal [BORROWS].
  */
 #define EMBED_CALL(entry_, ArgsType_, ...) entry_(&(ArgsType_){__VA_ARGS__})
@@ -201,13 +207,12 @@
 /**
  * @brief Expands to __attribute__((always_inline)) prefixed by static inline.
  *
- * @note always_inline requires rather than asks, so a helper the inliner would have left out of
- *       line on size is inlined anyway. That is the difference between a helper naming a step and a
- *       helper costing a call.
- * @note Expands to static inline where EMBED_HAS_ATTRIBUTE(always_inline) is 0, which costs speed
- *       and never correctness.
- * @warning No definition is made when EMBED_INLINE is already defined. A build wanting a different
- *          inlining policy defines it ahead of this header rather than editing this.
+ * @note GCC and clang inline the body even where their size heuristic would leave it out of line.
+ *       Plain static inline leaves that decision to the compiler.
+ * @note Expands to static inline where EMBED_HAS_ATTRIBUTE(always_inline) is 0. The code stays
+ *       correct. It may run slower.
+ * @warning This header defines nothing when EMBED_INLINE is already defined. Define it ahead of
+ *          this header to set your own inlining policy.
  */
 #ifndef EMBED_INLINE
 #if EMBED_HAS_ATTRIBUTE(always_inline)
@@ -220,15 +225,14 @@
 /**
  * @brief Expands to __attribute__((flatten)) where EMBED_HAS_ATTRIBUTE(flatten) is non-zero.
  *
- * @note Asks the compiler to inline everything the function it marks calls, reaching bodies the
- *       inliner would otherwise leave out of line on size. EMBED_INLINE marks a body; this marks
- *       the function whose calls are to be flattened into it.
- * @note Costs the inlined code at every site that carries it, so it belongs on one hot function
- *       rather than on a translation unit.
- * @warning Needs the called bodies visible, so a build without link-time optimization gets nothing
- *          from it.
- * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(flatten) is 0, which costs speed and never
- *          correctness.
+ * @note Put this on a function and GCC or clang inlines everything that function calls, including
+ *       bodies their size heuristic would skip. EMBED_INLINE goes on the callee. This goes on the
+ *       caller.
+ * @note Every call site of the marked function carries the inlined code. Put it on one hot function.
+ * @warning The called bodies have to be visible. Without link-time optimization this does nothing
+ *          across translation units.
+ * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(flatten) is 0. The code stays correct. It
+ *          may run slower.
  */
 #if EMBED_HAS_ATTRIBUTE(flatten)
 #define EMBED_FLATTEN __attribute__((flatten))
@@ -240,12 +244,11 @@
 /**
  * @brief Expands to __attribute__((packed)) where EMBED_HAS_ATTRIBUTE(packed) is non-zero.
  *
- * @note An enum carrying this is declared at the width its range needs rather than at int width. A
- *       struct with such a member takes its offsets from that width, so the attribute belongs to
- *       the layout and is not a size optimization.
- * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(packed) is 0, and a compiler may also
- *          accept the attribute and then ignore it. Neither case is visible from here, which is why
- *          embed_types.h declares a probe enum and asserts its size rather than trusting this #if.
+ * @note An enum carrying this takes the width its range needs. Without it the enum is int-wide.
+ *       A struct holding one takes its member offsets from that width, so this changes layout.
+ * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(packed) is 0. A compiler can also accept
+ *          the attribute and ignore it. Neither case shows up here. embed_types.h declares a probe
+ *          enum and asserts its size to catch both.
  */
 #if EMBED_HAS_ATTRIBUTE(packed)
 #define EMBED_ENUM_PACKED __attribute__((packed))
@@ -258,12 +261,11 @@
  * @brief Expands to __attribute__((aligned(bytes_))) where EMBED_HAS_ATTRIBUTE(aligned) is non-zero.
  *
  * @param[in] bytes_ Alignment operand passed to the attribute.
- * @note Used in both directions. It raises the alignment of an object above its natural one, and it
- *       lowers alignment to 1, which is half of EMBED_RAW.
- * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(aligned) is 0, ignoring bytes_. A raise
- *          that vanishes leaves an object less aligned than its use expects. A lower to 1 that
- *          vanishes leaves the type at its natural alignment while the code still reads it from any
- *          address.
+ * @note This goes both ways. Raise an object's alignment above its natural one, or lower it to 1.
+ *       EMBED_RAW uses the lower-to-1 form.
+ * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(aligned) is 0, ignoring bytes_. An object
+ *          you meant to over-align sits at its natural alignment instead. A type you meant to drop
+ *          to alignment 1 keeps its natural alignment, and the code still reads it from any address.
  */
 #if EMBED_HAS_ATTRIBUTE(aligned)
 #define EMBED_ALIGN(bytes_) __attribute__((aligned(bytes_)))
@@ -275,10 +277,12 @@
 /**
  * @brief Expands to __attribute__((may_alias)) where EMBED_HAS_ATTRIBUTE(may_alias) is non-zero.
  *
- * @note A character type may alias any object. A word lvalue reading the bytes of an eight-bit
- *       array is the direction the aliasing rules forbid, and this attribute is what permits it.
+ * @note C lets a character type alias any object. Reading an eight-bit array through a word lvalue
+ *       goes the other way, and C leaves that undefined. This attribute on the word type makes the
+ *       read defined.
  * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(may_alias) is 0. Nothing diagnoses that.
- *          The code still compiles and the compiler is free to assume the two accesses never meet.
+ *          The code compiles, and the compiler may assume the two accesses never touch the same
+ *          memory.
  */
 #if EMBED_HAS_ATTRIBUTE(may_alias)
 #define EMBED_ALIAS __attribute__((may_alias))
@@ -290,24 +294,22 @@
 /**
  * @brief Expands to EMBED_ALIGN(1) followed by EMBED_ALIAS.
  *
- * @note The pair a type needs before a word may be read from an address that is not a multiple of
- *       its width. The alignment says the compiler may not assume one; the aliasing says the read
- *       may reach bytes another type owns. Either alone leaves the access undefined.
- * @note Spelled once here because a consumer that writes the pair per declaration gets them out of
- *       step the first time one is edited.
- * @warning Carries both warnings of the two macros it expands to, and neither failure is diagnosed.
+ * @note Reading a word from an address that is not a multiple of its width needs both attributes.
+ *       EMBED_ALIGN(1) stops the compiler assuming the alignment. EMBED_ALIAS permits the read to
+ *       reach bytes another type owns. Either one alone leaves the access undefined.
+ * @note Both live in one macro here. Writing the pair out at each declaration lets the two drift
+ *       apart the first time someone edits one.
+ * @warning Both warnings above apply here. Neither failure is diagnosed.
  */
 #define EMBED_RAW EMBED_ALIGN(1) EMBED_ALIAS
 
 /**
  * @brief Expands to __attribute__((unused)) where EMBED_HAS_ATTRIBUTE(unused) is non-zero.
  *
- * @note Suppresses the unused-variable diagnostic on a definition deliberately left unreferenced. A
- *       table defined in a header with internal linkage reaches every translation unit that
- *       includes it, and one calling nothing through its copy would warn about a definition it
- *       never asked for.
- * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(unused) is 0. That costs a diagnostic and
- *          never correctness.
+ * @note Use this on a definition you leave unreferenced on purpose. A static definition in a header
+ *       reaches every translation unit that includes it. A unit that never touches its copy warns.
+ * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(unused) is 0. The warning comes back.
+ *          Correctness is unaffected.
  */
 #if EMBED_HAS_ATTRIBUTE(unused)
 #define EMBED_UNUSED __attribute__((unused))
@@ -319,12 +321,11 @@
 /**
  * @brief Expands to __attribute__((weak)) where EMBED_HAS_ATTRIBUTE(weak) is non-zero.
  *
- * @note A weak definition is replaced by a strong one of the same name, and links as itself where
- *       none is supplied. A default that refuses can therefore ship, and a build that supplies the
- *       real symbol overrides it without editing the default away.
- * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(weak) is 0. The default then has external
- *          linkage like any other definition, so a replacement collides with it instead of
- *          overriding it and the link fails on a duplicate symbol.
+ * @note The linker picks a strong definition of the same name over a weak one. With no strong
+ *       definition, the weak one links. That lets a default ship here and a port replace it
+ *       without touching this file.
+ * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(weak) is 0. The default then has ordinary
+ *          external linkage. A replacement becomes a duplicate symbol and the link fails.
  */
 #if EMBED_HAS_ATTRIBUTE(weak)
 #define EMBED_WEAK __attribute__((weak))
@@ -338,10 +339,10 @@
  *
  * @param[in] text_ Token sequence to stringize.
  * @return          text_ as a string literal.
- * @note Called by EMBED_DIAGNOSTIC_IGNORE, which builds a whole pragma line and stringizes it in
- *       one step because _Pragma takes a string literal.
- * @note Defined once above the compiler arms rather than inside each. The definition does not vary
- *       by compiler, and two identical copies drift the moment one is edited.
+ * @note EMBED_DIAGNOSTIC_IGNORE calls this. _Pragma takes a string literal, and this turns the
+ *       whole pragma line into one.
+ * @note This sits above the compiler arms below. Defining it inside each arm would put two
+ *       identical copies in the file, and they drift the first time someone edits one.
  */
 #define EMBED_DIAGNOSTIC_STRING(text_) #text_
 
@@ -349,18 +350,18 @@
 /**
  * @brief Expands to _Pragma("clang diagnostic push") where __clang__ is defined.
  *
- * @note Saves the diagnostic state so a suppression can be bounded. An ignore with nothing saved
- *       ahead of it runs to the end of the translation unit and silences code it was never meant to
- *       cover, so every EMBED_DIAGNOSTIC_IGNORE sits between this and EMBED_DIAGNOSTIC_POP.
+ * @note This saves the current diagnostic state. Without a save ahead of it, an
+ *       EMBED_DIAGNOSTIC_IGNORE stays in force to the end of the translation unit. Put every
+ *       EMBED_DIAGNOSTIC_IGNORE between this and EMBED_DIAGNOSTIC_POP.
  */
 #define EMBED_DIAGNOSTIC_PUSH _Pragma("clang diagnostic push")
 
 /**
  * @brief Expands to _Pragma("clang diagnostic pop") where __clang__ is defined.
  *
- * @note Restores the state EMBED_DIAGNOSTIC_PUSH saved, which is what ends a suppression. Omitting
- *       it leaves the ignore in force for the rest of the translation unit, and nothing diagnoses
- *       that because the diagnostic it would have raised is the one being suppressed.
+ * @note This restores the state EMBED_DIAGNOSTIC_PUSH saved. That ends the suppression. Leave it
+ *       out and the suppression runs to the end of the translation unit. Nothing warns about that.
+ *       The warning that would have fired is the one being suppressed.
  */
 #define EMBED_DIAGNOSTIC_POP _Pragma("clang diagnostic pop")
 
@@ -368,16 +369,23 @@
  * @brief Expands to a clang pragma ignoring the named warning.
  *
  * @param[in] warning_ Warning name as a string literal, such as "-Wpadded".
- * @note Suppresses one named diagnostic, and belongs between an EMBED_DIAGNOSTIC_PUSH and an
- *       EMBED_DIAGNOSTIC_POP so it ends where the code needing it ends.
+ * @note This turns off exactly one warning. See EMBED_DIAGNOSTIC_PUSH for where to put it.
  * @note EMBED_DIAGNOSTIC_STRING stringizes the whole pragma text, including warning_.
  */
 #define EMBED_DIAGNOSTIC_IGNORE(warning_) _Pragma(EMBED_DIAGNOSTIC_STRING(clang diagnostic ignored warning_))
 #elif defined(__GNUC__)
-/** @brief Expands to _Pragma("GCC diagnostic push") where __GNUC__ is defined and __clang__ is not. */
+/**
+ * @brief Expands to _Pragma("GCC diagnostic push") where __GNUC__ is defined and __clang__ is not.
+ * @note This is the GCC form of the clang push above. See that block for where to put
+ *       EMBED_DIAGNOSTIC_IGNORE.
+ */
 #define EMBED_DIAGNOSTIC_PUSH _Pragma("GCC diagnostic push")
 
-/** @brief Expands to _Pragma("GCC diagnostic pop") where __GNUC__ is defined and __clang__ is not. */
+/**
+ * @brief Expands to _Pragma("GCC diagnostic pop") where __GNUC__ is defined and __clang__ is not.
+ * @note This is the GCC form of the clang pop above. See that block for what happens when it is
+ *       left out.
+ */
 #define EMBED_DIAGNOSTIC_POP _Pragma("GCC diagnostic pop")
 
 /**
@@ -385,8 +393,7 @@
  *
  * @param[in] warning_ Warning name as a string literal, such as "-Wpadded".
  * @note Selected where __GNUC__ is defined and __clang__ is not.
- * @note Belongs between an EMBED_DIAGNOSTIC_PUSH and an EMBED_DIAGNOSTIC_POP so it ends where the
- *       code needing it ends.
+ * @note This turns off exactly one warning. See EMBED_DIAGNOSTIC_PUSH for where to put it.
  */
 #define EMBED_DIAGNOSTIC_IGNORE(warning_) _Pragma(EMBED_DIAGNOSTIC_STRING(GCC diagnostic ignored warning_))
 #else
@@ -394,15 +401,15 @@
 /**
  * @brief Expands to nothing when __clang__ and __GNUC__ are both undefined.
  *
- * @note A compiler with no diagnostic pragma has nothing to save, so the bracket a suppression sits
- *       in costs nothing and the calling code needs no arm of its own.
+ * @note A compiler with no diagnostic pragma has no state to save. Calling code keeps the same
+ *       push, ignore, and pop shape on every compiler, and this arm costs nothing.
  */
 #define EMBED_DIAGNOSTIC_PUSH
 
 /**
  * @brief Expands to nothing when __clang__ and __GNUC__ are both undefined.
  *
- * @note Pairs with EMBED_DIAGNOSTIC_PUSH, which also expands to nothing here.
+ * @note This pairs with EMBED_DIAGNOSTIC_PUSH. That macro also expands to nothing on this arm.
  */
 #define EMBED_DIAGNOSTIC_POP
 
@@ -410,8 +417,8 @@
  * @brief Expands to nothing when __clang__ and __GNUC__ are both undefined.
  *
  * @param[in] warning_ Warning name as a string literal, discarded.
- * @warning The diagnostic is not suppressed on this arm. A compiler here that raises it anyway
- *          reports it, which is the safe direction.
+ * @warning The warning is not suppressed on this arm. A compiler that raises it still reports it.
+ *          Reporting is the safe direction.
  */
 #define EMBED_DIAGNOSTIC_IGNORE(warning_)
 #endif
@@ -419,8 +426,11 @@
 /**
  * @brief Set to 1 where __BYTE_ORDER__ and __ORDER_BIG_ENDIAN__ are both defined and equal, 0 otherwise.
  *
- * @warning Neither definition is made when EMBED_BIG_ENDIAN is already defined, so a target whose
- *          compiler states neither macro sets it on the command line rather than being guessed at.
+ * @note A consumer that reads or writes multi-byte values one byte at a time branches on this.
+ *       Nothing in this library reads it.
+ * @warning This header defines nothing when EMBED_BIG_ENDIAN is already defined. A compiler that
+ *          defines neither __BYTE_ORDER__ nor __ORDER_BIG_ENDIAN__ falls to 0 here. Set it on the
+ *          command line for a big-endian target with such a compiler.
  */
 #ifndef EMBED_BIG_ENDIAN
 #if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
@@ -434,13 +444,14 @@
 /**
  * @brief Set to 1 where the target loads a word from any address in one instruction, 0 otherwise.
  *
- * @note Not whether an unaligned load compiles. A type carrying EMBED_RAW accepts one everywhere.
- *       It is whether the target performs one directly.
- * @note __ARM_FEATURE_UNALIGNED is the compiler's own answer, and is switched off by
- *       -mno-unaligned-access. No part is named here: a target list would be a guess from a
- *       compiler's identity, which is the thing every other gate in this file avoids.
- * @note Answers 0 where nothing is stated, which is the safe direction.
- * @warning Neither definition is made when EMBED_FAST_UNALIGNED_LOAD is already defined.
+ * @note An unaligned load compiles on any target through a type carrying EMBED_RAW. This flag is 1
+ *       only where the target does that load in one instruction.
+ * @note GCC and clang define __ARM_FEATURE_UNALIGNED on targets that support it. Passing
+ *       -mno-unaligned-access turns it off.
+ * @note No target is named here. The flag falls to 0 wherever that macro is absent, and 0 is the
+ *       safe answer. A consumer seeing 0 takes the byte-wise path, which is correct everywhere.
+ * @warning This header defines nothing when EMBED_FAST_UNALIGNED_LOAD is already defined. Nothing
+ *          in this library reads this flag.
  */
 #ifndef EMBED_FAST_UNALIGNED_LOAD
 #if defined(__ARM_FEATURE_UNALIGNED)

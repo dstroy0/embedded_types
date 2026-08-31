@@ -6,19 +6,19 @@
  */
 /**
  * @file test_embed_dispatch_layout.c
- * @brief Exercises the argument count, the token paste, the compound-literal call, and that a table
- *        reaches the function each slot names.
+ * @brief Exercises the argument count, the token paste, the compound-literal call, and that each
+ *        table entry reaches the function it was wired to.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-08-30
  *
- * @note EMBED_TABLE_LAYOUT is proved by this file compiling: its assertions are static, and a table
- *       whose members were at the wrong offsets would fail the build rather than a case below.
- * @note What runs here is what a static assertion cannot see. A table can satisfy every offset
- *       assertion and still be wired to the wrong functions, because an initializer names members
- *       and the assertions measure positions.
+ * @note EMBED_TABLE_LAYOUT expands to static assertions. A table whose members sat at the wrong
+ *       offsets would fail the build, and no case below would run.
+ * @note A table can satisfy every offset assertion and still be wired to the wrong functions. An
+ *       initializer names members, and the assertions measure positions. The cases below call
+ *       through the table to catch that.
  * @note EMBED_NARG, EMBED_CAT and EMBED_CALL are declared in embed_compiler_directives.h and are
- *       exercised here because EMBED_TABLE_LAYOUT is built out of them. test_embed_compiler_
- *       directives owns them as its header's own machinery.
+ *       exercised here because EMBED_TABLE_LAYOUT is built out of them.
+ *       test_embed_compiler_directives.c covers the same three macros against their own header.
  */
 #include "embed_dispatch_layout.h"
 #include "embed_types.h"
@@ -28,8 +28,8 @@
 /**
  * @brief Runs before each case, and has nothing to prepare.
  *
- * @note Unity calls this whether or not it does anything, and unity_internals.h declares it. The
- *       table below is const, so no case can leave state behind for the next one.
+ * @note Unity calls this before every case, and a suite has to define it. The only object this file
+ *       declares at file scope is the const table below, and no case writes to it.
  */
 void setUp(void)
 {
@@ -41,14 +41,15 @@ void tearDown(void)
 }
 
 /**
- * @brief Checks that the argument count answers the number of arguments it was handed.
+ * @brief Checks that EMBED_NARG evaluates to the number of arguments it was handed.
  *
  * @note Each expectation is the literal number of items written on the same line, counted by hand.
  *       Deriving it from EMBED_NARG would compare the macro with itself.
- * @note One, two, twenty-three and twenty-four are the cases that matter: the floor, the step, and
- *       both sides of the ceiling the family stops at.
+ * @note The five lengths are one, two, eight, twenty-three and twenty-four. One is the shortest
+ *       list EMBED_NARG covers and twenty-four is the longest. Twenty-three sits one below the
+ *       longest, and two and eight fall in between.
  */
-void test_the_argument_count_answers_the_length_of_the_list(void)
+void test_the_argument_count_matches_the_length_of_the_list(void)
 {
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, EMBED_NARG(a), "one argument counts as one");
     TEST_ASSERT_EQUAL_INT_MESSAGE(2, EMBED_NARG(a, b), "two arguments count as two");
@@ -66,8 +67,9 @@ void test_the_argument_count_answers_the_length_of_the_list(void)
 /**
  * @brief Checks that the two-step paste joins a name to an expanded count.
  *
- * @note The point of the outer step. Pasting the name of a macro rather than its value is the
- *       failure this shape exists to avoid, and it is what EMBED_TABLE_LAYOUT depends on.
+ * @note ## suppresses expansion of its own operands. EMBED_CAT expands its arguments first and
+ *       then pastes the results. EMBED_TABLE_LAYOUT needs that order, because it pastes
+ *       EMBED_NARG's count onto EMBED_TABLE_SLOTS_ to select an arity line.
  */
 void test_the_paste_joins_a_name_to_an_expanded_count(void)
 {
@@ -85,22 +87,25 @@ typedef struct
 } CallProbeArgs;
 
 /**
- * @brief Sums the three members so a caller can see which of them arrived.
+ * @brief Sums the three members under distinct weights.
  *
  * @param[in] args Operand block built by the caller [BORROWS].
- * @return         first plus twice second plus four times third, which no two inputs share.
- * @note The weights make the answer name which members were set, rather than only their total.
+ * @return         first plus twice second plus four times third.
+ * @note The weights are 1, 2 and 4. With each member set to 0 or 1, no two combinations produce
+ *       the same sum.
  */
 static embed_index call_probe(const CallProbeArgs *args)
 {
+    // The 2u and 4u operands promote the sum to unsigned int. Narrowing back to embed_index is safe
+    // because every call site passes members of 0 or 1, and the sum is at most 7.
     return (embed_index)(args->first + (2u * args->second) + (4u * args->third));
 }
 
 /**
  * @brief Checks that the call shape passes named members and zeroes the ones left out.
  *
- * @note The zeroed member is the part worth proving. It is a property of the standard rather than
- *       of a compiler, and a consumer relies on it every time it omits a default.
+ * @note C zero initializes any member a compound literal's initializer does not name. That comes
+ *       from the language, and a consumer relies on it every time it omits a default.
  */
 void test_the_call_passes_named_members_and_zeroes_the_rest(void)
 {
@@ -114,20 +119,20 @@ void test_the_call_passes_named_members_and_zeroes_the_rest(void)
                                    "positional initializers arrive");
 }
 
-/** @brief Answers 1, so a caller can tell which slot it reached. */
-static embed_index slot_zero_entry(void)
+/** @brief Returns 1, distinct from the values the other two entries return. */
+static embed_index first_entry(void)
 {
     return 1u;
 }
 
-/** @brief Answers 2, so a caller can tell which slot it reached. */
-static embed_index slot_one_entry(void)
+/** @brief Returns 2, distinct from the values the other two entries return. */
+static embed_index second_entry(void)
 {
     return 2u;
 }
 
-/** @brief Answers 4, so a caller can tell which slot it reached. */
-static embed_index slot_two_entry(void)
+/** @brief Returns 4, distinct from the values the other two entries return. */
+static embed_index third_entry(void)
 {
     return 4u;
 }
@@ -135,8 +140,8 @@ static embed_index slot_two_entry(void)
 /**
  * @brief A dispatch table of three entries, whose layout the assertion below pins.
  *
- * @note Each entry answers a distinct power of two, so a sum over the table names exactly which
- *       members were reached rather than only how many.
+ * @note Each entry returns a distinct power of two. No two subsets of the three entries sum to the
+ *       same total.
  */
 typedef struct
 {
@@ -149,36 +154,36 @@ EMBED_TABLE_LAYOUT(ProbeTable, first, second, third);
 /**
  * @brief The table under test, wired in the order its members are declared.
  *
- * @note EMBED_TABLE_STORAGE gives it internal linkage and const, and EMBED_UNUSED keeps a
- *       translation unit that calls nothing through it quiet.
+ * @note EMBED_TABLE_STORAGE expands to static const. EMBED_UNUSED suppresses the unused-object
+ *       warning on a table nothing calls through. The cases below call through this one.
  */
-EMBED_TABLE_STORAGE ProbeTable probe EMBED_UNUSED = {
-    .first = slot_zero_entry,
-    .second = slot_one_entry,
-    .third = slot_two_entry,
+EMBED_TABLE_STORAGE ProbeTable dispatch_probe_table EMBED_UNUSED = {
+    .first = first_entry,
+    .second = second_entry,
+    .third = third_entry,
 };
 
 /**
  * @brief Checks that each member reaches the function it was wired to.
  *
- * @note What the static assertions cannot see. They measure where the members sit; an initializer
- *       naming the wrong function satisfies every offset and still dispatches wrongly.
+ * @note EMBED_TABLE_LAYOUT asserts offsets on the struct type. The initializer is on the object, and
+ *       naming the wrong function there changes no offset. Calling through each member catches it.
  */
 void test_each_member_reaches_the_function_it_names(void)
 {
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(1u, probe.first(), "the first member reaches its own function");
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(2u, probe.second(), "the second member reaches its own function");
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(4u, probe.third(), "the third member reaches its own function");
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(7u, probe.first() + probe.second() + probe.third(),
-                                   "no two members reach the same function");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(1u, dispatch_probe_table.first(), "the first member reaches its own function");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(2u, dispatch_probe_table.second(), "the second member reaches its own function");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(4u, dispatch_probe_table.third(), "the third member reaches its own function");
+    TEST_ASSERT_EQUAL_UINT_MESSAGE(
+        7u, dispatch_probe_table.first() + dispatch_probe_table.second() + dispatch_probe_table.third(),
+        "no two members reach the same function");
 }
 
 /**
  * @brief Checks that the table holds nothing but its function pointers.
  *
- * @note The size is compared against a count written as a literal times the pointer width, which is
- *       what the static assertion inside EMBED_TABLE_LAYOUT proves at compile time. Repeating it
- *       here catches a build where that assertion was compiled out.
+ * @note EMBED_TABLE_LAYOUT asserts this size at compile time. This case checks it again at run time.
+ *       The suite's report then lists it alongside every other case.
  */
 void test_the_table_is_exactly_its_three_pointers(void)
 {

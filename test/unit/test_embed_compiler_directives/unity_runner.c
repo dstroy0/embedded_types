@@ -11,9 +11,9 @@ extern void setUp(void);
 extern void tearDown(void);
 extern void test_every_feature_gate_carries_a_value_of_zero_or_one(void);
 extern void test_the_static_assertion_compiles_at_file_and_block_scope(void);
-extern void test_the_feature_tests_answer_zero_for_a_name_nothing_defines(void);
-extern void test_the_endian_answer_agrees_with_the_bytes_of_a_word(void);
-extern void test_the_argument_count_answers_the_length_of_the_list(void);
+extern void test_the_feature_tests_evaluate_to_zero_for_an_unknown_name(void);
+extern void test_the_endian_flag_agrees_with_the_bytes_of_a_word(void);
+extern void test_the_argument_count_matches_the_length_of_the_list(void);
 extern void test_the_paste_joins_a_name_to_an_expanded_count(void);
 extern void test_the_call_passes_named_members_and_zeroes_the_rest(void);
 extern void test_the_inline_and_flattened_helpers_run_their_bodies(void);
@@ -85,19 +85,19 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 int main(void)
 {
   UnityBegin("C:/Users/Douglas/Desktop/git_project/embedded_types/test/unit/test_embed_compiler_directives\\test_embed_compiler_directives.c");
-  run_test(test_every_feature_gate_carries_a_value_of_zero_or_one, "test_every_feature_gate_carries_a_value_of_zero_or_one", 243);
-  run_test(test_the_static_assertion_compiles_at_file_and_block_scope, "test_the_static_assertion_compiles_at_file_and_block_scope", 260);
-  run_test(test_the_feature_tests_answer_zero_for_a_name_nothing_defines, "test_the_feature_tests_answer_zero_for_a_name_nothing_defines", 277);
-  run_test(test_the_endian_answer_agrees_with_the_bytes_of_a_word, "test_the_endian_answer_agrees_with_the_bytes_of_a_word", 294);
-  run_test(test_the_argument_count_answers_the_length_of_the_list, "test_the_argument_count_answers_the_length_of_the_list", 322);
-  run_test(test_the_paste_joins_a_name_to_an_expanded_count, "test_the_paste_joins_a_name_to_an_expanded_count", 341);
-  run_test(test_the_call_passes_named_members_and_zeroes_the_rest, "test_the_call_passes_named_members_and_zeroes_the_rest", 354);
-  run_test(test_the_inline_and_flattened_helpers_run_their_bodies, "test_the_inline_and_flattened_helpers_run_their_bodies", 373);
-  run_test(test_a_packed_enum_takes_the_width_its_range_needs, "test_a_packed_enum_takes_the_width_its_range_needs", 386);
-  run_test(test_the_alignment_attribute_raises_and_lowers, "test_the_alignment_attribute_raises_and_lowers", 403);
-  run_test(test_a_raw_word_reads_from_an_odd_address, "test_a_raw_word_reads_from_an_odd_address", 422);
-  run_test(test_the_diagnostic_bracket_bounds_a_suppression, "test_the_diagnostic_bracket_bounds_a_suppression", 449);
-  run_test(test_the_weak_default_links_as_itself, "test_the_weak_default_links_as_itself", 474);
+  run_test(test_every_feature_gate_carries_a_value_of_zero_or_one, "test_every_feature_gate_carries_a_value_of_zero_or_one", 244);
+  run_test(test_the_static_assertion_compiles_at_file_and_block_scope, "test_the_static_assertion_compiles_at_file_and_block_scope", 261);
+  run_test(test_the_feature_tests_evaluate_to_zero_for_an_unknown_name, "test_the_feature_tests_evaluate_to_zero_for_an_unknown_name", 277);
+  run_test(test_the_endian_flag_agrees_with_the_bytes_of_a_word, "test_the_endian_flag_agrees_with_the_bytes_of_a_word", 295);
+  run_test(test_the_argument_count_matches_the_length_of_the_list, "test_the_argument_count_matches_the_length_of_the_list", 324);
+  run_test(test_the_paste_joins_a_name_to_an_expanded_count, "test_the_paste_joins_a_name_to_an_expanded_count", 343);
+  run_test(test_the_call_passes_named_members_and_zeroes_the_rest, "test_the_call_passes_named_members_and_zeroes_the_rest", 356);
+  run_test(test_the_inline_and_flattened_helpers_run_their_bodies, "test_the_inline_and_flattened_helpers_run_their_bodies", 375);
+  run_test(test_a_packed_enum_takes_the_width_its_range_needs, "test_a_packed_enum_takes_the_width_its_range_needs", 388);
+  run_test(test_the_alignment_attribute_raises_and_lowers, "test_the_alignment_attribute_raises_and_lowers", 405);
+  run_test(test_a_raw_word_reads_from_an_odd_address, "test_a_raw_word_reads_from_an_odd_address", 424);
+  run_test(test_the_diagnostic_bracket_bounds_a_suppression, "test_the_diagnostic_bracket_bounds_a_suppression", 451);
+  run_test(test_the_weak_default_links_as_itself, "test_the_weak_default_links_as_itself", 475);
   run_test(test_the_declaration_guards_leave_a_c_declaration_intact, "test_the_declaration_guards_leave_a_c_declaration_intact", 486);
   run_test(test_an_unreferenced_marked_definition_compiles_quietly, "test_an_unreferenced_marked_definition_compiles_quietly", 498);
 

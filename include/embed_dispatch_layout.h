@@ -11,12 +11,11 @@
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-08-30
  *
- * @note Two mistakes are what this file is for, and neither is visible at a call site. A member
- *       added to the struct but left out of the list moves every member below it to a slot that is
- *       no longer its own. Padding appearing between members does the same without anyone editing
- *       the list at all.
- * @note The preprocessor cannot walk a list, so each member count needs a line of its own. That is
- *       why the family below is written out to twenty-four rather than expressed once.
+ * @note This catches two mistakes, and neither shows up at a call site. Adding a member to the
+ *       struct and leaving it out of the list moves every member below it off its slot. Padding
+ *       appearing between two members does the same with no edit to the list at all.
+ * @note The preprocessor has no loop. Each member count needs its own line. The family below runs
+ *       out to twenty-four for that reason.
  */
 #ifndef EMBED_DISPATCH_LAYOUT_H
 #define EMBED_DISPATCH_LAYOUT_H
@@ -28,20 +27,20 @@
 /**
  * @brief Expands to sizeof(void (*)(void)).
  *
- * @note The ruler a slot index is multiplied by. Not sizeof(void *), which is the wrong one on a
- *       part where a code pointer and a data pointer differ in width.
+ * @note A slot index times this gives a byte offset. sizeof(void *) would be wrong here. Code and
+ *       data pointers differ in width on some targets.
  */
 #define EMBED_FUNCTION_POINTER_BYTES (sizeof(void (*)(void)))
 
 /**
- * @brief Asserts one member sits at the slot its position claims.
+ * @brief Asserts one member sits at a given dispatch slot.
  *
  * @param[in] Table_  Struct type passed to offsetof.
  * @param[in] member_ Member name passed to offsetof.
  * @param[in] slot_   Index, cast to size_t and multiplied by EMBED_FUNCTION_POINTER_BYTES.
- * @note The single check the whole family below is built out of. One member, one offset.
- * @note Table_, member_ and slot_ are stringized into the assertion message, so a failure names the
- *       table, the member and the index it was expected at rather than only a file and a line.
+ * @note Every EMBED_TABLE_SLOTS_N line below is built from this one check.
+ * @note Table_, member_, and slot_ are stringized into the assertion message. A failure names the
+ *       table, the member, and the index it was expected at.
  */
 #define EMBED_TABLE_SLOT(Table_, member_, slot_)                                                                       \
     EMBED_STATIC_ASSERT(offsetof(Table_, member_) == (size_t)(slot_) * EMBED_FUNCTION_POINTER_BYTES,                   \
@@ -52,8 +51,8 @@
  *
  * @param[in] Table_   Struct type forwarded to EMBED_TABLE_SLOT.
  * @param[in] member1_ The single member's name, at slot 0.
- * @note The base of the family. Every longer line ends in this one, so it is the only line here
- *       that names no other.
+ * @note Every longer line in the family expands down to this one. This line calls only
+ *       EMBED_TABLE_SLOT.
  */
 #define EMBED_TABLE_SLOTS_1(Table_, member1_) EMBED_TABLE_SLOT(Table_, member1_, 0);
 
@@ -61,9 +60,10 @@
  * @brief Asserts two members sit at consecutive slots from 0.
  *
  * @param[in] Table_   Struct type forwarded to EMBED_TABLE_SLOT.
- * @param[in] member1_ Member at slot 0, which EMBED_TABLE_SLOTS_1 asserts.
- * @param[in] member2_ Member at slot 1, asserted after it.
- * @note The step every longer line repeats. Expand the line one shorter, then assert the next index.
+ * @param[in] member1_ Member at slot 0.
+ * @param[in] member2_ Member at slot 1.
+ * @note Every longer line in the family works the same way. It expands the line one shorter, then
+ *       asserts the next index.
  */
 #define EMBED_TABLE_SLOTS_2(Table_, member1_, member2_)                                                                \
     EMBED_TABLE_SLOTS_1(Table_, member1_) EMBED_TABLE_SLOT(Table_, member2_, 1);
@@ -619,9 +619,9 @@
  * @param[in] member23_ Member at slot 22.
  * @param[in] member24_ Member at slot 23, asserted after EMBED_TABLE_SLOTS_23 covers the first twenty-three.
  * @note EMBED_TABLE_LAYOUT selects this line for a table with twenty-four members.
- * @warning The ceiling of the family. A twenty-fifth member has no line to reach, and EMBED_NARG
- *          cannot count that far either, so raising the ceiling means adding a line here and a
- *          constant to both EMBED_NARG and EMBED_ARG_N.
+ * @warning This is the longest line in the family. A table with twenty-five members has no line to
+ *          expand to. EMBED_NARG stops at twenty-four as well. Raising the limit takes a new line
+ *          here, one more constant in EMBED_NARG, and one more parameter in EMBED_ARG_N.
  */
 #define EMBED_TABLE_SLOTS_24(Table_, member1_, member2_, member3_, member4_, member5_, member6_, member7_, member8_,   \
                              member9_, member10_, member11_, member12_, member13_, member14_, member15_, member16_,    \
@@ -638,10 +638,9 @@
  * @param[in] ...    Member names in slot order, one to twenty-four.
  * @note The per-member assertions catch a member left out of the list. The size assertion catches
  *       padding, since a padded struct is larger than the count times EMBED_FUNCTION_POINTER_BYTES.
- * @note EMBED_CAT builds the arity line's name from EMBED_NARG's count of the member list, so the
- *       caller states the members once and the arity follows from them.
- * @warning Any size other than the member count times EMBED_FUNCTION_POINTER_BYTES fails the
- *          assertion, which is what a member of some other type in the struct produces.
+ * @note EMBED_CAT builds the arity line's name from EMBED_NARG's count of the member list. The
+ *       caller writes each member once.
+ * @warning A member of some other type changes sizeof(Table_) and fails the size assertion.
  */
 #define EMBED_TABLE_LAYOUT(Table_, ...)                                                                                \
     EMBED_CAT(EMBED_TABLE_SLOTS_, EMBED_NARG(__VA_ARGS__))(Table_, __VA_ARGS__)                                        \
@@ -651,13 +650,12 @@
 /**
  * @brief Expands to static const.
  *
- * @note Declares a dispatch table. Internal linkage is what makes a table definable in a header at
- *       all: each translation unit including it gets its own, rather than every one of them
- *       defining the same symbol.
- * @note const is what pays for the indirection. A table no other translation unit can reach and no
- *       code assigns to leaves the compiler free to resolve an entry call to the function directly.
- * @note A table carries EMBED_UNUSED as well, for the translation unit that includes the header and
- *       calls nothing through it.
+ * @note Declares a dispatch table. static gives internal linkage. Each translation unit including
+ *       the header gets its own copy. The copies do not collide at link time.
+ * @note const lets the compiler resolve a call through a table entry to the function directly. That
+ *       needs a table no other translation unit can reach and no code assigns to.
+ * @note This macro does not supply EMBED_UNUSED. Write it on the table as well. A translation unit
+ *       that calls nothing through the table warns without it.
  */
 #define EMBED_TABLE_STORAGE static const
 

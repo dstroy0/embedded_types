@@ -76,12 +76,12 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 int main(void)
 {
   UnityBegin("C:/Users/Douglas/Desktop/git_project/embedded_types/test/unit/test_embed_types\\test_embed_types.c");
-  run_test(test_the_widths_are_the_widths_they_are_named_for, "test_the_widths_are_the_widths_they_are_named_for", 50);
-  run_test(test_the_signed_aliases_carry_a_sign_and_the_unsigned_ones_do_not, "test_the_signed_aliases_carry_a_sign_and_the_unsigned_ones_do_not", 68);
-  run_test(test_the_word_matches_the_pointer_it_was_derived_from, "test_the_word_matches_the_pointer_it_was_derived_from", 87);
-  run_test(test_the_index_fits_the_register_and_is_two_or_four_bytes, "test_the_index_fits_the_register_and_is_two_or_four_bytes", 103);
-  run_test(test_the_boolean_normalizes_every_nonzero_to_one, "test_the_boolean_normalizes_every_nonzero_to_one", 116);
-  run_test(test_a_raw_word_reads_from_an_odd_address, "test_a_raw_word_reads_from_an_odd_address", 142);
+  run_test(test_the_widths_are_the_widths_they_are_named_for, "test_the_widths_are_the_widths_they_are_named_for", 48);
+  run_test(test_the_signed_aliases_carry_a_sign_and_the_unsigned_ones_do_not, "test_the_signed_aliases_carry_a_sign_and_the_unsigned_ones_do_not", 66);
+  run_test(test_the_word_matches_the_pointer_it_was_derived_from, "test_the_word_matches_the_pointer_it_was_derived_from", 88);
+  run_test(test_the_index_fits_the_register_and_is_two_or_four_bytes, "test_the_index_fits_the_register_and_is_two_or_four_bytes", 106);
+  run_test(test_the_boolean_normalizes_every_nonzero_to_one, "test_the_boolean_normalizes_every_nonzero_to_one", 121);
+  run_test(test_a_raw_word_reads_from_an_odd_address, "test_a_raw_word_reads_from_an_odd_address", 148);
 
   return UNITY_END();
 }

@@ -8,7 +8,7 @@
 /*=======External Functions This Runner Calls=====*/
 extern void setUp(void);
 extern void tearDown(void);
-extern void test_the_argument_count_answers_the_length_of_the_list(void);
+extern void test_the_argument_count_matches_the_length_of_the_list(void);
 extern void test_the_paste_joins_a_name_to_an_expanded_count(void);
 extern void test_the_call_passes_named_members_and_zeroes_the_rest(void);
 extern void test_each_member_reaches_the_function_it_names(void);
@@ -74,11 +74,11 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 int main(void)
 {
   UnityBegin("C:/Users/Douglas/Desktop/git_project/embedded_types/test/unit/test_embed_dispatch_layout\\test_embed_dispatch_layout.c");
-  run_test(test_the_argument_count_answers_the_length_of_the_list, "test_the_argument_count_answers_the_length_of_the_list", 51);
-  run_test(test_the_paste_joins_a_name_to_an_expanded_count, "test_the_paste_joins_a_name_to_an_expanded_count", 72);
-  run_test(test_the_call_passes_named_members_and_zeroes_the_rest, "test_the_call_passes_named_members_and_zeroes_the_rest", 105);
-  run_test(test_each_member_reaches_the_function_it_names, "test_each_member_reaches_the_function_it_names", 167);
-  run_test(test_the_table_is_exactly_its_three_pointers, "test_the_table_is_exactly_its_three_pointers", 183);
+  run_test(test_the_argument_count_matches_the_length_of_the_list, "test_the_argument_count_matches_the_length_of_the_list", 52);
+  run_test(test_the_paste_joins_a_name_to_an_expanded_count, "test_the_paste_joins_a_name_to_an_expanded_count", 74);
+  run_test(test_the_call_passes_named_members_and_zeroes_the_rest, "test_the_call_passes_named_members_and_zeroes_the_rest", 110);
+  run_test(test_each_member_reaches_the_function_it_names, "test_each_member_reaches_the_function_it_names", 172);
+  run_test(test_the_table_is_exactly_its_three_pointers, "test_the_table_is_exactly_its_three_pointers", 188);
 
   return UNITY_END();
 }
