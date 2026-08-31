@@ -659,4 +659,128 @@
  */
 #define EMBED_TABLE_STORAGE static const
 
+/**
+ * @brief Expands to left_##right_.
+ *
+ * @param[in] left_  Left operand of ##.
+ * @param[in] right_ Right operand of ##.
+ * @return           The single token formed by joining left_ and right_.
+ * @note EMBED_CAT calls this. ## does not expand its own operands, and EMBED_CAT expands them
+ *       before handing them here. Call EMBED_CAT when either operand is itself a macro.
+ */
+#define EMBED_CAT_(left_, right_) left_##right_
+
+/**
+ * @brief Expands to EMBED_CAT_(left_, right_).
+ *
+ * @param[in] left_  Left operand, forwarded to EMBED_CAT_.
+ * @param[in] right_ Right operand, forwarded to EMBED_CAT_.
+ * @return           The single token formed by joining left_ and right_.
+ * @note This expands its arguments first, then EMBED_CAT_ pastes the results. A macro operand
+ *       reaches EMBED_CAT_ as its value.
+ * @note EMBED_TABLE_LAYOUT uses this to build an EMBED_TABLE_SLOTS_<n> name from EMBED_NARG's
+ *       count.
+ */
+#define EMBED_CAT(left_, right_) EMBED_CAT_(left_, right_)
+
+/**
+ * @brief Expands to EMBED_ARG_N with __VA_ARGS__ followed by the constants 24 down to 0.
+ *
+ * @param[in] ... The list to count.
+ * @return        The number of arguments, for one to twenty-four arguments.
+ * @note Counting the arguments turns an arity into a number EMBED_CAT can paste into a macro name.
+ *       The preprocessor has no loop.
+ * @warning An empty list gives 1. The preprocessor cannot tell an empty argument from a missing one.
+ * @warning Twenty-five or more arguments make EMBED_ARG_N select an argument instead of a constant.
+ */
+#define EMBED_NARG(...)                                                                                                \
+    EMBED_NARG_(__VA_ARGS__, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+
+/**
+ * @brief Expands to EMBED_ARG_N(__VA_ARGS__).
+ *
+ * @param[in] ... The list from EMBED_NARG, followed by the constants 24 down to 0.
+ * @return        The value EMBED_ARG_N selects.
+ * @note EMBED_NARG calls this. Going through one more macro expands the caller's list before
+ *       EMBED_ARG_N picks a slot from it.
+ */
+#define EMBED_NARG_(...) EMBED_ARG_N(__VA_ARGS__)
+
+/**
+ * @brief Expands to its twenty-fifth argument.
+ *
+ * @param[in] slot1_    Arguments one through twenty-four, discarded.
+ * @param[in] selected_ The twenty-fifth argument.
+ * @param[in] ...       Arguments beyond the twenty-fifth, discarded.
+ * @return              selected_.
+ * @note EMBED_NARG appends the constants 24 down to 0 after the caller's list. The caller's
+ *       arguments push those constants to the right. Whichever one lands twenty-fifth is how many
+ *       arguments the caller passed.
+ */
+#define EMBED_ARG_N(slot1_, slot2_, slot3_, slot4_, slot5_, slot6_, slot7_, slot8_, slot9_, slot10_, slot11_, slot12_, \
+                    slot13_, slot14_, slot15_, slot16_, slot17_, slot18_, slot19_, slot20_, slot21_, slot22_, slot23_, \
+                    slot24_, selected_, ...)                                                                           \
+    selected_
+
+/**
+ * @brief Expands to entry_(&(ArgsType_){__VA_ARGS__}).
+ *
+ * @param[in] entry_    Function called with the address of the literal.
+ * @param[in] ArgsType_ Type of the compound literal.
+ * @param[in] ...       Initializers for the compound literal.
+ * @return              The value entry_ returns.
+ * @note One pointer costs one register at any arity. A long parameter list fills the registers and
+ *       spills the rest onto the stack.
+ * @note C zero initializes any member the initializer does not name. A compound literal in argument
+ *       position lives until the end of the enclosing block, so entry_ may hold the pointer for the
+ *       whole call.
+ * @note Use this from C only. Compound literals are not C++ in any revision. GNU C++ accepts one as
+ *       an extension. Its lifetime there ends at the full-expression. That breaks the [BORROWS]
+ *       contract below. No header here expands this macro. A C++ build never sees the expansion.
+ * @warning entry_ receives the address of the literal [BORROWS].
+ */
+#define EMBED_CALL(entry_, ArgsType_, ...) entry_(&(ArgsType_){__VA_ARGS__})
+
+/**
+ * @brief Defines a value-returning entry point that forwards an argument pack.
+ *
+ * @param[in] entry_prefix_   Public entry point prefix, such as mmgr_anular_.
+ * @param[in] backend_prefix_ Backend function prefix, such as infin_.
+ * @param[in] CtxType_        Type of the compound literal the backend receives, such as AnularisCtx.
+ * @param[in] CfgType_        Type the emitted entry takes a pointer to, such as AnularisCfg.
+ * @param[in] ReturnType_     Return type of the emitted function.
+ * @param[in] name_           Core name, pasted onto both prefixes.
+ * @param[in] ...             Initializers for the CtxType_ literal, written in terms of args.
+ * @return                    What the backend returns.
+ * @note One shape for every entry in the library, so a caller meets the same call at each module.
+ *       The entry tests nothing. Whatever checking an operation needs belongs in the backend it
+ *       names.
+ * @warning The initializers dereference args, so it must not be NULL [BORROWS].
+ */
+#define EMBED_ENTRY(entry_prefix_, backend_prefix_, CtxType_, CfgType_, ReturnType_, name_, ...)                       \
+    ReturnType_ entry_prefix_##name_(const CfgType_ *args)                                                             \
+    {                                                                                                                  \
+        return EMBED_CALL(backend_prefix_##name_, CtxType_, __VA_ARGS__);                                              \
+    }
+
+/**
+ * @brief Defines a void entry point that forwards an argument pack.
+ *
+ * @param[in] entry_prefix_   Public entry point prefix, such as mmgr_anular_.
+ * @param[in] backend_prefix_ Backend function prefix, such as infin_.
+ * @param[in] CtxType_        Type of the compound literal the backend receives, such as AnularisCtx.
+ * @param[in] CfgType_        Type the emitted entry takes a pointer to, such as AnularisCfg.
+ * @param[in] name_           Core name, pasted onto both prefixes.
+ * @param[in] ...             Initializers for the CtxType_ literal, written in terms of args.
+ * @note The same body as GENERIC_ENTRY, without the return. Two macros rather than one because the
+ *       return type is not a parameter that can be void here. Writing `void` where ReturnType_ goes
+ *       would still emit `return backend(...)` on a void call.
+ * @warning The initializers dereference args, so it must not be NULL [BORROWS].
+ */
+#define EMBED_ENTRY_V(entry_prefix_, backend_prefix_, CtxType_, CfgType_, name_, ...)                                  \
+    void entry_prefix_##name_(const CfgType_ *args)                                                                    \
+    {                                                                                                                  \
+        EMBED_CALL(backend_prefix_##name_, CtxType_, __VA_ARGS__);                                                     \
+    }
+
 #endif
