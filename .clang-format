@@ -89,10 +89,6 @@ AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
 AttributeMacros:
   - __capability
-  # The attribute wrappers from embed_compiler_directives.h. Listed so each is formatted as an
-  # attribute on the declaration it qualifies rather than as a type or a call. EMBED_RAW and
-  # EMBED_ALIAS trail a typedef's declarator and EMBED_ALIGN(n) precedes a name; unlisted, the
-  # trailing ones read as a second declarator and the line is split at the wrong place.
   - EMBED_RAW
   - EMBED_ALIGN
   - EMBED_ALIAS

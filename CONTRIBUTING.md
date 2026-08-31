@@ -9,11 +9,9 @@ ctest --test-dir build --output-on-failure
 ```
 
 Three CTest targets, one per header under test. `EMBEDDED_TYPES_BUILD_TESTS` defaults on when this
-is the top-level project and off when it is consumed by another, so `add_subdirectory` does not
-build suites nobody asked for.
+is the top-level project and off when it is consumed by another.
 
-`test/harness.py` carries each build tree's flags, so running one is a command rather than a
-remembered incantation:
+`test/harness.py` carries each build tree's flags:
 
 ```sh
 python test/harness.py test                     # the library as it ships
@@ -23,9 +21,8 @@ python test/harness.py cases test/unit/test_embed_types
 ```
 
 The suites use [Unity](https://github.com/ThrowTheSwitch/Unity), fetched at `v2.6.1` when this
-directory is configured, and generating a runner needs `ruby` on `PATH`. Both belong to `test/`
-alone. The target a consumer links carries the include directory and the C11 requirement and
-nothing else, so a library that includes these headers inherits no test framework.
+directory is configured. Generating a runner needs `ruby` on `PATH`. Both belong to `test/` alone.
+The target a consumer links carries the include directory and `c_std_11`, and no test framework.
 
 ## Adding a suite
 
@@ -43,48 +40,47 @@ A case is `void test_<name>(void)` at file scope. Two shapes make a case silentl
 `harness.py suites --strict` reports both:
 
 - **A definition the generator walks past.** Unity's generator collects `void test_<name>(void)` and
-  nothing else, so a case named anything else is never registered and the suite still passes.
+  nothing else. A case named anything else is never registered, and the suite still reports a pass.
 - **A case defined inside a preprocessor conditional.** The generator reads case names out of the
-  source text and does not see the conditional, so the runner declares and calls the case however it
-  went. Where it went the other way the definition is gone and the suite fails to link. Put the
-  `#if` inside the case body, and report `TEST_IGNORE_MESSAGE` on the arm that cannot measure
-  anything.
+  source text and does not see the conditional. The runner declares and calls the case whichever way
+  the conditional went, and where it went the other way the definition is absent and the suite fails
+  to link. Put the `#if` inside the case body, and call `TEST_IGNORE_MESSAGE` on the arm that cannot
+  measure anything.
 
 ## Where the proof lives
 
 Most of this library is proved by compiling. The eight width assertions, the packed-enum probe, and
-every `EMBED_TABLE_LAYOUT` are static: a build that reaches the link step has already checked them,
-and there is no case in `test/` that repeats the work.
+every `EMBED_TABLE_LAYOUT` are static. A build that reaches the link step has already checked them,
+and no case in `test/` repeats that work.
 
-What the suites cover is what a static assertion cannot see:
+The suites cover what a static assertion does not reach:
 
-- **Signedness.** A typedef pointing at the wrong signedness has the right size, so `sizeof` cannot
-  catch it. Round-tripping a negative through the signed type does.
-- **Boolean normalization.** That any nonzero becomes one, which a plain eight-bit alias would not
-  give, and which decides whether two true values compare equal across an API boundary.
+- **Signedness.** A typedef pointing at the wrong signedness has the right size, and `sizeof` passes
+  either way. Each case casts `-1` to the alias and tests the sign of the result.
+- **Boolean normalization.** Any nonzero converts to 1. A plain eight-bit alias keeps the value it
+  was given, and two true values can then compare unequal across an API boundary.
 - **`EMBED_RAW`.** A word read from an odd address, checked against a `memcpy` of the same bytes.
-- **Dispatch wiring.** A table can satisfy every offset assertion and still be initialized with the
-  wrong function in a slot. The suite calls through it.
-- **The byte order.** `EMBED_BIG_ENDIAN` is derived from `__BYTE_ORDER__`; the case measures how the
-  target actually lays a word out in memory and compares. Reading the same macro back would restate
-  the derivation rather than check it.
-- **The feature tests.** `EMBED_HAS_ATTRIBUTE` and `EMBED_HAS_BUILTIN` answer zero for a name
-  nothing defines. One that answered non-zero would answer non-zero for every name, and every
-  attribute wrapper would be emitted on a compiler that rejects it.
-- **The attribute wrappers.** That a marked definition is still a definition and still computes what
-  its body says, and that the alignment and packing attributes reach the type rather than expanding
-  to nothing unnoticed. Where the compiler cannot carry one the case reports `IGNORE`, so a build
-  that measured nothing says so rather than passing.
+- **Dispatch wiring.** Offsets are properties of the struct type, and an initializer naming the
+  wrong function changes none of them. The suite calls through each member.
+- **The byte order.** `EMBED_BIG_ENDIAN` is derived from `__BYTE_ORDER__`. The case measures how the
+  target lays a word out in memory. Reading the same macro back would compare the macro with itself.
+- **The feature tests.** `EMBED_HAS_ATTRIBUTE` and `EMBED_HAS_BUILTIN` evaluate to zero for a name
+  nothing defines. A non-zero result there would be non-zero for every name, and every attribute
+  wrapper would be emitted on a compiler that rejects it.
+- **The attribute wrappers.** A marked definition is still a definition and still computes what its
+  body says, and the alignment and packing attributes reach the type. Where the compiler cannot
+  carry one, the case calls `TEST_IGNORE_MESSAGE`, and a case that measured nothing does not count
+  as a pass.
 
 ## Never test the library with itself
 
 The expected side of an assertion comes from a literal, from the compiler, or from exact arithmetic.
 Never from the code under test.
 
-A width checked against the macro that produced it agrees with itself and reports green for any
-value. `sizeof(embed_u32) == 4u` is a test; `sizeof(embed_u32) * 8u == 32u` compared against a macro
-that was itself derived from the type is not. Where a test needs an independent source, `uintptr_t`
-and `memcpy` are the compiler's and the standard's, not this library's.
+A width checked against the macro that produced it compares the macro with itself and passes at any
+value. `sizeof(embed_u32) == 4u` is a test. `sizeof(embed_u32) * 8u == 32u` against a macro derived
+from the same type is not. Where a case needs an independent source, `uintptr_t` and `memcpy` come
+from the compiler and the standard.
 
 ## Formatting
 
@@ -96,13 +92,13 @@ npm run format
 `unity_runner.c` is generated and is listed in `.clang-format-ignore`. Formatting it by hand is
 undone on the next generation.
 
-120 columns. CI checks and never rewrites: a formatter that rewrites on CI produces commits nobody
-reviewed and races the author's own push. The fix belongs in the working tree.
+120 columns. CI checks formatting and never rewrites it. A formatter that rewrites on CI produces
+commits nobody reviewed and races the author's own push. Fix it in the working tree.
 
 ## Comments
 
 Every header opens with the license banner and a `@file` block, and every declaration in it carries
-its own Doxygen block. A block documents exactly one declaration; a contiguous family of similar
+its own Doxygen block. A block documents exactly one declaration. A contiguous family of similar
 macros takes one block each, because nearly identical is not identical.
 
 ```c
@@ -121,8 +117,8 @@ macros takes one block each, because nearly identical is not identical.
 ```
 
 A macro parameter takes a real name with a trailing underscore, and the block is written around it.
-`@param[in] x` documents a defect; rename the parameter first and the line then has something to say.
-Pad every `@param` description to the longest name, and pad `@return` to match.
+`@param[in] x` documents a defect. Rename the parameter first, and the line then has something to
+say. Pad every `@param` description to the longest name, and pad `@return` to match.
 
 ```c
 /**
@@ -135,13 +131,12 @@ Pad every `@param` description to the longest name, and pad `@return` to match.
 #define EMBED_HAS_ATTRIBUTE(attribute_) __has_attribute(attribute_)
 ```
 
-Every attribute wrapper carries a `@warning` saying what its absence costs. That is the difference
-between a wrapper that costs speed when it vanishes and one that costs correctness, and a reader
-cannot tell which from the `#if`.
+Every attribute wrapper carries a `@warning` saying what its absence costs. Most cost speed when
+they expand to nothing. `EMBED_ALIGN` and `EMBED_ALIAS` cost correctness. The `#if` does not
+distinguish the two.
 
-State the mechanism, not a consumer. This header set is shared, so a block that says what one
-library does with a macro, or names a part it was measured on, is describing a relationship rather
-than the macro.
+State the mechanism, not a consumer. These headers are shared. A block naming what one library does
+with a macro, or naming a part it was measured on, documents a relationship instead of the macro.
 
 ## What belongs here
 
@@ -150,7 +145,7 @@ The test is whether it is machinery or a domain fact.
 Machinery is anything a library above would otherwise define for itself: a width, a word, an
 attribute wrapper, a static assertion, a feature probe, an argument count. Define it once, here.
 
-A domain fact belongs to the library that has the opinion — a pool size, a protocol timer, a buffer
+A domain fact belongs to the library that has the opinion. A pool size, a protocol timer, a buffer
 count. Those never come here, whatever their prefix looks like.
 
 ## Adding a declaration

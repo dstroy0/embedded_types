@@ -1,7 +1,1 @@
-# Unity's generator writes these, and one is rewritten on every build whose cases changed.
-# Formatting it by hand is undone on the next generation, and formatting it in CI reports a dirty
-# tree on every build that regenerates one.
-#
-# This is the only exemption. Add a path here when a generator acquires another output, rather than
-# a formatter suppression at the site.
 test/**/unity_runner.c

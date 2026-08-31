@@ -1,57 +1,57 @@
 # Security {#proj_security}
 
-## What this library is responsible for
+## Scope
 
 embedded_types declares types and expands macros. It has no functions, no storage, and no run-time
-behavior of its own, so its security properties are narrow and worth stating exactly. The gap
-between what it does and what a reader assumes it does is where the bugs live.
+behavior.
 
-**It does prove its own widths.** Every alias is pinned by a static assertion, so a target where
-`embed_u32` is not thirty-two bits fails the build with a message naming the type. A width that was
-wrong would otherwise be discovered by a wire format that did not match at the far end.
+## What fails the build
 
-**It does refuse to guess the machine word.** The width is derived from `UINTPTR_MAX`. Where that
-macro is absent, or names a width other than sixteen, thirty-two or sixty-four, the build stops.
-Silently choosing the narrowest width would halve every lane on a machine that has more, and nothing
-downstream would report it.
+**A wrong width.** Every unsigned alias is pinned by a static assertion. A target where `embed_u32`
+is not thirty-two bits fails to compile, with a message naming the type.
 
-**It does prove the packed-enum attribute reached the compiler.** A compiler may accept
-`__attribute__((packed))` and disregard it, which no `#if` can see. `EmbedEnumProbe` is declared and
-its size asserted, so a build where packing was ignored fails rather than shipping structs whose
-members sit at offsets the code does not expect.
+**An underivable machine word.** `EMBED_WORD_BITS` comes from `UINTPTR_MAX`. Where that macro is
+absent, or names a width other than sixteen, thirty-two or sixty-four, the header raises `#error`.
+There is no fallback width.
 
-**It does refuse to build before C11.** No earlier revision has a static assertion. Left to expand,
-`EMBED_STATIC_ASSERT` would parse as a function declaration with an implicit `int`, and every
-assertion in every consumer would check nothing while appearing to. That is now an `#error`.
+**A disregarded packed-enum attribute.** A compiler may accept `__attribute__((packed))` and ignore
+it, and no `#if` detects that. `EmbedEnumProbe` has a one-byte range and its size is asserted, so a
+build that ignored packing fails to compile.
 
-**It does not make an unaligned access safe on its own.** `EMBED_RAW` lowers alignment and permits
-aliasing, and both halves are needed. Where the compiler supports neither attribute, both expand to
-nothing, the type reverts to its natural alignment, and a read through it at an odd address is
-undefined. Nothing diagnoses that. The `@warning` on `EMBED_ALIGN` and `EMBED_ALIAS` says so, and it
-is the one place in this library where a missing attribute costs correctness rather than speed.
+**A pre-C11 dialect.** No earlier revision has a static assertion. Unguarded, `EMBED_STATIC_ASSERT`
+would parse as a function declaration with an implicit `int`, and every assertion in every consumer
+would compile to nothing. The header raises `#error` below C11.
 
-**It does not bound anything at run time.** `EMBED_TABLE_LAYOUT` asserts a struct's members sit at
-consecutive slots; it cannot see whether the initializer wired each member to the function that
-belongs there. A table can satisfy every offset assertion and still dispatch wrongly. The suite in
-`test/` calls through a table for exactly that reason.
+## What is not checked
 
-**It is not concurrent and has nothing to synchronize.** There is no state here.
+**Unaligned access without the attributes.** `EMBED_RAW` lowers alignment to 1 and permits aliasing.
+Both are required. Where the compiler supports neither, both expand to nothing, `embed_raw_word`
+reverts to the natural alignment of `embed_word`, and a read through it at an unaligned address is
+undefined. Nothing diagnoses this. The `@warning` on `EMBED_ALIGN` and `EMBED_ALIAS` states it. This
+is the one place in the library where a missing attribute costs correctness.
+
+**Dispatch table wiring.** `EMBED_TABLE_LAYOUT` asserts byte offsets and `sizeof`. Offsets are
+properties of the struct type, and an initializer naming the wrong function changes none of them. A
+table can satisfy every assertion and still dispatch to the wrong function. `test/unit/` calls
+through a table to cover that.
+
+**Anything at run time.** There are no bounds checks, because there is no run-time code.
+
+**Concurrency.** There is no state.
 
 ## Hardening the build
 
-Build with `-DEMBEDDED_TYPES_WERROR=ON`. The warning set in `CMakeLists.txt` is documented flag by
-flag, and each one catches something a widths-and-macros header can plausibly get wrong. Run it in
-CI, not just locally.
+Build with `-DEMBEDDED_TYPES_WERROR=ON`, in CI as well as locally. The warning set is in
+`CMakeLists.txt`.
 
-A consumer should keep `-Wconversion` and `-Wsign-conversion` on in its own build. This library
-exists to make a narrowing visible; a consumer that silences those has given that back.
+Keep `-Wconversion` and `-Wsign-conversion` on in the consuming build. Those are what make a
+narrowing visible at a call site.
 
 ## Reporting
 
 Open a private security advisory at
 <https://github.com/dstroy0/embedded_types/security/advisories/new>, or e-mail dquigg123@gmail.com.
-Please include the compiler and target, the value of `EMBED_WORD_BITS` the build derived, and the
-smallest translation unit that shows the behavior.
+Include the compiler and target, the value of `EMBED_WORD_BITS` the build derived, and the smallest
+translation unit that shows the behavior.
 
-This is a pre-1.0 library maintained by one person. There is no patch SLA. Fixes land on `main` and
-are noted in @ref proj_changelog.
+Fixes land on `main`.

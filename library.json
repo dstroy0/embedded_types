@@ -1,7 +1,7 @@
 {
   "name": "embedded_types",
-  "version": "0.1.0",
-  "description": "Fixed widths, a machine word derived from the target rather than guessed, and the compile-time machinery a C11 embedded library is written in. Header only, no allocation, nothing at startup; the only headers it reaches for are stddef and stdint.",
+  "version": "1.0.0",
+  "description": "Fixed-width integer aliases, a machine word derived from the target's pointer width, and the compile-time machinery a C11 embedded library is written in. Header only, no allocation, nothing at startup; the only headers it reaches for are stddef and stdint.",
   "keywords": [
     "types",
     "stdint",

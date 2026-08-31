@@ -1,15 +1,8 @@
-# prettier formats the markup and data files: md, json, yml, yaml, css, html, js.
-# C is not prettier's - .clang-format owns that.
-
-# Lock files are generated and rewriting them defeats the lock.
 package-lock.json
 
-# License texts are quoted verbatim and must stay byte for byte as issued. Reflowing the AGPL, or
-# renumbering a clause in either LicenseRef, changes a document people are held to.
 LICENSE
 LICENSES/
 
-# Build and analysis output. Machine-written, regenerated on every run.
 build/
 build-*/
 cmake-build-*/

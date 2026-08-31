@@ -1,7 +1,4 @@
 CompileFlags:
   Add:
-    # These headers are C11. clangd parses a bare .h as a C++ header by default, which leaves
-    # __STDC_VERSION__ undefined, trips the C11 guard in embed_compiler_directives.h, and reports
-    # every static assertion as a declaration with no type specifier.
     - -xc
     - -std=c11
