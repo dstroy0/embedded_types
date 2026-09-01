@@ -32,7 +32,11 @@
   "license": "AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational",
   "frameworks": "*",
   "platforms": "*",
-  "headers": ["embed_types.h", "embed_compiler_directives.h", "embed_dispatch_layout.h"],
+  "headers": [
+    "embed_types.h",
+    "embed_compiler_directives.h",
+    "embed_dispatch_layout.h"
+  ],
   "export": {
     "exclude": [
       ".github",

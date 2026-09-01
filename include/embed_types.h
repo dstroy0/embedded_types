@@ -216,8 +216,7 @@ typedef embed_word embed_raw_word EMBED_RAW;
  * @note A conforming stdint defines uint8_t at exactly eight bits, so this assertion guards against
  *       a stdint that does not conform.
  */
-EMBED_STATIC_ASSERT(sizeof(embed_u8) == 1u,
-                    "embed_u8 must be exactly 8 bits: this target has no 8-bit type");
+EMBED_STATIC_ASSERT(sizeof(embed_u8) == 1u, "embed_u8 must be exactly 8 bits: this target has no 8-bit type");
 
 /** @brief Asserts embed_u16 is exactly sixteen bits. */
 EMBED_STATIC_ASSERT(sizeof(embed_u16) == 2u, "embed_u16 must be exactly 16 bits");
@@ -234,15 +233,13 @@ EMBED_STATIC_ASSERT(sizeof(embed_u64) == 8u, "embed_u64 must be exactly 64 bits"
  * @note A consumer derives every offset from this width at compile time. Nothing measures it at run
  *       time. A width that differs from what the code assumed has to fail the build.
  */
-EMBED_STATIC_ASSERT(sizeof(embed_word) == EMBED_WORD_BITS / 8u,
-                    "embed_word must be exactly EMBED_WORD_BITS wide");
+EMBED_STATIC_ASSERT(sizeof(embed_word) == EMBED_WORD_BITS / 8u, "embed_word must be exactly EMBED_WORD_BITS wide");
 
 /** @brief Asserts embed_iword is the same size as embed_word. */
 EMBED_STATIC_ASSERT(sizeof(embed_iword) == sizeof(embed_word), "the signed word must be the same register as the word");
 
 /** @brief Asserts embed_index is EMBED_INDEX_BITS wide. */
-EMBED_STATIC_ASSERT(sizeof(embed_index) == EMBED_INDEX_BITS / 8u,
-                    "embed_index must be exactly EMBED_INDEX_BITS wide");
+EMBED_STATIC_ASSERT(sizeof(embed_index) == EMBED_INDEX_BITS / 8u, "embed_index must be exactly EMBED_INDEX_BITS wide");
 
 /** @brief Asserts embed_index is no larger than embed_word. */
 EMBED_STATIC_ASSERT(sizeof(embed_index) <= sizeof(embed_word), "an index must fit the register it is carried in");

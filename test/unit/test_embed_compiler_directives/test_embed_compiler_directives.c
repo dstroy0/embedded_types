@@ -6,21 +6,25 @@
  */
 /**
  * @file test_embed_compiler_directives.c
- * @brief Exercises the feature gates, the static assertion, the counting and pasting macros, the
- *        call shape, and each attribute wrapper the header declares.
+ * @brief Exercises the feature gates, the static assertion, the linkage guards, the diagnostic
+ *        bracket, and each attribute wrapper the header declares.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-08-30
  *
  * @note This reaches <stdint.h> and not embed_types.h. The header under test declares no width of
  *       its own, and a suite that borrowed embed_types.h could fail for a defect in either one.
+ * @note EMBED_NARG, EMBED_CAT and EMBED_CALL are not covered here. They are declared in
+ *       embed_dispatch_layout.h, which this suite does not include, and
+ *       test_embed_dispatch_layout.c exercises all three against that header.
  * @note An attribute wrapper expands to nothing where its attribute is unavailable. That costs
  *       speed or a diagnostic, never correctness. A case for one of those is guarded on
  *       EMBED_HAS_ATTRIBUTE and calls TEST_IGNORE_MESSAGE on the other arm. Unity marks the case
  *       ignored, and a case that measured nothing does not count as a pass.
  * @note Unity's generator reads case names out of the source text and does not evaluate a
- *       preprocessor conditional, so every #if here sits inside a case body. A case defined inside
- *       one would be called by the runner on the arm where its definition is gone, and the suite
- *       would fail to link.
+ *       preprocessor conditional. No case below is defined inside an #if. A case defined inside one
+ *       would be called by the runner on the arm where its definition is gone, and the suite would
+ *       fail to link. The conditionals at file scope here define macros, and a case that needs a
+ *       conditional puts it inside its own body.
  */
 #include <stdint.h>
 #include <string.h>
@@ -78,9 +82,6 @@ EMBED_STATIC_ASSERT(EMBED_FAST_UNALIGNED_LOAD == 0 || EMBED_FAST_UNALIGNED_LOAD 
 
 #define TEST_UNKNOWN_ATTRIBUTE_ANSWER EMBED_GNU_ATTRIBUTES
 #endif
-
-/** @brief A value the paste case reaches only by building its name from two tokens. */
-#define TEST_PASTED_NAME_7 7
 
 /**
  * @brief A one-byte enum, declared to prove EMBED_ENUM_PACKED reaches the compiler.
@@ -199,27 +200,6 @@ static const uint32_t unreferenced_probe_table[] EMBED_UNUSED = {1u, 2u, 4u};
  */
 static const uint32_t shadowed_probe_value = 11u;
 
-/** @brief The operand block the compound-literal call builds at its call site. */
-typedef struct
-{
-    uint32_t first;
-    uint32_t second;
-    uint32_t third;
-} CallProbeArgs;
-
-/**
- * @brief Sums the three members under distinct weights.
- *
- * @param[in] args Operand block built by the caller [BORROWS].
- * @return         first plus twice second plus four times third.
- * @note The weights are 1, 2 and 4. With each member set to 0 or 1, the sum identifies exactly
- *       which members the caller named. An unweighted total would not.
- */
-static uint32_t call_probe(const CallProbeArgs *args)
-{
-    return args->first + (2u * args->second) + (4u * args->third);
-}
-
 /**
  * @brief Runs before each case, and has nothing to prepare.
  *
@@ -307,62 +287,8 @@ void test_the_endian_flag_agrees_with_the_bytes_of_a_word(void)
     TEST_ASSERT_FALSE_MESSAGE(EMBED_BIG_ENDIAN && bytes_are_little_endian,
                               "EMBED_BIG_ENDIAN is never 1 where the low byte comes first");
 #if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__)
-    TEST_ASSERT_EQUAL_INT_MESSAGE(EMBED_BIG_ENDIAN, bytes_are_big_endian,
-                                  "EMBED_BIG_ENDIAN matches the byte layout");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(EMBED_BIG_ENDIAN, bytes_are_big_endian, "EMBED_BIG_ENDIAN matches the byte layout");
 #endif
-}
-
-/**
- * @brief Checks that EMBED_NARG evaluates to the number of arguments it was handed.
- *
- * @note Each expectation is the literal number of items written on the same line, counted by hand.
- *       Deriving it from EMBED_NARG would compare the macro with itself.
- * @note The five lengths are one, two, eight, twenty-three and twenty-four. One is the shortest
- *       list EMBED_NARG covers and twenty-four is the longest. Twenty-three sits one below the
- *       longest, and two and eight fall in between.
- */
-void test_the_argument_count_matches_the_length_of_the_list(void)
-{
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, EMBED_NARG(a), "one argument counts as one");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(2, EMBED_NARG(a, b), "two arguments count as two");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(8, EMBED_NARG(a, b, c, d, e, f, g, h), "eight arguments count as eight");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(23, EMBED_NARG(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w),
-                                  "twenty-three arguments count as twenty-three");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(24,
-                                  EMBED_NARG(a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x),
-                                  "twenty-four arguments count as twenty-four");
-}
-
-/**
- * @brief Checks that the two-step paste joins a name to an expanded count.
- *
- * @note ## suppresses expansion of its own operands. EMBED_CAT expands its arguments first and
- *       then pastes the results. A caller whose operand is itself a macro needs that order. The
- *       dispatch layout family selects its arity through it.
- */
-void test_the_paste_joins_a_name_to_an_expanded_count(void)
-{
-    TEST_ASSERT_EQUAL_INT_MESSAGE(7, EMBED_CAT(TEST_PASTED_NAME_, 7), "a literal suffix pastes");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(7, EMBED_CAT(TEST_PASTED_NAME_, EMBED_NARG(a, b, c, d, e, f, g)),
-                                  "an expanded count pastes");
-}
-
-/**
- * @brief Checks that EMBED_CALL passes named members and zeroes the ones left out.
- *
- * @note C zero initializes any member a compound literal's initializer does not name. That comes
- *       from the language, and a consumer relies on it every time it omits a default.
- */
-void test_the_call_passes_named_members_and_zeroes_the_rest(void)
-{
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(7u, EMBED_CALL(call_probe, CallProbeArgs, .first = 1u, .second = 1u, .third = 1u),
-                                   "all three members arrive");
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(2u, EMBED_CALL(call_probe, CallProbeArgs, .second = 1u),
-                                   "an omitted member is zero");
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(4u, EMBED_CALL(call_probe, CallProbeArgs, .third = 1u),
-                                   "only the named member is set");
-    TEST_ASSERT_EQUAL_UINT_MESSAGE(7u, EMBED_CALL(call_probe, CallProbeArgs, 1u, 1u, 1u),
-                                   "positional initializers arrive");
 }
 
 /**

@@ -23,15 +23,11 @@ option(EMBEDDED_TYPES_WERROR "Treat warnings as errors in this project's own tar
 
 set(EMBEDDED_TYPES_WARNINGS
     $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic;-Wshadow;-Wconversion;-Wsign-conversion;-Wcast-align;-Wcast-qual;-Wstrict-prototypes;-Wmissing-prototypes;-Wpointer-arith;-Wvla>
-    $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:GNU,Clang,AppleClang>>:-Werror>
-    $<$<C_COMPILER_ID:MSVC>:/W4>
-    $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:MSVC>>:/WX>)
+    $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:GNU,Clang,AppleClang>>:-Werror>)
 
 set(EMBEDDED_TYPES_TEST_WARNINGS
     $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic;-Wshadow;-Wcast-align;-Wcast-qual;-Wstrict-prototypes;-Wpointer-arith;-Wvla>
-    $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:GNU,Clang,AppleClang>>:-Werror>
-    $<$<C_COMPILER_ID:MSVC>:/W4>
-    $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:MSVC>>:/WX>)
+    $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:GNU,Clang,AppleClang>>:-Werror>)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 

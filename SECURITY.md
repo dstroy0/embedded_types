@@ -15,7 +15,7 @@ absent, or names a width other than sixteen, thirty-two or sixty-four, the heade
 There is no fallback width.
 
 **A disregarded packed-enum attribute.** A compiler may accept `__attribute__((packed))` and ignore
-it, and no `#if` detects that. `EmbedEnumProbe` has a one-byte range and its size is asserted, so a
+it, and no `#if` detects that. `EmbedEnumProbe` has a one-byte range and its size is asserted. A
 build that ignored packing fails to compile.
 
 **A pre-C11 dialect.** No earlier revision has a static assertion. Unguarded, `EMBED_STATIC_ASSERT`

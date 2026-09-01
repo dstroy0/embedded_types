@@ -4,15 +4,20 @@
 #include "unity.h"
 #include "embed_dispatch_layout.h"
 #include "embed_types.h"
+#include <stddef.h>
 
 /*=======External Functions This Runner Calls=====*/
 extern void setUp(void);
 extern void tearDown(void);
 extern void test_the_argument_count_matches_the_length_of_the_list(void);
-extern void test_the_paste_joins_a_name_to_an_expanded_count(void);
+extern void test_a_macro_name_is_built_from_an_expanded_count(void);
 extern void test_the_call_passes_named_members_and_zeroes_the_rest(void);
 extern void test_each_member_reaches_the_function_it_names(void);
+extern void test_the_slot_stride_is_the_width_of_a_table_member(void);
 extern void test_the_table_is_exactly_its_three_pointers(void);
+extern void test_the_shortest_and_longest_tables_hold_only_their_slots(void);
+extern void test_a_generated_entry_forwards_its_configuration_to_its_backend(void);
+extern void test_a_generated_void_entry_reaches_its_backend(void);
 
 
 /*=======Mock Management=====*/
@@ -74,11 +79,15 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 int main(void)
 {
   UnityBegin("C:/Users/Douglas/Desktop/git_project/embedded_types/test/unit/test_embed_dispatch_layout\\test_embed_dispatch_layout.c");
-  run_test(test_the_argument_count_matches_the_length_of_the_list, "test_the_argument_count_matches_the_length_of_the_list", 52);
-  run_test(test_the_paste_joins_a_name_to_an_expanded_count, "test_the_paste_joins_a_name_to_an_expanded_count", 74);
-  run_test(test_the_call_passes_named_members_and_zeroes_the_rest, "test_the_call_passes_named_members_and_zeroes_the_rest", 110);
-  run_test(test_each_member_reaches_the_function_it_names, "test_each_member_reaches_the_function_it_names", 172);
-  run_test(test_the_table_is_exactly_its_three_pointers, "test_the_table_is_exactly_its_three_pointers", 188);
+  run_test(test_the_argument_count_matches_the_length_of_the_list, "test_the_argument_count_matches_the_length_of_the_list", 296);
+  run_test(test_a_macro_name_is_built_from_an_expanded_count, "test_a_macro_name_is_built_from_an_expanded_count", 321);
+  run_test(test_the_call_passes_named_members_and_zeroes_the_rest, "test_the_call_passes_named_members_and_zeroes_the_rest", 334);
+  run_test(test_each_member_reaches_the_function_it_names, "test_each_member_reaches_the_function_it_names", 352);
+  run_test(test_the_slot_stride_is_the_width_of_a_table_member, "test_the_slot_stride_is_the_width_of_a_table_member", 372);
+  run_test(test_the_table_is_exactly_its_three_pointers, "test_the_table_is_exactly_its_three_pointers", 384);
+  run_test(test_the_shortest_and_longest_tables_hold_only_their_slots, "test_the_shortest_and_longest_tables_hold_only_their_slots", 399);
+  run_test(test_a_generated_entry_forwards_its_configuration_to_its_backend, "test_a_generated_entry_forwards_its_configuration_to_its_backend", 417);
+  run_test(test_a_generated_void_entry_reaches_its_backend, "test_a_generated_void_entry_reaches_its_backend", 438);
 
   return UNITY_END();
 }

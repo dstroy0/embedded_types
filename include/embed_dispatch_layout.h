@@ -736,7 +736,9 @@
  *       whole call.
  * @note Use this from C only. Compound literals are not C++ in any revision. GNU C++ accepts one as
  *       an extension. Its lifetime there ends at the full-expression. That breaks the [BORROWS]
- *       contract below. No header here expands this macro. A C++ build never sees the expansion.
+ *       contract below. EMBED_ENTRY and EMBED_ENTRY_V expand this macro at a definition site, which
+ *       is a .c compiled as C. A C++ translation unit sees the emitted prototype under
+ *       EMBED_BEGIN_DECLS and never the expansion.
  * @warning entry_ receives the address of the literal [BORROWS].
  */
 #define EMBED_CALL(entry_, ArgsType_, ...) entry_(&(ArgsType_){__VA_ARGS__})
@@ -752,7 +754,7 @@
  * @param[in] name_           Core name, pasted onto both prefixes.
  * @param[in] ...             Initializers for the CtxType_ literal, written in terms of args.
  * @return                    What the backend returns.
- * @note One shape for every entry in the library, so a caller meets the same call at each module.
+ * @note One shape for every entry in the library. A caller writes the same call at each module.
  *       The entry tests nothing. Whatever checking an operation needs belongs in the backend it
  *       names.
  * @warning The initializers dereference args, so it must not be NULL [BORROWS].
@@ -772,9 +774,9 @@
  * @param[in] CfgType_        Type the emitted entry takes a pointer to, such as AnularisCfg.
  * @param[in] name_           Core name, pasted onto both prefixes.
  * @param[in] ...             Initializers for the CtxType_ literal, written in terms of args.
- * @note The same body as GENERIC_ENTRY, without the return. Two macros rather than one because the
- *       return type is not a parameter that can be void here. Writing `void` where ReturnType_ goes
- *       would still emit `return backend(...)` on a void call.
+ * @note The same body as EMBED_ENTRY, without the return. Two macros exist because void does not
+ *       work as ReturnType_. Writing `void` there would still emit `return backend(...)`, and C
+ *       forbids a return with an expression in a function returning void.
  * @warning The initializers dereference args, so it must not be NULL [BORROWS].
  */
 #define EMBED_ENTRY_V(entry_prefix_, backend_prefix_, CtxType_, CfgType_, name_, ...)                                  \

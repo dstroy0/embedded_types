@@ -62,13 +62,17 @@ The suites cover what a static assertion does not reach:
 - **`EMBED_RAW`.** A word read from an odd address, checked against a `memcpy` of the same bytes.
 - **Dispatch wiring.** Offsets are properties of the struct type, and an initializer naming the
   wrong function changes none of them. The suite calls through each member.
+- **Generated entry points.** `EMBED_ENTRY` and `EMBED_ENTRY_V` emit a function that builds a
+  compound literal from the caller's configuration and hands it to a backend. The suite calls both
+  generated entries and checks what the backend received, including the context member the entry
+  leaves out of its initializer.
 - **The byte order.** `EMBED_BIG_ENDIAN` is derived from `__BYTE_ORDER__`. The case measures how the
   target lays a word out in memory. Reading the same macro back would compare the macro with itself.
 - **The feature tests.** `EMBED_HAS_ATTRIBUTE` and `EMBED_HAS_BUILTIN` evaluate to zero for a name
   nothing defines. A non-zero result there would be non-zero for every name, and every attribute
   wrapper would be emitted on a compiler that rejects it.
 - **The attribute wrappers.** A marked definition is still a definition and still computes what its
-  body says, and the alignment and packing attributes reach the type. Where the compiler cannot
+  body defines, and the alignment and packing attributes reach the type. Where the compiler cannot
   carry one, the case calls `TEST_IGNORE_MESSAGE`, and a case that measured nothing does not count
   as a pass.
 
@@ -131,7 +135,7 @@ say. Pad every `@param` description to the longest name, and pad `@return` to ma
 #define EMBED_HAS_ATTRIBUTE(attribute_) __has_attribute(attribute_)
 ```
 
-Every attribute wrapper carries a `@warning` saying what its absence costs. Most cost speed when
+Every attribute wrapper carries a `@warning` naming what its absence costs. Most cost speed when
 they expand to nothing. `EMBED_ALIGN` and `EMBED_ALIAS` cost correctness. The `#if` does not
 distinguish the two.
 
@@ -152,7 +156,8 @@ count. Those never come here, whatever their prefix looks like.
 
 1. Put it in the header it belongs to, in file order.
 2. Write its Doxygen block as you write it, not afterwards.
-3. If it can fail silently on some target, add the assertion or the `@warning` that says so.
+3. If it can fail silently on some target, add the assertion that catches it or the `@warning` that
+   names it.
 4. If it is observable at run time, add a case to the suite that observes it independently.
 5. Add its name to `keywords.txt`.
 

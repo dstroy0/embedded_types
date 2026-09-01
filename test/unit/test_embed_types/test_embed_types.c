@@ -10,8 +10,9 @@
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-08-30
  *
- * @note Every byte count below is written as a literal. Deriving one from the macro that produced it
- *       would agree with itself at any value.
+ * @note An expected width below is a literal or comes from the compiler. None is derived from
+ *       EMBED_WORD_BITS or EMBED_INDEX_BITS, which would compare those macros with the types they
+ *       produced and agree at any value.
  * @note The static assertions inside embed_types.h are proved by this file compiling at all.
  * @note Unity's generator collects the file-scope cases and writes unity_runner.c beside this file.
  *       It reads the case names out of the source text, so no case below sits inside a #if - a

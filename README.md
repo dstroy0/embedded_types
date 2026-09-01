@@ -34,16 +34,16 @@ EMBED_TABLE_LAYOUT(ScanNs, length, is_empty);
 | path                                                                         | contents                                                                             |
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | [`include/embed_types.h`](include/embed_types.h)                             | the widths, the boolean, the word, the index, the raw-access word, the assertions    |
-| [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | feature probes, the static assertion, attribute wrappers, the call shape, the guards |
-| [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | `EMBED_TABLE_LAYOUT` and the arity family behind it                                  |
+| [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | feature probes, the static assertion, attribute wrappers, diagnostic pragmas, guards |
+| [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the machinery behind them     |
 | [`test/unit/`](test/unit)                                                    | one Unity suite per header, each its own CTest target                                |
 | [`test/harness.py`](test/harness.py)                                         | suite discovery, Unity runner generation, and the two build trees                    |
 | [`cmake/`](cmake)                                                            | `embedded_types_add_suite()`                                                         |
-| [`LICENSES/`](LICENSES)                                                      | the AGPL text and the two LicenseRef documents                                        |
+| [`LICENSES/`](LICENSES)                                                      | the AGPL text and the two LicenseRef documents                                       |
 
 ## Symbols
 
-| symbol                                                                                                                        | definition                                                          |
+| symbol                                                                                                                        | definition                                                           |
 | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `embed_u8` … `embed_u64`, `embed_i8` … `embed_i64`                                                                            | `uint8_t` … `int64_t`, each unsigned width pinned by an assertion    |
 | `embed_bool`, `EMBED_TRUE`, `EMBED_FALSE`                                                                                     | `_Bool` in C, `bool` in C++; the two constants are cast to that type |
@@ -56,7 +56,9 @@ EMBED_TABLE_LAYOUT(ScanNs, length, is_empty);
 | `EMBED_INLINE`, `EMBED_FLATTEN`, `EMBED_ENUM_PACKED`, `EMBED_ALIGN`, `EMBED_ALIAS`, `EMBED_RAW`, `EMBED_UNUSED`, `EMBED_WEAK` | the attribute where available, empty where not                       |
 | `EMBED_CAT`, `EMBED_NARG`, `EMBED_ARG_N`                                                                                      | two-step token paste, and argument count from 1 to 24                |
 | `EMBED_CALL`                                                                                                                  | `entry_(&(ArgsType_){__VA_ARGS__})`                                  |
+| `EMBED_ENTRY`, `EMBED_ENTRY_V`                                                                                                | a value-returning and a void entry point, both built on `EMBED_CALL` |
 | `EMBED_TABLE_LAYOUT`, `EMBED_TABLE_STORAGE`                                                                                   | the offset and size assertions, and `static const`                   |
+| `EMBED_FUNCTION_POINTER_BYTES`                                                                                                | `sizeof(void (*)(void))`, the stride one dispatch slot takes         |
 | `EMBED_BIG_ENDIAN`, `EMBED_FAST_UNALIGNED_LOAD`                                                                               | 0 or 1, from `__BYTE_ORDER__` and the target's load behavior         |
 
 ## EMBED_WORD_BITS
@@ -108,7 +110,7 @@ own targets.
 
 ## Status
 
-1.0.0. Three suites, 26 cases, passing under
+1.0.0. Three suites, 27 cases, passing under
 `-Wall -Wextra -Wpedantic -Wshadow -Wcast-align -Wcast-qual -Wstrict-prototypes -Wpointer-arith
 -Wvla -Werror`.
 

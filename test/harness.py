@@ -12,34 +12,34 @@
   harness.py cases <dir>...                   what Unity will register, and what it will walk past
   harness.py runners gen <dir>... --unity <rb>   write <dir>/unity_runner.c
 
-There are two build trees and each one is a different question, so each carries its own flags here
-rather than in somebody's shell history:
+There are two build trees. Each carries its own flags here, and running one takes no remembered
+shell invocation:
 
   build          the library, as it ships
   build-werror   the same, with EMBEDDED_TYPES_WERROR on
 
 The second one matters because this library is headers a consumer compiles inside its own
 translation unit. A warning it introduces is raised in the consumer's build and attributed to the
-consumer's file, so a diagnostic that only scrolls past here is one somebody else has to read.
+consumer's file. A diagnostic that only scrolls past here is one somebody else has to read.
 
 Two environment variables, because a first build has nothing to infer them from:
 
   EMBEDDED_TYPES_BUILD_ROOT   where the trees are made, ROOT by default. Windows caps a full object
-                              path at 250 characters, so a checkout far enough down cannot build in
+                              path at 250 characters. A checkout far enough down cannot build in
                               place at all. The cap is the compiler's, and a shorter prefix is the
                               only fix.
   EMBEDDED_TYPES_CMAKE_ARGS   extra configure arguments, split like a shell would. The generator and
-                              the compiler are otherwise read off a tree that already built, which
-                              answers nothing in a fresh clone whose first build is this one.
+                              the compiler are otherwise read off a tree that already built, and a
+                              fresh clone whose first build is this one has no such tree.
 
-A case Unity's generator does not collect is not an error to the generator: it is simply never
-registered, so the suite passes while the case never ran. `cases` and `runners gen` both break that
-silence by naming the near misses.
+A case Unity's generator does not collect is not an error to the generator. It is never registered,
+and the suite passes while the case never ran. `cases` and `runners gen` both break that silence by
+naming the near misses.
 
 The same silence has a second shape. The generator reads case names out of the source text and does
-not see a preprocessor conditional, so a case defined inside an `#if` is declared and called by the
-runner however that conditional went - and where it went the other way the suite fails to LINK.
-`suites` reports every case sitting inside one.
+not see a preprocessor conditional. A case defined inside an `#if` is declared and called by the
+runner however that conditional went. Where it went the other way the suite fails to LINK. `suites`
+reports every case sitting inside one.
 
 The mechanisms here are generic. The paths and the two build trees are this project's.
 """
@@ -55,17 +55,16 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Where the build trees live. ROOT by default, because a tree beside the source is what anyone
-# expects to find. EMBEDDED_TYPES_BUILD_ROOT moves them, which is not a convenience: Windows caps a
-# full object path at 250 characters, so a checkout deep enough - a git worktree under a temporary
-# directory is the usual way to get there - cannot build in place. The cap is the compiler's, so the
-# only fix is a shorter prefix.
+# expects to find. EMBEDDED_TYPES_BUILD_ROOT moves them, and it is not a convenience. Windows caps
+# a full object path at 250 characters. A checkout deep enough cannot build in place, and a git
+# worktree under a temporary directory is the usual way to get that deep. The cap is the compiler's,
+# and the only fix is a shorter prefix.
 BUILD_ROOT = os.path.abspath(os.environ.get("EMBEDDED_TYPES_BUILD_ROOT", ROOT))
 
 # Extra configure arguments, split like a shell would. borrowed_toolchain() reads the generator and
-# the compiler off a tree that already built, which answers the question everywhere there is such a
-# tree - and nowhere there is not, which is any fresh clone whose first build is this one. cmake's
-# default generator is not always one that works on a given machine, so a first build with nothing
-# to borrow from needs somewhere to be told.
+# the compiler off a tree that already built. A fresh clone whose first build is this one has no
+# such tree. cmake's default generator is not always one that works on a given machine, and a first
+# build with nothing to borrow from needs somewhere to read them from.
 CMAKE_ARGS = os.environ.get("EMBEDDED_TYPES_CMAKE_ARGS", "")
 
 
@@ -113,7 +112,8 @@ def conditional_cases(path):
 
     Unity's generator reads case names out of the source text, so such a case is still declared and
     called by the runner. Where the conditional went the other way the definition is gone and the
-    suite fails to LINK, which is a build somebody has to read rather than a case quietly not run.
+    suite fails to LINK. A failed link is a build somebody has to read, and it is louder than a case
+    that quietly never ran.
 
     A case whose body must vary by target puts the #if inside the case, where every arm still
     compiles into one definition the runner can reach.
@@ -226,8 +226,8 @@ def generate_runner(suite_dir, unity_rb):
 # ------------------------------------------------------------------------------------------------
 # Build trees
 # ------------------------------------------------------------------------------------------------
-# Each tree is a question, and the flags are the question. Written down here so that running one is
-# a command rather than a remembered incantation.
+# Each tree carries the flags that define it. Keeping them here means running one takes no
+# remembered shell invocation.
 TREES = {
     "build": {
         "what": "the library as it ships",
@@ -235,8 +235,8 @@ TREES = {
     },
     "build-werror": {
         "what": "the same, with every warning an error",
-        # This library is headers a consumer compiles inside its own translation unit, so a warning
-        # it introduces is raised in that build and attributed to that file. A diagnostic nobody has
+        # This library is headers a consumer compiles inside its own translation unit. A warning it
+        # introduces is raised in that build and attributed to that file. A diagnostic nobody has
         # to fix here is one somebody else has to read.
         "args": ["-DEMBEDDED_TYPES_WERROR=ON"],
     },
@@ -254,7 +254,7 @@ def borrowed_toolchain(skip):
     """Generator and compiler taken from whichever tree is already configured.
 
     cmake's default generator is not always the one that works on a given machine, and a tree that
-    already built is proof of one that does. Beats a second place to keep a toolchain path.
+    already built is proof of one that does. Reading it back keeps the toolchain path in one place.
     """
     keys = {
         "CMAKE_GENERATOR": "-G",
