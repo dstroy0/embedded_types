@@ -100,8 +100,8 @@ typedef enum EMBED_ENUM_PACKED
  * @brief A word whose alignment EMBED_ALIGN raised above its natural one.
  *
  * @note Sixteen bytes. The widest type this file declares is four bytes wide and aligns to four,
- *       and nothing else here aligns to sixteen. A reported alignment of sixteen came from the
- *       attribute.
+ *       and no other declaration here aligns to sixteen. A reported alignment of sixteen came from
+ *       the attribute.
  */
 typedef uint32_t RaisedAlignmentProbe EMBED_ALIGN(16);
 
@@ -295,8 +295,8 @@ void test_the_endian_flag_agrees_with_the_bytes_of_a_word(void)
  * @brief Checks that inline_probe_doubled and flatten_probe_quadrupled compute what their bodies
  *        define.
  *
- * @note Neither attribute changes what the bodies compute. Both affect inlining and nothing else,
- *       and this case checks the two results, ten and twenty.
+ * @note Neither attribute changes what the bodies compute. Both reach the inliner and leave the
+ *       arithmetic alone, and this case checks the two results, ten and twenty.
  */
 void test_the_inline_and_flattened_helpers_run_their_bodies(void)
 {
@@ -305,7 +305,7 @@ void test_the_inline_and_flattened_helpers_run_their_bodies(void)
 }
 
 /**
- * @brief Checks that a packed enum is the one byte its range needs.
+ * @brief Checks that a packed enum takes the single byte its range needs.
  *
  * @note embed_types.h asserts the same width on its own probe enum. This case checks
  *       EMBED_ENUM_PACKED directly on a type declared here. A failure means the attribute did not

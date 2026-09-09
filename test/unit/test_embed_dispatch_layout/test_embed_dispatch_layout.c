@@ -234,7 +234,7 @@ static embed_index entry_probe_backend_weighted_sum(const EntryProbeContext *arg
  *
  * @param[in] args Context built by the generated entry point [BORROWS].
  * @note This is the backend EMBED_ENTRY_V names below. That macro emits no return, and the store
- *       here is what makes the call observable.
+ *       here leaves the result where the case can read it.
  */
 static void entry_probe_backend_record_sum(const EntryProbeContext *args)
 {

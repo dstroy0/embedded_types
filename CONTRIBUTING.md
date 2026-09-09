@@ -1,5 +1,10 @@
 # Contributing {#proj_contributing}
 
+**Purpose:** Add a suite, a case, or a declaration to embedded_types without tripping either of the
+two shapes that make a Unity case silently never run.
+**Scope:** `include/`, `test/unit/`, `test/harness.py`, `cmake/EmbeddedTypesSuite.cmake`,
+`CMakeLists.txt`, `keywords.txt`, `.clang-format`
+
 ## Build and test
 
 ```sh
@@ -8,10 +13,12 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-Three CTest targets, one per header under test. `EMBEDDED_TYPES_BUILD_TESTS` defaults on when this
-is the top-level project and off when it is consumed by another.
+There are three CTest targets, one per header under test (`test/unit/CMakeLists.txt:4-6`).
+`EMBEDDED_TYPES_BUILD_TESTS` defaults to the value of `PROJECT_IS_TOP_LEVEL`, and a tree that
+consumes this one configures no tests (`CMakeLists.txt:21`, `:34-37`).
 
-`test/harness.py` carries each build tree's flags:
+`test/harness.py` carries each build tree's flags and adds a per-suite view of what Unity will
+register.
 
 ```sh
 python test/harness.py test                     # the library as it ships
@@ -20,40 +27,48 @@ python test/harness.py suites --strict          # every case registered, none be
 python test/harness.py cases test/unit/test_embed_types
 ```
 
-The suites use [Unity](https://github.com/ThrowTheSwitch/Unity), fetched at `v2.6.1` when this
-directory is configured. Generating a runner needs `ruby` on `PATH`. Both belong to `test/` alone.
-The target a consumer links carries the include directory and `c_std_11`, and no test framework.
+The Unity dependency and the `ruby` the runner generator needs are in [README.md](README.md).
+Neither reaches a consumer of the library.
 
 ## Adding a suite
 
 A suite is a directory under `test/unit/` holding exactly one `.c` of cases and a `CMakeLists.txt`
-that names it:
+that names it. `embedded_types_add_suite()` stops the configure with a `FATAL_ERROR` where the
+matching `<suite_name>.c` is absent (`cmake/EmbeddedTypesSuite.cmake:9-12`).
 
 ```cmake
 embedded_types_add_suite(test_embed_something)
 ```
 
-Then one `add_subdirectory` line in `test/unit/CMakeLists.txt`. Nothing central holds a list of
-suite names.
+Add one `add_subdirectory` line to `test/unit/CMakeLists.txt` and the CMake build picks the suite
+up. The harness needs no such line, because it discovers a suite by walking `test/unit/` for a
+directory holding a `.c` with a collectable case (`test/harness.py:151-161`).
+
+## Adding a case
 
 A case is `void test_<name>(void)` at file scope. Two shapes make a case silently never run, and
-`harness.py suites --strict` reports both:
+`harness.py suites --strict` reports both.
 
-- **A definition the generator walks past.** Unity's generator collects `void test_<name>(void)` and
-  nothing else. A case named anything else is never registered, and the suite still reports a pass.
+- **A definition the generator walks past.** Unity's generator matches the exact spelling
+  `void test_<name>(void)`. A case spelled any other way is never registered, and the suite still
+  reports a pass.
 - **A case defined inside a preprocessor conditional.** The generator reads case names out of the
   source text and does not see the conditional. The runner declares and calls the case whichever way
   the conditional went, and where it went the other way the definition is absent and the suite fails
   to link. Put the `#if` inside the case body, and call `TEST_IGNORE_MESSAGE` on the arm that cannot
   measure anything.
 
+`UNITY_CASE` and `NEAR_MISS` at `test/harness.py:90-91` are the spellings the report is built from,
+and `ANY_IF`, `ANY_ELSE` and `ANY_ENDIF` at `test/harness.py:96-98` count the conditional depth.
+
 ## Where the proof lives
 
-Most of this library is proved by compiling. The eight width assertions, the packed-enum probe, and
-every `EMBED_TABLE_LAYOUT` are static. A build that reaches the link step has already checked them,
-and no case in `test/` repeats that work.
+Most of this library is proved by compiling. The eight width assertions
+(`include/embed_types.h:219-245`), the packed-enum probe (`include/embed_types.h:263-265`), and each
+expansion of `EMBED_TABLE_LAYOUT` (`include/embed_dispatch_layout.h:645-648`) are static. A build
+that reaches the link step has already checked them, and no case in `test/` repeats that work.
 
-The suites cover what a static assertion does not reach:
+The suites under `test/unit/`, one file per header, cover what a static assertion does not reach:
 
 - **Signedness.** A typedef pointing at the wrong signedness has the right size, and `sizeof` passes
   either way. Each case casts `-1` to the alias and tests the sign of the result.
@@ -82,9 +97,11 @@ The expected side of an assertion comes from a literal, from the compiler, or fr
 Never from the code under test.
 
 A width checked against the macro that produced it compares the macro with itself and passes at any
-value. `sizeof(embed_u32) == 4u` is a test. `sizeof(embed_u32) * 8u == 32u` against a macro derived
-from the same type is not. Where a case needs an independent source, `uintptr_t` and `memcpy` come
-from the compiler and the standard.
+value. `sizeof(embed_u32) == 4u` measures the type against a literal the standard fixed.
+`sizeof(embed_u32) * 8u == 32u`, where the 32 comes from a macro derived from that same type,
+measures the type against itself. Where a case needs an independent source, `uintptr_t` and `memcpy`
+come from the compiler and the standard
+(`test/unit/test_embed_types/test_embed_types.c:93`, `:159`).
 
 ## Formatting
 
@@ -93,17 +110,24 @@ clang-format -i include/*.h test/unit/*/test_*.c
 npm run format
 ```
 
-`unity_runner.c` is generated and is listed in `.clang-format-ignore`. Formatting it by hand is
-undone on the next generation.
+`unity_runner.c` is generated and is listed in `.clang-format-ignore` (`.clang-format-ignore:1`).
+Formatting it by hand is undone on the next generation.
 
-120 columns. CI checks formatting and never rewrites it. A formatter that rewrites on CI produces
-commits nobody reviewed and races the author's own push. Fix it in the working tree.
+The column limit is 120 (`.clang-format:151`). `npm run format:check` reports without rewriting
+(`package.json:17`). A formatter that rewrites during a check produces commits nobody reviewed and
+races the author's own push, and the fix belongs in the working tree. This repository carries no CI
+configuration, so the policy is not enforced on push by anything in the tree.
 
 ## Comments
 
-Every header opens with the license banner and a `@file` block, and every declaration in it carries
-its own Doxygen block. A block documents exactly one declaration. A contiguous family of similar
-macros takes one block each, because nearly identical is not identical.
+Every header opens with the license banner and a `@file` block (`include/embed_types.h:1-18`,
+`include/embed_compiler_directives.h:1-18`, `include/embed_dispatch_layout.h:1-19`). A block
+documents exactly one declaration. A contiguous family of similar macros takes one block each,
+because nearly identical is not identical. Where a conditional declares the same name on more than
+one arm, the arm the compiler reaches first carries the block for all of them
+(`include/embed_types.h:161`, `:190`).
+
+A new header opens with the banner and the `@file` block.
 
 ```c
 /* embedded_types - Copyright (C) 2026 Douglas Quigg (dstroy0) <dquigg123@gmail.com>
@@ -123,6 +147,7 @@ macros takes one block each, because nearly identical is not identical.
 A macro parameter takes a real name with a trailing underscore, and the block is written around it.
 `@param[in] x` documents a defect. Rename the parameter first, and the line then has something to
 say. Pad every `@param` description to the longest name, and pad `@return` to match.
+`EMBED_HAS_ATTRIBUTE` shows the shape (`include/embed_compiler_directives.h:39-51`).
 
 ```c
 /**
@@ -130,8 +155,13 @@ say. Pad every `@param` description to the longest name, and pad `@return` to ma
  *
  * @param[in] attribute_ Attribute name, as passed to __has_attribute.
  * @return               The value __has_attribute gives for attribute_.
+ * @note Every attribute macro below goes through this. Asking the compiler whether it supports an
+ *       attribute is more reliable than checking which compiler it is.
  * @warning Expands to EMBED_GNU_ATTRIBUTES where __has_attribute is undefined, ignoring attribute_.
+ *          Every attribute then gets the same answer. A compiler without __has_attribute gets all
+ *          of them or none.
  */
+#if defined(__has_attribute)
 #define EMBED_HAS_ATTRIBUTE(attribute_) __has_attribute(attribute_)
 ```
 
@@ -139,15 +169,15 @@ Every attribute wrapper carries a `@warning` naming what its absence costs. Most
 they expand to nothing. `EMBED_ALIGN` and `EMBED_ALIAS` cost correctness. The `#if` does not
 distinguish the two.
 
-State the mechanism, not a consumer. These headers are shared. A block naming what one library does
-with a macro, or naming a part it was measured on, documents a relationship instead of the macro.
+State the mechanism. These headers are shared, and a block naming what one library does with a
+macro, or naming a part it was measured on, documents a relationship instead of the macro.
 
 ## What belongs here
 
 The test is whether it is machinery or a domain fact.
 
-Machinery is anything a library above would otherwise define for itself: a width, a word, an
-attribute wrapper, a static assertion, a feature probe, an argument count. Define it once, here.
+Machinery is anything a library above would otherwise define for itself, such as a width, a word, an
+attribute wrapper, a static assertion, a feature probe, or an argument count. Define it once, here.
 
 A domain fact belongs to the library that has the opinion. A pool size, a protocol timer, a buffer
 count. Those never come here, whatever their prefix looks like.
@@ -167,4 +197,8 @@ Contributions are accepted under the same terms as the project. There is no CLA.
 request means you have the right to contribute the code and are doing so under AGPL-3.0-or-later.
 
 Keep the banner on every new file. Both `LicenseRef-` identifiers in it resolve to files in
-`LICENSES/`, and a scanner reports the expression as unresolved if one goes missing.
+`LICENSES/` (`LICENSES/LicenseRef-Commercial.txt`, `LICENSES/LicenseRef-Educational.txt`), and a
+scanner reports the expression as unresolved if one goes missing.
+
+**Author:** dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
+**Date:** 2026-09-09

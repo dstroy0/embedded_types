@@ -66,9 +66,9 @@ void test_the_widths_are_the_widths_they_are_named_for(void)
  */
 void test_the_signed_aliases_carry_a_sign_and_the_unsigned_ones_do_not(void)
 {
-    // Each cast below converts the int -1 to the alias under test, which is the check itself. For an
-    // unsigned alias the conversion is defined and gives that type's maximum, above 0. For a signed
-    // alias the value fits and stays -1.
+    // Each cast below converts the int -1 to the alias under test, and the assertion reads the
+    // converted value. For an unsigned alias the conversion is defined and gives that type's
+    // maximum, above 0. For a signed alias the value fits and stays -1.
     TEST_ASSERT_TRUE_MESSAGE((embed_u8)-1 > 0, "embed_u8 is unsigned");
     TEST_ASSERT_TRUE_MESSAGE((embed_u16)-1 > 0, "embed_u16 is unsigned");
     TEST_ASSERT_TRUE_MESSAGE((embed_u32)-1 > 0, "embed_u32 is unsigned");
@@ -84,7 +84,8 @@ void test_the_signed_aliases_carry_a_sign_and_the_unsigned_ones_do_not(void)
  *
  * @note uintptr_t comes from the compiler, and embed_types.h derives EMBED_WORD_BITS from it.
  *       Comparing the two checks that derivation. The comparison is skipped where the build defined
- *       EMBED_WORD_BITS itself, because an override means the two widths differ on purpose.
+ *       EMBED_WORD_BITS itself, because a build that overrides the width has declared that the two
+ *       widths differ.
  */
 void test_the_word_matches_the_pointer_it_was_derived_from(void)
 {

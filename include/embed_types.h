@@ -112,7 +112,7 @@ typedef _Bool embed_bool;
  * @note This header sets the flag itself. A build that overrode the width would otherwise have to
  *       set a second macro to match, and the two would drift apart.
  * @note A check that the word width matches the pointer width holds only where the derivation ran.
- *       An override means the two differ on purpose.
+ *       A build that overrides the width has declared that the two differ.
  * @note Both arms define this macro, so #ifdef EMBED_WORD_BITS_WAS_OVERRIDDEN is always true. Test
  *       it with #if.
  */

@@ -62,8 +62,8 @@
  * @note This is the builtin-side version of EMBED_HAS_ATTRIBUTE. Gate a builtin with it the same
  *       way you would gate an attribute.
  * @warning Without __has_builtin this expands to 0 and ignores builtin_. The fallback is 0 because
- *          a missing builtin fails to compile. A missing attribute is only ignored, which is why
- *          EMBED_HAS_ATTRIBUTE can fall back to a guess.
+ *          a missing builtin fails to compile. EMBED_HAS_ATTRIBUTE falls back to a guess instead,
+ *          because a missing attribute is ignored and compiles.
  */
 #if defined(__has_builtin)
 #define EMBED_HAS_BUILTIN(builtin_) __has_builtin(builtin_)
@@ -224,8 +224,9 @@
 /**
  * @brief Expands to __attribute__((unused)) where EMBED_HAS_ATTRIBUTE(unused) is non-zero.
  *
- * @note Use this on a definition you leave unreferenced on purpose. A static definition in a header
- *       reaches every translation unit that includes it. A unit that never touches its copy warns.
+ * @note Put this on a definition the code is expected to leave unreferenced. A static definition in
+ *       a header reaches every translation unit that includes it. A unit that never touches its
+ *       copy warns.
  * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(unused) is 0. The warning comes back.
  *          Correctness is unaffected.
  */
@@ -278,8 +279,8 @@
  * @brief Expands to _Pragma("clang diagnostic pop") where __clang__ is defined.
  *
  * @note This restores the state EMBED_DIAGNOSTIC_PUSH saved. That ends the suppression. Leave it
- *       out and the suppression runs to the end of the translation unit. Nothing warns about that.
- *       The warning that would have fired is the one being suppressed.
+ *       out and the suppression runs to the end of the translation unit. Nothing reports that,
+ *       because the suppressed warning is the warning that would have reported it.
  */
 #define EMBED_DIAGNOSTIC_POP _Pragma("clang diagnostic pop")
 

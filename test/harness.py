@@ -91,8 +91,8 @@ UNITY_CASE = re.compile(r"^[ \t]*void[ \t]+(test_\w+)[ \t]*\([ \t]*(?:void)?[ \t
 NEAR_MISS = re.compile(r"^[ \t]*void[ \t]+(\w+)[ \t]*\([ \t]*(?:void)?[ \t]*\)[ \t]*\r?\n[ \t]*\{", re.M)
 NOT_A_CASE = ("setUp", "tearDown", "main", "suiteSetUp", "suiteTearDown")
 
-# A conditional, and the two directives that end or invert one. #ifdef and #ifndef are both matched
-# by ANY_IF, which is what makes the depth count right.
+# A conditional, and the two directives that end or invert one. ANY_IF matches the #if prefix, which
+# covers #ifdef and #ifndef, and the depth count sees every directive that opens a conditional.
 ANY_IF = re.compile(r"^[ \t]*#[ \t]*if")
 ANY_ELSE = re.compile(r"^[ \t]*#[ \t]*el(se|if)")
 ANY_ENDIF = re.compile(r"^[ \t]*#[ \t]*endif")

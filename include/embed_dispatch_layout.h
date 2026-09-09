@@ -7,7 +7,7 @@
 /**
  * @file embed_dispatch_layout.h
  * @brief Compile-time assertions that a struct of function pointers holds its members at
- *        consecutive slots and nothing else.
+ *        consecutive slots, with no padding between them and no member of another type.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-08-30
  *
@@ -746,13 +746,13 @@
 /**
  * @brief Defines a value-returning entry point that forwards an argument pack.
  *
- * @param[in] entry_prefix_   Public entry point prefix, such as mmgr_anular_.
- * @param[in] backend_prefix_ Backend function prefix, such as infin_.
- * @param[in] CtxType_        Type of the compound literal the backend receives, such as AnularisCtx.
- * @param[in] CfgType_        Type the emitted entry takes a pointer to, such as AnularisCfg.
+ * @param[in] entry_prefix_   Prefix of the emitted entry point, pasted ahead of name_.
+ * @param[in] backend_prefix_ Prefix of the backend the entry calls, pasted ahead of name_.
+ * @param[in] CtxType_        Type of the compound literal the backend receives.
+ * @param[in] CfgType_        Type the emitted entry takes a pointer to.
  * @param[in] ReturnType_     Return type of the emitted function.
  * @param[in] name_           Core name, pasted onto both prefixes.
- * @param[in] ...             Initializers for the CtxType_ literal, written in terms of args.
+ * @param[in] ...             Initializers for the CtxType_ literal, written from members of args.
  * @return                    What the backend returns.
  * @note One shape for every entry in the library. A caller writes the same call at each module.
  *       The entry tests nothing. Whatever checking an operation needs belongs in the backend it
@@ -768,12 +768,12 @@
 /**
  * @brief Defines a void entry point that forwards an argument pack.
  *
- * @param[in] entry_prefix_   Public entry point prefix, such as mmgr_anular_.
- * @param[in] backend_prefix_ Backend function prefix, such as infin_.
- * @param[in] CtxType_        Type of the compound literal the backend receives, such as AnularisCtx.
- * @param[in] CfgType_        Type the emitted entry takes a pointer to, such as AnularisCfg.
+ * @param[in] entry_prefix_   Prefix of the emitted entry point, pasted ahead of name_.
+ * @param[in] backend_prefix_ Prefix of the backend the entry calls, pasted ahead of name_.
+ * @param[in] CtxType_        Type of the compound literal the backend receives.
+ * @param[in] CfgType_        Type the emitted entry takes a pointer to.
  * @param[in] name_           Core name, pasted onto both prefixes.
- * @param[in] ...             Initializers for the CtxType_ literal, written in terms of args.
+ * @param[in] ...             Initializers for the CtxType_ literal, written from members of args.
  * @note The same body as EMBED_ENTRY, without the return. Two macros exist because void does not
  *       work as ReturnType_. Writing `void` there would still emit `return backend(...)`, and C
  *       forbids a return with an expression in a function returning void.
