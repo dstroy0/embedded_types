@@ -1,0 +1,49 @@
+# embedded_types - Copyright (C) 2026 Douglas Quigg (dstroy0) <dquigg123@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational
+#
+# Joins this repository to repo_tools. Every tool walks up from the working directory to find this
+# file, so its location at the root is the contract.
+#
+# Only what differs from lib/repotools/defaults.toml is stated here. Run `repotools config` to see
+# what it resolves to once the defaults are merged under it.
+
+[project]
+name = "embedded_types"
+version = "1.0.0"
+spdx = "AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational"
+copyright = "Copyright (C) 2026 Douglas Quigg (dstroy0) <dquigg123@gmail.com>"
+prefix = "EMBED"
+
+[layout]
+# Headers only, and no src/. The default names both, and a root that is not there is a root a later
+# check reports by name.
+source = ["include"]
+# This repository keeps no docs/ directory. Its documentation is the three markdown files at the
+# root, which [prose] roots names one by one.
+docs = []
+examples = []
+# test/ holds one directory per suite under test/unit, plus harness.py, which builds and runs them.
+# There are no fixtures: every input a case needs is a literal in the case.
+tests = ["test"]
+
+[prose]
+# Named file by file rather than as a directory, because the writing at this root is three documents
+# and a changelog, and a bare "." would pull in the two build trees and the Unity checkout inside
+# each of them. That is not this repository's prose and it is not this repository's to fix.
+roots = ["README.md", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "include", "test"]
+
+[hooks]
+# fetch_check is not named, because [fetch] sets is empty and this repository vendors no tool from
+# the toolkit. A gate over nothing reports success over nothing.
+gates = ["docs_check"]
+
+[hooks.docs_check]
+# Pass these to the checker explicitly. Run with no roots at all it appends its own private_roots(),
+# which is hardcoded to two repositories under ../private_repos, and this repository's count then
+# reads 19 where its own prose is 14. Reported upstream on 2026-09-09.
+roots = ["README.md", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "include", "test"]
+
+[fetch]
+# Nothing is vendored in. The toolkit is invoked from its own checkout, so there is no second copy
+# here to drift from it. Adding a set is a decision to maintain a copy.
+sets = []
