@@ -160,15 +160,27 @@
 #endif
 
 /**
- * @brief Expands to __attribute__((packed)) where EMBED_HAS_ATTRIBUTE(packed) is non-zero.
+ * @brief Expands to `: unsigned char` for clang on the MSVC ABI, else to __attribute__((packed)) where
+ *        EMBED_HAS_ATTRIBUTE(packed) is non-zero.
  *
  * @note An enum carrying this takes the width its range needs. Without it the enum is int-wide.
  *       A struct holding one takes its member offsets from that width, so this changes layout.
+ * @note Clang on the MSVC ABI defines both __clang__ and _MSC_VER, accepts the packed attribute on an
+ *       enum and leaves the enum int-wide, as MSVC lays every enum out. There the width comes from a
+ *       fixed underlying type instead, which clang takes in C as the C23 form. It sits where the
+ *       attribute sits, between `enum` and the brace of an enum declared without a tag.
+ * @warning On clang's MSVC arm the width is one byte whatever the range, so an enumerator past 255 or
+ *          below 0 fails the build there, where the attribute would have widened the enum.
  * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(packed) is 0. A compiler can also accept
  *          the attribute and ignore it. Neither case shows up here. embed_types.h declares a probe
  *          enum and asserts its size to catch both.
  */
-#if EMBED_HAS_ATTRIBUTE(packed)
+#if defined(__clang__) && defined(_MSC_VER)
+// the fixed underlying type is the width this arm exists for, so clang's note that C11 lacks it is
+// silenced here, for that one warning and on this arm alone
+#pragma clang diagnostic ignored "-Wmicrosoft-fixed-enum"
+#define EMBED_ENUM_PACKED : unsigned char
+#elif EMBED_HAS_ATTRIBUTE(packed)
 #define EMBED_ENUM_PACKED __attribute__((packed))
 #else
 

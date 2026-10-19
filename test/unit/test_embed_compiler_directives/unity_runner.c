@@ -81,7 +81,7 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("C:/Users/Douglas/Desktop/git_project/embedded_types/test/unit/test_embed_compiler_directives\\test_embed_compiler_directives.c");
+  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/embedded_types/test/unit/test_embed_compiler_directives\\test_embed_compiler_directives.c");
   run_test(test_every_feature_gate_carries_a_value_of_zero_or_one, "test_every_feature_gate_carries_a_value_of_zero_or_one", 224);
   run_test(test_the_static_assertion_compiles_at_file_and_block_scope, "test_the_static_assertion_compiles_at_file_and_block_scope", 241);
   run_test(test_the_feature_tests_evaluate_to_zero_for_an_unknown_name, "test_the_feature_tests_evaluate_to_zero_for_an_unknown_name", 257);

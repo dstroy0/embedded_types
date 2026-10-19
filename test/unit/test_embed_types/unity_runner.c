@@ -75,7 +75,7 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("C:/Users/Douglas/Desktop/git_project/embedded_types/test/unit/test_embed_types\\test_embed_types.c");
+  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/embedded_types/test/unit/test_embed_types\\test_embed_types.c");
   run_test(test_the_widths_are_the_widths_they_are_named_for, "test_the_widths_are_the_widths_they_are_named_for", 49);
   run_test(test_the_signed_aliases_carry_a_sign_and_the_unsigned_ones_do_not, "test_the_signed_aliases_carry_a_sign_and_the_unsigned_ones_do_not", 67);
   run_test(test_the_word_matches_the_pointer_it_was_derived_from, "test_the_word_matches_the_pointer_it_was_derived_from", 90);
