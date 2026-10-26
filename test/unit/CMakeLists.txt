@@ -3,4 +3,5 @@
 
 add_subdirectory(test_embed_compiler_directives)
 add_subdirectory(test_embed_dispatch_layout)
+add_subdirectory(test_embed_spinlock)
 add_subdirectory(test_embed_types)

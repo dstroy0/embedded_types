@@ -160,31 +160,52 @@
 #endif
 
 /**
- * @brief Expands to `: unsigned char` for clang on the MSVC ABI, else to __attribute__((packed)) where
- *        EMBED_HAS_ATTRIBUTE(packed) is non-zero.
+ * @brief Declares name_ as a one-byte enumeration of the enumerators given, on every compiler.
  *
- * @note An enum carrying this takes the width its range needs. Without it the enum is int-wide.
- *       A struct holding one takes its member offsets from that width, so this changes layout.
- * @note Clang on the MSVC ABI defines both __clang__ and _MSC_VER, accepts the packed attribute on an
- *       enum and leaves the enum int-wide, as MSVC lays every enum out. There the width comes from a
- *       fixed underlying type instead, which clang takes in C as the C23 form. It sits where the
- *       attribute sits, between `enum` and the brace of an enum declared without a tag.
- * @warning On clang's MSVC arm the width is one byte whatever the range, so an enumerator past 255 or
- *          below 0 fails the build there, where the attribute would have widened the enum.
- * @warning Expands to nothing where EMBED_HAS_ATTRIBUTE(packed) is 0. A compiler can also accept
- *          the attribute and ignore it. Neither case shows up here. embed_types.h declares a probe
- *          enum and asserts its size to catch both.
+ * @param[in] name_ The type's name.
+ * @param[in] ...   The enumerators, as an enum's braces hold them.
+ * @note Where the compiler can pin an enum to one byte, name_ is that enum, and a switch on it or a
+ *       value of another enum stays checked. Clang on the MSVC ABI and C++ take the fixed underlying
+ *       type `: unsigned char`, which C++11 made standard and clang takes in C as the C23 form. Clang
+ *       on the MSVC ABI also accepts the packed attribute and leaves the enum int-wide, as MSVC lays
+ *       every enum out, so it takes the fixed type before the attribute is looked for. Every other
+ *       compiler with the packed attribute takes the attribute.
+ * @note Where it cannot, MSVC's C among them, the enumerators are declared as constants and name_ is
+ *       an unsigned char. The width is one byte either way, so a struct holding name_ is laid out the
+ *       same whichever compiler reads it.
+ * @warning An enumerator past 255 or below 0 fails the build on the fixed-type arms, widens the enum
+ *          on the attribute arm and is cut to a byte where it is stored on the unsigned char arm.
+ *          embed_types.h declares a probe and asserts its size, which also catches a compiler that
+ *          accepts the attribute and ignores it.
  */
 #if defined(__clang__) && defined(_MSC_VER)
 // the fixed underlying type is the width this arm exists for, so clang's note that C11 lacks it is
 // silenced here, for that one warning and on this arm alone
 #pragma clang diagnostic ignored "-Wmicrosoft-fixed-enum"
-#define EMBED_ENUM_PACKED : unsigned char
+#define EMBED_ENUM_BYTE(name_, ...)                                                                                    \
+    typedef enum : unsigned char                                                                                       \
+    {                                                                                                                  \
+        __VA_ARGS__                                                                                                    \
+    } name_
 #elif EMBED_HAS_ATTRIBUTE(packed)
-#define EMBED_ENUM_PACKED __attribute__((packed))
+#define EMBED_ENUM_BYTE(name_, ...)                                                                                    \
+    typedef enum __attribute__((packed))                                                                               \
+    {                                                                                                                  \
+        __VA_ARGS__                                                                                                    \
+    } name_
+#elif defined(__cplusplus)
+#define EMBED_ENUM_BYTE(name_, ...)                                                                                    \
+    typedef enum : unsigned char                                                                                       \
+    {                                                                                                                  \
+        __VA_ARGS__                                                                                                    \
+    } name_
 #else
-
-#define EMBED_ENUM_PACKED
+#define EMBED_ENUM_BYTE(name_, ...)                                                                                    \
+    enum                                                                                                               \
+    {                                                                                                                  \
+        __VA_ARGS__                                                                                                    \
+    };                                                                                                                 \
+    typedef unsigned char name_
 #endif
 
 /**

@@ -3,13 +3,15 @@
 **Purpose:** Take the fixed-width aliases, the machine word, and the compile-time machinery a C11
 embedded build needs from one place, instead of declaring them again in each library that uses them.
 **Scope:** `include/embed_types.h`, `include/embed_compiler_directives.h`,
-`include/embed_dispatch_layout.h`, `cmake/EmbeddedTypesSuite.cmake`, `test/harness.py`, `test/unit/`
+`include/embed_dispatch_layout.h`, `include/embed_spinlock.h`, `cmake/EmbeddedTypesSuite.cmake`,
+`test/harness.py`, `test/support/`, `test/unit/`
 
-Three C11 headers hold the fixed-width integer aliases, a machine word derived from the target, and
-the compile-time machinery around them. They are header only, and the system headers they reach are
-`stddef.h` and `stdint.h` (`include/embed_types.h:22`, `include/embed_compiler_directives.h:22`,
-`include/embed_dispatch_layout.h:23`). What the headers guarantee, and what they leave undiagnosed,
-is in [SECURITY.md](SECURITY.md).
+Four C11 headers hold the fixed-width integer aliases, a machine word derived from the target, the
+compile-time machinery around them, and a spinlock on the target's atomics. They are header only.
+The first three reach `stddef.h` and `stdint.h` (`include/embed_types.h:22`,
+`include/embed_compiler_directives.h:22`, `include/embed_dispatch_layout.h:23`). The spinlock adds
+`stdatomic.h` on its C11 arm and `intrin.h` under MSVC, and nothing on its CUDA device arm. What the
+headers guarantee, and what they leave undiagnosed, is in [SECURITY.md](SECURITY.md).
 
 A consumer includes the headers and writes against the names directly.
 
@@ -48,6 +50,8 @@ padding between two members, fails the build.
 | [`include/embed_types.h`](include/embed_types.h)                             | the widths, the boolean, the word, the index, the raw-access word, the assertions    |
 | [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | feature probes, the static assertion, attribute wrappers, diagnostic pragmas, guards |
 | [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the machinery behind them     |
+| [`include/embed_spinlock.h`](include/embed_spinlock.h)                       | a 32-bit spinlock for host, part and GPU threads, its arm switched by the target     |
+| [`test/support/`](test/support)                                              | host threads for the contention cases, out of the runners' sight                     |
 | [`test/unit/`](test/unit)                                                    | one Unity suite per header, each its own CTest target                                |
 | [`test/harness.py`](test/harness.py)                                         | suite discovery, Unity runner generation, and the two build trees                    |
 | [`cmake/`](cmake)                                                            | `embedded_types_add_suite()`                                                         |
@@ -62,29 +66,30 @@ target (`cmake/EmbeddedTypesSuite.cmake:36`). The two build trees the harness kn
 The table indexes what each name is. The contract for a name is the Doxygen block on its
 declaration, and a guarantee or a warning is stated there once.
 
-| symbol | definition |
-| --- | --- |
-| `embed_u8` … `embed_u64`, `embed_i8` … `embed_i64` | `uint8_t` … `int64_t`, each unsigned width pinned by an assertion |
-| `embed_bool`, `EMBED_TRUE`, `EMBED_FALSE` | `_Bool` in C, `bool` in C++; the two constants are cast to that type |
-| `embed_word`, `embed_iword` | the unsigned and signed integer of `EMBED_WORD_BITS` bits |
-| `embed_index` | the unsigned integer of `EMBED_INDEX_BITS` bits, for offsets |
-| `embed_raw_word` | `embed_word` with alignment lowered to 1 and aliasing permitted |
-| `EmbedEnumProbe` | a one-byte enum whose asserted size proves `EMBED_ENUM_PACKED` reached the compiler |
-| `EMBED_STATIC_ASSERT` | `static_assert` in C++ and C23, `_Static_assert` in C11, `#error` below C11 |
-| `EMBED_BEGIN_DECLS`, `EMBED_END_DECLS` | `extern "C" {` and `}` under `__cplusplus`, empty without it |
-| `EMBED_GNU_ATTRIBUTES` | 1 where `__GNUC__` or `__clang__` is defined, 0 otherwise |
-| `EMBED_HAS_ATTRIBUTE` | `__has_attribute`, or `EMBED_GNU_ATTRIBUTES` where it is undefined |
-| `EMBED_HAS_BUILTIN` | `__has_builtin`, or 0 where it is undefined |
-| `EMBED_INLINE`, `EMBED_FLATTEN`, `EMBED_ENUM_PACKED`, `EMBED_ALIGN`, `EMBED_ALIAS`, `EMBED_RAW`, `EMBED_UNUSED`, `EMBED_WEAK` | the attribute where available, empty where not |
-| `EMBED_DIAGNOSTIC_PUSH`, `EMBED_DIAGNOSTIC_POP`, `EMBED_DIAGNOSTIC_IGNORE`, `EMBED_DIAGNOSTIC_STRING` | the clang or the GCC pragma, empty on a compiler with neither |
-| `EMBED_CAT`, `EMBED_NARG`, `EMBED_ARG_N` | two-step token paste, and argument count from 1 to 24 |
-| `EMBED_CALL` | `entry_(&(ArgsType_){__VA_ARGS__})`, where `entry_` receives the address of the literal [BORROWS] |
-| `EMBED_ENTRY`, `EMBED_ENTRY_V` | a value-returning and a void entry point, both built on `EMBED_CALL`, whose initializers dereference `args` [BORROWS] |
-| `EMBED_TABLE_SLOT` | one offset assertion, for one member at one slot |
-| `EMBED_TABLE_LAYOUT`, `EMBED_TABLE_STORAGE` | the offset and size assertions, and `static const` |
-| `EMBED_FUNCTION_POINTER_BYTES` | `sizeof(void (*)(void))`, the stride one dispatch slot takes |
-| `EMBED_BIG_ENDIAN` | 1 where `__BYTE_ORDER__` equals `__ORDER_BIG_ENDIAN__`, 0 otherwise |
-| `EMBED_FAST_UNALIGNED_LOAD` | 1 where `__ARM_FEATURE_UNALIGNED` is defined, 0 otherwise |
+| symbol                                                                                                   | definition                                                                                                                     |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `embed_u8` … `embed_u64`, `embed_i8` … `embed_i64`                                                       | `uint8_t` … `int64_t`, each unsigned width pinned by an assertion                                                              |
+| `embed_bool`, `EMBED_TRUE`, `EMBED_FALSE`                                                                | `_Bool` in C, `bool` in C++; the two constants are cast to that type                                                           |
+| `embed_word`, `embed_iword`                                                                              | the unsigned and signed integer of `EMBED_WORD_BITS` bits                                                                      |
+| `embed_index`                                                                                            | the unsigned integer of `EMBED_INDEX_BITS` bits, for offsets                                                                   |
+| `embed_raw_word`                                                                                         | `embed_word` with alignment lowered to 1 and aliasing permitted                                                                |
+| `EmbedEnumProbe`                                                                                         | a one-byte enum whose asserted size proves `EMBED_ENUM_BYTE` gave one byte                                                     |
+| `EMBED_STATIC_ASSERT`                                                                                    | `static_assert` in C++ and C23, `_Static_assert` in C11, `#error` below C11                                                    |
+| `EMBED_BEGIN_DECLS`, `EMBED_END_DECLS`                                                                   | `extern "C" {` and `}` under `__cplusplus`, empty without it                                                                   |
+| `EMBED_GNU_ATTRIBUTES`                                                                                   | 1 where `__GNUC__` or `__clang__` is defined, 0 otherwise                                                                      |
+| `EMBED_HAS_ATTRIBUTE`                                                                                    | `__has_attribute`, or `EMBED_GNU_ATTRIBUTES` where it is undefined                                                             |
+| `EMBED_HAS_BUILTIN`                                                                                      | `__has_builtin`, or 0 where it is undefined                                                                                    |
+| `EMBED_ENUM_BYTE`                                                                                        | a one-byte enum: the enum itself where the compiler can pin it to a byte, its constants and an `unsigned char` where it cannot |
+| `EMBED_INLINE`, `EMBED_FLATTEN`, `EMBED_ALIGN`, `EMBED_ALIAS`, `EMBED_RAW`, `EMBED_UNUSED`, `EMBED_WEAK` | the attribute where available, empty where not                                                                                 |
+| `EMBED_DIAGNOSTIC_PUSH`, `EMBED_DIAGNOSTIC_POP`, `EMBED_DIAGNOSTIC_IGNORE`, `EMBED_DIAGNOSTIC_STRING`    | the clang or the GCC pragma, empty on a compiler with neither                                                                  |
+| `EMBED_CAT`, `EMBED_NARG`, `EMBED_ARG_N`                                                                 | two-step token paste, and argument count from 1 to 24                                                                          |
+| `EMBED_CALL`                                                                                             | `entry_(&(ArgsType_){__VA_ARGS__})`, where `entry_` receives the address of the literal [BORROWS]                              |
+| `EMBED_ENTRY`, `EMBED_ENTRY_V`                                                                           | a value-returning and a void entry point, both built on `EMBED_CALL`, whose initializers dereference `args` [BORROWS]          |
+| `EMBED_TABLE_SLOT`                                                                                       | one offset assertion, for one member at one slot                                                                               |
+| `EMBED_TABLE_LAYOUT`, `EMBED_TABLE_STORAGE`                                                              | the offset and size assertions, and `static const`                                                                             |
+| `EMBED_FUNCTION_POINTER_BYTES`                                                                           | `sizeof(void (*)(void))`, the stride one dispatch slot takes                                                                   |
+| `EMBED_BIG_ENDIAN`                                                                                       | 1 where `__BYTE_ORDER__` equals `__ORDER_BIG_ENDIAN__`, 0 otherwise                                                            |
+| `EMBED_FAST_UNALIGNED_LOAD`                                                                              | 1 where `__ARM_FEATURE_UNALIGNED` is defined, 0 otherwise                                                                      |
 
 `EMBED_STATIC_ASSERT` takes `static_assert` under `__cplusplus` or C23, `_Static_assert` under C11,
 and raises `#error` below C11 (`include/embed_compiler_directives.h:92-99`). `EMBED_BIG_ENDIAN` is

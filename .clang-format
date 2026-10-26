@@ -95,7 +95,6 @@ AttributeMacros:
     - EMBED_UNUSED
     - EMBED_WEAK
     - EMBED_FLATTEN
-    - EMBED_ENUM_PACKED
     - EMBED_INLINE
 BinPackArguments: true
 BinPackLongBracedList: true

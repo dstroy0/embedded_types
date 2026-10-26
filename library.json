@@ -35,7 +35,8 @@
   "headers": [
     "embed_types.h",
     "embed_compiler_directives.h",
-    "embed_dispatch_layout.h"
+    "embed_dispatch_layout.h",
+    "embed_spinlock.h"
   ],
   "export": {
     "exclude": [

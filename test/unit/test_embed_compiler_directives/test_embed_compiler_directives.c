@@ -84,17 +84,14 @@ EMBED_STATIC_ASSERT(EMBED_FAST_UNALIGNED_LOAD == 0 || EMBED_FAST_UNALIGNED_LOAD 
 #endif
 
 /**
- * @brief A one-byte enum, declared to prove EMBED_ENUM_PACKED reaches the compiler.
+ * @brief A one-byte enum, declared to prove EMBED_ENUM_BYTE gives one byte on this compiler.
  *
- * @note Its range needs a single byte, and test_a_packed_enum_takes_the_width_its_range_needs
- *       checks for that width. Without the attribute the enum takes int's width. A compiler may
- *       also accept the attribute and disregard it, and no #if distinguishes that case.
+ * @note Its range needs a single byte, and test_a_byte_enum_takes_one_byte checks for that width on
+ *       every compiler, whichever arm of EMBED_ENUM_BYTE it takes.
  */
-typedef enum EMBED_ENUM_PACKED
-{
-    TEST_PACKED_ENUM_MIN = 0,   /**< Low end of the probe range. */
-    TEST_PACKED_ENUM_MAX = 255, /**< High end, the largest value eight bits hold. */
-} PackedEnumProbe;
+EMBED_ENUM_BYTE(ByteEnumProbe, TEST_BYTE_ENUM_MIN = 0, /**< Low end of the probe range. */
+                TEST_BYTE_ENUM_MAX = 255               /**< High end, the largest value eight bits hold. */
+);
 
 /**
  * @brief A word whose alignment EMBED_ALIGN raised above its natural one.
@@ -305,20 +302,19 @@ void test_the_inline_and_flattened_helpers_run_their_bodies(void)
 }
 
 /**
- * @brief Checks that a packed enum takes the single byte its range needs.
+ * @brief Checks that a byte enum takes one byte and keeps its enumerators' values.
  *
- * @note embed_types.h asserts the same width on its own probe enum. This case checks
- *       EMBED_ENUM_PACKED directly on a type declared here. A failure means the attribute did not
- *       reach the compiler, and every enum a consumer declares would widen to int.
+ * @note embed_types.h asserts the same width on its own probe enum. This case checks EMBED_ENUM_BYTE
+ *       directly on a type declared here, on every compiler, with no arm left out.
  */
-void test_a_packed_enum_takes_the_width_its_range_needs(void)
+void test_a_byte_enum_takes_one_byte(void)
 {
-    TEST_ASSERT_EQUAL_INT_MESSAGE(255, TEST_PACKED_ENUM_MAX, "the range survives the attribute");
-#if EMBED_HAS_ATTRIBUTE(packed)
-    TEST_ASSERT_EQUAL_size_t_MESSAGE(1u, sizeof(PackedEnumProbe), "a packed enum is one byte");
-#else
-    TEST_IGNORE_MESSAGE("EMBED_HAS_ATTRIBUTE(packed) is 0 here, so EMBED_ENUM_PACKED expands to nothing");
-#endif
+    const ByteEnumProbe low = TEST_BYTE_ENUM_MIN;
+    const ByteEnumProbe high = TEST_BYTE_ENUM_MAX;
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, low, "the low enumerator survives the declaration");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(255, high, "the high enumerator survives the declaration");
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(1u, sizeof(ByteEnumProbe), "a byte enum is one byte");
 }
 
 /**

@@ -245,23 +245,20 @@ EMBED_STATIC_ASSERT(sizeof(embed_index) == EMBED_INDEX_BITS / 8u, "embed_index m
 EMBED_STATIC_ASSERT(sizeof(embed_index) <= sizeof(embed_word), "an index must fit the register it is carried in");
 
 /**
- * @brief A one-byte enum used only to prove EMBED_ENUM_PACKED reaches the compiler.
+ * @brief A one-byte enum used only to prove EMBED_ENUM_BYTE gives one byte on this compiler.
  *
- * @note Its range needs a single byte. An unpacked enum takes int's width, so the assertion below
- *       fails when packing is ignored.
- * @warning A failure means EMBED_ENUM_PACKED expanded to nothing, or the compiler accepted the
- *          attribute and disregarded it. No #if distinguishes those two. Every enum a consumer
- *          declares then widens to int, and any offset computed from a struct holding one is wrong.
+ * @note Its range needs a single byte, so the assertion below fails only where the compiler accepted
+ *       the packed attribute and disregarded it.
+ * @warning A failure means every enum a consumer declares through EMBED_ENUM_BYTE widens, and any
+ *          offset computed from a struct holding one is wrong.
  */
-typedef enum EMBED_ENUM_PACKED
-{
-    EMBED_ENUM_PROBE_MIN = 0,   /**< Low end of the probe range. */
-    EMBED_ENUM_PROBE_MAX = 255, /**< High end, the largest value eight bits hold. */
-} EmbedEnumProbe;
+EMBED_ENUM_BYTE(EmbedEnumProbe, EMBED_ENUM_PROBE_MIN = 0, /**< Low end of the probe range. */
+                EMBED_ENUM_PROBE_MAX = 255                /**< High end, the largest value eight bits hold. */
+);
 
-/** @brief Asserts EMBED_ENUM_PACKED is honored on this enum. */
+/** @brief Asserts EMBED_ENUM_BYTE gave the probe one byte. */
 EMBED_STATIC_ASSERT(sizeof(EmbedEnumProbe) == 1,
-                    "EMBED_ENUM_PACKED is not honored here, so no enum keeps its declared width "
+                    "EMBED_ENUM_BYTE gave an enum more than one byte here, so no enum keeps its declared width "
                     "(TI: pass --small_enum)");
 
 EMBED_END_DECLS
