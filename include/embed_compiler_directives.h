@@ -279,8 +279,80 @@
 #if EMBED_HAS_VECTOR_SIZE
 #define EMBED_VECTOR(bytes_) __attribute__((vector_size(bytes_)))
 #else
-
 #define EMBED_VECTOR(bytes_)
+#endif
+
+/**
+ * @brief The width in bits of the widest vector register the target compiles for: 512 under
+ *        AVX-512, 256 under AVX2, 128 under SSE2 or NEON, 0 where the target has none.
+ *
+ * @note Read off the macros the compiler defines for the instruction set it emits. The build
+ *       supplies no width of its own here: a flag that turns an instruction set on turns this with
+ *       it. embed_lane.h derives the lane's width from it where the build does not define one.
+ * @note Both arms define this macro. Test it with #if.
+ */
+#if defined(__AVX512F__)
+#define EMBED_VECTOR_REGISTER_BITS 512
+#elif defined(__AVX2__)
+#define EMBED_VECTOR_REGISTER_BITS 256
+#elif defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && (_M_IX86_FP >= 2)) || defined(__ARM_NEON) ||       \
+    defined(__aarch64__) || defined(_M_ARM64)
+#define EMBED_VECTOR_REGISTER_BITS 128
+#else
+#define EMBED_VECTOR_REGISTER_BITS 0
+#endif
+
+/**
+ * @brief Set to 1 where the target runs AVX2 and the compiler has the builtin that reads the sign bit
+ *        of each of 32 bytes into an integer, else 0.
+ *
+ * @note The builtin is the compiler's own name for the instruction, reached without the vendor
+ *       header. A byte compare of two 32-byte vectors leaves every equal byte all ones, and this
+ *       reads those into one bit a byte in one instruction.
+ * @note Both arms define this macro. Test it with #if.
+ */
+#if defined(__AVX2__) && EMBED_HAS_BUILTIN(__builtin_ia32_pmovmskb256)
+#define EMBED_HAS_BYTE_MASK_256 1
+#else
+#define EMBED_HAS_BYTE_MASK_256 0
+#endif
+
+/**
+ * @brief The sign bits of 32 bytes as an int, bit 0 the first byte, where EMBED_HAS_BYTE_MASK_256 is 1.
+ *
+ * @param[in] chars_ A 32-wide vector of char.
+ * @warning Expands to 0 where EMBED_HAS_BYTE_MASK_256 is 0, ignoring chars_. A use tests the flag
+ *          first and takes another arm where it is 0, as embed_lane.h does.
+ */
+#if EMBED_HAS_BYTE_MASK_256
+#define EMBED_BYTE_MASK_256(chars_) __builtin_ia32_pmovmskb256(chars_)
+#else
+#define EMBED_BYTE_MASK_256(chars_) 0
+#endif
+
+/**
+ * @brief Set to 1 where the target runs SSE2 and the compiler has the builtin that reads the sign bit
+ *        of each of 16 bytes into an integer, else 0.
+ *
+ * @note Both arms define this macro. Test it with #if.
+ */
+#if defined(__SSE2__) && EMBED_HAS_BUILTIN(__builtin_ia32_pmovmskb128)
+#define EMBED_HAS_BYTE_MASK_128 1
+#else
+#define EMBED_HAS_BYTE_MASK_128 0
+#endif
+
+/**
+ * @brief The sign bits of 16 bytes as an int, bit 0 the first byte, where EMBED_HAS_BYTE_MASK_128 is 1.
+ *
+ * @param[in] chars_ A 16-wide vector of char.
+ * @warning Expands to 0 where EMBED_HAS_BYTE_MASK_128 is 0, ignoring chars_. A use tests the flag
+ *          first and takes another arm where it is 0, as embed_lane.h does.
+ */
+#if EMBED_HAS_BYTE_MASK_128
+#define EMBED_BYTE_MASK_128(chars_) __builtin_ia32_pmovmskb128(chars_)
+#else
+#define EMBED_BYTE_MASK_128(chars_) 0
 #endif
 
 /**

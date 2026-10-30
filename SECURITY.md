@@ -35,11 +35,12 @@ A compiler may accept `__attribute__((packed))` and ignore it, and no `#if` dete
 `EmbedEnumProbe` has a one-byte range and its size is asserted (`include/embed_types.h:256-265`). A
 build that ignored packing fails to compile.
 
-### A lane of another width
+### A lane of an impossible width
 
-`EMBED_LANE_BITS` is 256 unless the build defines it, and the arms carry 256 alone. A build defining
-another width fails to compile, as does a target whose word does not divide the lane
-(`include/embed_lane.h:53-54`), and a lane type that is not 32 bytes (`include/embed_lane.h:102`).
+`EMBED_LANE_BITS` derives from the target's widest vector register, or from the word where it has
+none, and a build may define it instead. Assertions in `include/embed_lane.h` refuse a width that is
+not whole 32-bit lanes, below 32 bits, above 512 bits, or not whole words, and a lane type whose size
+is not `EMBED_LANE_BYTES`.
 
 ### A pre-C11 dialect
 
@@ -60,7 +61,7 @@ nothing. These two cost correctness.
 
 ### A lane read at any address without the attributes
 
-`embed_lane_raw` is the lane carrying `EMBED_RAW` (`include/embed_lane.h:111`), and
+`embed_lane_raw` is the lane carrying `EMBED_RAW` (`include/embed_lane.h`), and
 `embed_lane_load` and `embed_lane_put` read and write through it. Where the compiler supports
 neither attribute, the type reverts to the lane's 32-byte alignment, and a load or a store at an
 address that is not a multiple of 32 is undefined, on either arm. Nothing diagnoses this. The

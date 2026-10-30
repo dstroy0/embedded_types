@@ -6,13 +6,14 @@
  */
 /**
  * @file test_embed_lane.c
- * @brief Holds every lane operation to the scalar answer on the arm the build takes.
+ * @brief Holds every lane operation to the scalar answer on the arm and at the width the build takes.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-10-29
  *
  * @note The arm is the build's: the compiler's vector type where it has one, the portable struct
- *       where it does not or where EMBED_LANE_PORTABLE is 1. The same cases hold on each, one
- *       source native on every target.
+ *       where it does not or where EMBED_LANE_PORTABLE is 1. The width is the build's too, derived
+ *       from the target or defined ahead of the header. The same cases hold on each, one source
+ *       native on every target.
  * @note The cases reach no header of the C library: bytes are read and written through the lane's
  *       own raw views, as the library's code does.
  */
@@ -23,8 +24,11 @@
 /** @brief A 32-bit value readable at any address, the test's view into a byte array. */
 typedef embed_u32 raw_u32 EMBED_RAW;
 
-/** @brief The bytes the cases read lanes from: the index times seven, which repeats nowhere in 64. */
-static embed_u8 s_bytes[64];
+/** @brief Two lanes and a half of bytes, which the cases load lanes from at offsets. */
+#define BYTES_HELD ((2u * EMBED_LANE_BYTES) + 16u)
+
+/** @brief The bytes the cases read lanes from: the index times seven, which repeats nowhere below 256. */
+static embed_u8 s_bytes[BYTES_HELD];
 
 void setUp(void)
 {
@@ -76,11 +80,27 @@ static embed_u32 u32_of(embed_lane lane, unsigned int index)
     return u32_at(bytes + (4u * index));
 }
 
-void test_the_lane_is_256_bits_of_eight_32_bit_lanes_on_one_arm(void)
+/** @brief The mask bit of byte `byte`. */
+static embed_u64 bit_of(unsigned int byte)
 {
-    TEST_ASSERT_EQUAL_size_t_MESSAGE(32u, sizeof(embed_lane), "a lane is 32 bytes");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(8u, EMBED_LANE_U32S, "a lane holds eight 32-bit lanes");
+    return (embed_u64)1 << byte;
+}
+
+void test_the_lane_is_whole_32_bit_lanes_of_the_derived_width_on_one_arm(void)
+{
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(EMBED_LANE_BYTES, sizeof(embed_lane), "a lane is EMBED_LANE_BYTES wide");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, EMBED_LANE_BITS % 32u, "a lane is whole 32-bit lanes");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(EMBED_LANE_BYTES / 4u, EMBED_LANE_U32S, "the 32-bit lanes fill the lane");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, EMBED_LANE_BYTES % sizeof(embed_word), "a lane is whole words");
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, EMBED_LANE_VECTOR + EMBED_LANE_PLAIN, "exactly one arm is taken");
+#if EMBED_LANE_BITS_WAS_OVERRIDDEN
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, EMBED_LANE_BITS_WAS_OVERRIDDEN, "the build defined the width");
+#elif EMBED_VECTOR_REGISTER_BITS != 0
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(EMBED_VECTOR_REGISTER_BITS, EMBED_LANE_BITS, "the lane is the vector register");
+#else
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE((EMBED_WORD_BITS > 32u) ? EMBED_WORD_BITS : 32u, EMBED_LANE_BITS,
+                                     "the lane is the word where there is no vector register");
+#endif
 }
 
 void test_a_lane_loaded_at_an_odd_address_puts_back_the_same_bytes(void)
@@ -96,8 +116,8 @@ void test_a_lane_loaded_at_an_odd_address_puts_back_the_same_bytes(void)
 
 void test_a_lane_loaded_aligned_puts_back_aligned(void)
 {
-    static embed_u8 aligned[EMBED_LANE_BYTES] EMBED_ALIGN(32);
-    static embed_u8 out[EMBED_LANE_BYTES] EMBED_ALIGN(32);
+    static embed_u8 aligned[EMBED_LANE_BYTES] EMBED_ALIGN(EMBED_LANE_BYTES);
+    static embed_u8 out[EMBED_LANE_BYTES] EMBED_ALIGN(EMBED_LANE_BYTES);
     bytes_copy(aligned, s_bytes, EMBED_LANE_BYTES);
     embed_lane_put_aligned(out, embed_lane_load_aligned(aligned));
     TEST_ASSERT_EQUAL_MEMORY_MESSAGE(aligned, out, EMBED_LANE_BYTES, "the aligned bytes come back");
@@ -164,29 +184,43 @@ void test_shifts_move_each_32_bit_lane_alone(void)
 
 void test_the_byte_masks_answer_one_bit_a_byte_lowest_first(void)
 {
+    const unsigned int last = EMBED_LANE_BYTES - 1u;
+    const unsigned int middle = EMBED_LANE_BYTES / 2u;
     embed_u8 changed[EMBED_LANE_BYTES];
     bytes_copy(changed, s_bytes, EMBED_LANE_BYTES);
     changed[0] ^= 1u;
-    changed[5] ^= 0x80u;
-    changed[31] ^= 0x10u;
+    changed[3] ^= 0x80u;
+    changed[last] ^= 0x10u;
     const embed_lane_mask equal = embed_lane_bytes_equal(embed_lane_load(s_bytes), embed_lane_load(changed));
-    TEST_ASSERT_EQUAL_HEX32_MESSAGE(0xffffffffu & ~((1u << 0u) | (1u << 5u) | (1u << 31u)), equal,
-                                    "the bytes changed are the bits clear");
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE((embed_u64)EMBED_LANE_MASK_ALL & ~(bit_of(0u) | bit_of(3u) | bit_of(last)),
+                                    (embed_u64)equal, "the bytes changed are the bits clear");
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE((embed_u64)EMBED_LANE_MASK_ALL,
+                                    (embed_u64)embed_lane_bytes_equal(embed_lane_load(s_bytes), embed_lane_load(s_bytes)),
+                                    "equal lanes set every byte");
     embed_u8 zeros[EMBED_LANE_BYTES];
     bytes_set(zeros, sizeof(zeros), 1u);
     zeros[2] = 0u;
-    zeros[17] = 0u;
-    TEST_ASSERT_EQUAL_HEX32_MESSAGE((1u << 2u) | (1u << 17u), embed_lane_bytes_zero(embed_lane_load(zeros)),
+    zeros[middle] = 0u;
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(bit_of(2u) | bit_of(middle), (embed_u64)embed_lane_bytes_zero(embed_lane_load(zeros)),
                                     "the zero bytes are the bits set");
+}
+
+void test_the_first_byte_of_a_mask_is_the_lowest_bit_set(void)
+{
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, embed_lane_mask_first(EMBED_LANE_MASK_ALL), "every byte set starts at the first");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(2u, embed_lane_mask_first((embed_lane_mask)(bit_of(2u) | bit_of(3u))),
+                                     "the lowest of two bits");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(EMBED_LANE_BYTES - 1u, embed_lane_mask_first((embed_lane_mask)bit_of(EMBED_LANE_BYTES - 1u)),
+                                     "the last byte alone");
 }
 
 void test_the_exact_divide_by_255_holds_in_every_lane_over_every_product(void)
 {
     // the blend's identity: (x + (x >> 8)) >> 8 is (a * b + 127) / 255 for every a and b of a byte, x being
-    // a * b + 128; eight products a lane, every pair covered
+    // a * b + 128; EMBED_LANE_U32S products a lane, every pair covered
     for (unsigned int a = 0u; a < 256u; a += 1u)
     {
-        for (unsigned int b = 0u; b < 256u; b += 8u)
+        for (unsigned int b = 0u; b < 256u; b += EMBED_LANE_U32S)
         {
             embed_u8 products[EMBED_LANE_BYTES];
             for (unsigned int at = 0u; at < EMBED_LANE_U32S; at += 1u)

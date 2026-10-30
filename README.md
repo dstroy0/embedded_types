@@ -7,12 +7,13 @@ embedded build needs from one place, instead of declaring them again in each lib
 `cmake/EmbeddedTypesSuite.cmake`, `test/harness.py`, `test/support/`, `test/unit/`
 
 Five C11 headers hold the fixed-width integer aliases, a machine word derived from the target, the
-compile-time machinery around them, a spinlock on the target's atomics, and the lane, the 256-bit
-unit a bulk pass over memory moves and computes in. They are header only. The first three reach
+compile-time machinery around them, a spinlock on the target's atomics, and the lane, the target's
+widest vector register derived the same way, which a bulk pass over memory moves and computes in.
+They are header only. The first three reach
 `stddef.h` and `stdint.h` (`include/embed_types.h:22`, `include/embed_compiler_directives.h:22`,
 `include/embed_dispatch_layout.h:23`). The spinlock adds `stdatomic.h` on its C11 arm and `intrin.h`
 under MSVC, and nothing on its CUDA device arm. The lane reaches `embed_types.h` alone
-(`include/embed_lane.h:34`). What the headers guarantee, and what they leave undiagnosed, is in
+(`include/embed_lane.h`). What the headers guarantee, and what they leave undiagnosed, is in
 [SECURITY.md](SECURITY.md).
 
 A consumer includes the headers and writes against the names directly.
@@ -53,7 +54,7 @@ padding between two members, fails the build.
 | [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | feature probes, the static assertion, attribute wrappers, diagnostic pragmas, guards |
 | [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the machinery behind them     |
 | [`include/embed_spinlock.h`](include/embed_spinlock.h)                       | a 32-bit spinlock for host, part and GPU threads, its arm switched by the target     |
-| [`include/embed_lane.h`](include/embed_lane.h)                               | the 256-bit lane beside the word, its loads, fills, logic, arithmetic and byte masks |
+| [`include/embed_lane.h`](include/embed_lane.h)                               | the lane beside the word, the widest register, its loads, fills, arithmetic and masks |
 | [`test/support/`](test/support)                                              | host threads for the contention cases, out of the runners' sight                     |
 | [`test/unit/`](test/unit)                                                    | one Unity suite per header, each its own CTest target                                |
 | [`test/harness.py`](test/harness.py)                                         | suite discovery, Unity runner generation, and the two build trees                    |
@@ -85,8 +86,10 @@ declaration, and a guarantee or a warning is stated there once.
 | `EMBED_ENUM_BYTE`                                                                                        | a one-byte enum: the enum itself where the compiler can pin it to a byte, its constants and an `unsigned char` where it cannot |
 | `EMBED_INLINE`, `EMBED_FLATTEN`, `EMBED_ALIGN`, `EMBED_ALIAS`, `EMBED_RAW`, `EMBED_UNUSED`, `EMBED_WEAK` | the attribute where available, empty where not                                                                                 |
 | `EMBED_HAS_VECTOR_SIZE`, `EMBED_VECTOR`                                                                  | 1 where the compiler has the `vector_size` attribute, 0 otherwise, and the attribute at a width in bytes, empty where not     |
-| `embed_lane`, `embed_lane_raw`, `embed_lane_mask`                                                        | eight 32-bit lanes in the compiler's vector type or an aligned struct, the same at any address, and one bit a byte             |
-| `EMBED_LANE_BITS`, `EMBED_LANE_BYTES`, `EMBED_LANE_U32S`                                                 | 256, 32 and 8                                                                                                                  |
+| `EMBED_VECTOR_REGISTER_BITS`                                                                             | the widest vector register the target compiles for: 512, 256, 128, or 0 where it has none                                      |
+| `EMBED_HAS_BYTE_MASK_256`, `EMBED_BYTE_MASK_256`, `EMBED_HAS_BYTE_MASK_128`, `EMBED_BYTE_MASK_128`       | 1 where the compiler has the builtin reading 32 or 16 bytes' sign bits into an int, 0 otherwise, and the builtin, 0 where not |
+| `embed_lane`, `embed_lane_raw`, `embed_lane_mask`, `EMBED_LANE_MASK_ALL`, `embed_lane_mask_first`       | the lane's 32-bit lanes in the compiler's vector type or an aligned struct, the same at any address, one bit a byte, every byte, the first set |
+| `EMBED_LANE_BITS`, `EMBED_LANE_BYTES`, `EMBED_LANE_U32S`, `EMBED_LANE_BITS_WAS_OVERRIDDEN`               | the lane's width in bits, derived or defined by the build, in bytes, in 32-bit lanes, and which of the two                     |
 | `EMBED_LANE_VECTOR`, `EMBED_LANE_PLAIN`, `EMBED_LANE_PORTABLE`                                           | the arm taken, one of the two 1, and the build's switch forcing the struct arm                                                 |
 | `embed_lane_load`, `embed_lane_put`, `embed_lane_fill_byte`, `embed_lane_fill_u32`                       | a lane from and to any address, an aligned pair beside each, and a lane of one byte or one 32-bit value                        |
 | `embed_lane_and`, `embed_lane_or`, `embed_lane_xor`, `embed_lane_add_u32`, `embed_lane_sub_u32`, `embed_lane_mul_u32`, `embed_lane_shift_right_u32`, `embed_lane_shift_left_u32` | the logic over every bit and the arithmetic over each 32-bit lane, wrapping as the scalar does |
@@ -134,22 +137,38 @@ override wider than the word.
 
 ## The lane
 
-The word is the register, and every count, mask and carry runs in it. The lane is wider: 256 bits,
-one AVX2 register, two SSE2 or NEON registers, or a CUDA thread's eight 32-bit registers. A bulk pass
-over memory, a copy, a fill, a compare, a blend of pixels, steps one lane at a time, and the lane
-partitions at compile time to what the target has (`include/embed_lane.h:75-81`).
+The word is the register, and every count, mask and carry runs in it. The lane is the target's
+widest vector register, and its width derives from the compiler's instruction set macros as the
+word's derives from `UINTPTR_MAX` (`include/embed_compiler_directives.h`, `EMBED_VECTOR_REGISTER_BITS`;
+`include/embed_lane.h`). A bulk pass over memory, a copy, a fill, a compare, a blend of pixels, steps
+one lane at a time, and a wider register in a later build widens every pass with no edit.
 
-| arm             | `embed_lane`                                              | taken where                                                            |
-| --------------- | --------------------------------------------------------- | ---------------------------------------------------------------------- |
-| vector          | `embed_u32` carrying `EMBED_VECTOR(32)`                   | `EMBED_HAS_VECTOR_SIZE` is 1, `EMBED_LANE_PORTABLE` is 0, not a device |
-| portable        | a struct of eight `embed_u32` carrying `EMBED_ALIGN(32)`  | everywhere else, a CUDA device among them                              |
+| target                      | `EMBED_LANE_BITS`                     |
+| --------------------------- | ------------------------------------- |
+| a CUDA device               | 256, a thread's eight 32-bit registers |
+| AVX-512                     | 512                                   |
+| AVX2                        | 256                                   |
+| SSE2, NEON                  | 128                                   |
+| no vector unit, 64-bit word | 64                                    |
+| no vector unit, 32-bit or 16-bit word | 32                          |
+
+Define `EMBED_LANE_BITS` on the command line to override the derivation; the header then sets
+`EMBED_LANE_BITS_WAS_OVERRIDDEN` to 1, and to 0 where the derivation ran. Assertions hold any width
+to whole 32-bit lanes, whole words, and at most 512 bits, the width the byte mask holds.
+
+| arm      | `embed_lane`                                                       | taken where                                                            |
+| -------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| vector   | `embed_u32` carrying `EMBED_VECTOR(EMBED_LANE_BYTES)`              | `EMBED_HAS_VECTOR_SIZE` is 1, `EMBED_LANE_PORTABLE` is 0, not a device |
+| portable | a struct of `EMBED_LANE_U32S` `embed_u32` aligned to the lane      | everywhere else, a CUDA device among them                              |
 
 The two arms define the same operations, the vector arm as the plain operators over the vector type
 and the portable arm as loops the compiler vectorizes where it can. A load or a store at any address
-goes through `embed_lane_raw`, the lane carrying `EMBED_RAW`, as `embed_raw_word` is the word
-(`include/embed_lane.h:111`). Assertions hold the lane at 256 bits, 32 bytes and whole words
-(`include/embed_lane.h:53-54`, `:102`). The suite builds on the vector arm by default and on the
-portable arm with `-DEMBED_LANE_PORTABLE=1`.
+goes through `embed_lane_raw`, the lane carrying `EMBED_RAW`, as `embed_raw_word` is the word. The
+byte masks read through the compiler's own mask builtin where the directives header finds one for
+the lane's width, `EMBED_BYTE_MASK_256` under AVX2 and `EMBED_BYTE_MASK_128` under SSE2, one
+instruction each, and gather the bits by a multiply over the whole lane elsewhere. The suite builds
+on the vector arm at the derived width by default, and on the portable arm with
+`-DEMBED_LANE_PORTABLE=1`.
 
 ## Building
 

@@ -12,18 +12,19 @@
  * @date 2026-10-29
  *
  * @note The word, embed_word, is the register, and every count, mask and carry runs in it. The
- *       lane is wider than the register: EMBED_LANE_BITS wide, 256 by default, which is one AVX2
- *       register, two SSE2 or NEON registers, or a CUDA thread's eight 32-bit registers. A bulk
- *       operation, a copy, a fill, a compare, a blend of pixels, steps one lane at a time on every
- *       target, and the lane partitions at compile time to what the target has.
+ *       lane is the target's widest vector register, EMBED_LANE_BITS wide, derived here as the
+ *       word's width is derived in embed_types.h: 512 bits under AVX-512, 256 under AVX2 and on a
+ *       CUDA device, 128 under SSE2 or NEON, and the word's own width where the target has no
+ *       vector unit. A bulk operation, a copy, a fill, a compare, a blend of pixels, steps one lane
+ *       at a time on every target, and the lane partitions at compile time to what the target has.
  * @note Two arms, every operation defined on both. The vector arm is the compiler's vector type,
- *       eight 32-bit lanes the compiler keeps in its widest registers and runs the plain operators
- *       over; the compiler lowers it to the target's own instructions, one register on AVX2 and two
- *       on SSE2 or NEON. The portable arm is a struct of eight 32-bit lanes with the same operations
- *       written as loops, which a CUDA thread holds in eight registers.
+ *       EMBED_LANE_U32S 32-bit lanes the compiler keeps in its widest registers and runs the plain
+ *       operators over; the compiler lowers it to the target's own instructions. The portable arm is
+ *       a struct of the same 32-bit lanes with the same operations written as loops, which a CUDA
+ *       thread holds in registers.
  * @note The 32-bit lanes are the unit of the arithmetic, since a pixel is one and a byte's share of
  *       255 times a byte fits in one. The byte masks answer where bytes are equal or zero, one bit
- *       a byte, in an embed_u32 the register holds whole.
+ *       a byte, in an integer the register holds whole.
  * @note No header of the C library is reached: a load or a store at any address goes through the
  *       lane's own raw view, as the word's does.
  * @warning EMBED_LANE_PORTABLE set to 1 by the build takes the portable arm on any target. Both
@@ -35,13 +36,36 @@
 #include "embed_types.h"
 
 /**
- * @brief The lane's width in bits, 256 unless the build defines it.
+ * @brief The lane's width in bits, derived from the target's widest vector register.
  *
- * @note The arms carry 256 alone. A build defining another width fails the assertion below in place
- *       of taking a lane its arms do not implement.
+ * @note EMBED_VECTOR_REGISTER_BITS comes from the compiler's own instruction set macros. A CUDA
+ *       device takes 256, a thread's eight 32-bit registers. A target with no vector unit takes the
+ *       word's width, and 32 where the word is narrower, since a lane holds whole 32-bit lanes.
+ * @note A build wanting another width defines this ahead of this header, as EMBED_WORD_BITS is
+ *       defined. The assertions below hold any width to whole 32-bit lanes, whole words, and at
+ *       most 512 bits, the width the byte mask can hold.
  */
 #ifndef EMBED_LANE_BITS
+/**
+ * @brief Set to 0 where the lane width was derived here, 1 where the build defined it.
+ *
+ * @note Both arms define this macro. Test it with #if.
+ */
+#define EMBED_LANE_BITS_WAS_OVERRIDDEN 0
+
+#if defined(__CUDA_ARCH__)
 #define EMBED_LANE_BITS 256
+#elif EMBED_VECTOR_REGISTER_BITS != 0
+#define EMBED_LANE_BITS EMBED_VECTOR_REGISTER_BITS
+#elif EMBED_WORD_BITS > 32
+#define EMBED_LANE_BITS EMBED_WORD_BITS
+#else
+#define EMBED_LANE_BITS 32
+#endif
+#else
+
+/** @brief Set to 1 where the build defined EMBED_LANE_BITS ahead of this header. */
+#define EMBED_LANE_BITS_WAS_OVERRIDDEN 1
 #endif
 
 /** @brief The lane's width in bytes. */
@@ -50,7 +74,9 @@
 /** @brief The 32-bit lanes a lane holds. */
 #define EMBED_LANE_U32S (EMBED_LANE_BYTES / 4u)
 
-EMBED_STATIC_ASSERT(EMBED_LANE_BITS == 256, "EMBED_LANE_BITS must be 256: the lane's arms carry no other width");
+EMBED_STATIC_ASSERT((EMBED_LANE_BITS % 32u) == 0u, "EMBED_LANE_BITS must be whole 32-bit lanes");
+EMBED_STATIC_ASSERT(EMBED_LANE_BITS >= 32u, "EMBED_LANE_BITS must hold at least one 32-bit lane");
+EMBED_STATIC_ASSERT(EMBED_LANE_BITS <= 512u, "EMBED_LANE_BITS must be at most 512: the byte mask holds 64 bytes");
 EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must be whole words");
 
 /**
@@ -81,22 +107,25 @@ EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must 
 #endif
 
 /**
- * @brief The lane, EMBED_LANE_BYTES wide: eight 32-bit lanes in the compiler's vector type on the
- *        vector arm, in a struct aligned to the lane on the portable arm.
+ * @brief The lane, EMBED_LANE_BYTES wide: EMBED_LANE_U32S 32-bit lanes in the compiler's vector
+ *        type on the vector arm, in a struct aligned to the lane on the portable arm.
  *
  * @note On both arms lanes in a row lay out as the registers do, each lane at a multiple of its
  *       width.
  */
 #if EMBED_LANE_VECTOR
-typedef embed_u32 embed_lane EMBED_VECTOR(32);
+typedef embed_u32 embed_lane EMBED_VECTOR(EMBED_LANE_BYTES);
 
-/** @brief The lane seen as its 32 bytes, which the byte masks compare in. */
-typedef embed_u8 embed_lane_bytes EMBED_VECTOR(32);
+/** @brief The lane seen as its bytes, which the byte masks compare in. */
+typedef embed_u8 embed_lane_bytes EMBED_VECTOR(EMBED_LANE_BYTES);
+
+/** @brief The lane seen as char, the shape the compiler's byte mask builtin reads. */
+typedef char embed_lane_chars EMBED_VECTOR(EMBED_LANE_BYTES);
 #else
 typedef struct
 {
     embed_u32 at[EMBED_LANE_U32S]; /**< The 32-bit lanes, the lowest address first. */
-} embed_lane EMBED_ALIGN(32);
+} embed_lane EMBED_ALIGN(EMBED_LANE_BYTES);
 #endif
 
 EMBED_STATIC_ASSERT(sizeof(embed_lane) == EMBED_LANE_BYTES, "embed_lane must be exactly EMBED_LANE_BYTES wide");
@@ -110,8 +139,44 @@ EMBED_STATIC_ASSERT(sizeof(embed_lane) == EMBED_LANE_BYTES, "embed_lane must be 
  */
 typedef embed_lane embed_lane_raw EMBED_RAW;
 
-/** @brief The byte mask a lane's byte operations answer in, one bit a byte, the lowest byte the lowest bit. */
+/**
+ * @brief The byte mask a lane's byte operations answer in, one bit a byte, the lowest byte the
+ *        lowest bit: 32 bits wide up to a 32-byte lane, 64 above it.
+ */
+#if EMBED_LANE_BYTES <= 32u
 typedef embed_u32 embed_lane_mask;
+#else
+typedef embed_u64 embed_lane_mask;
+#endif
+
+/** @brief The mask with every byte of the lane set. */
+#if EMBED_LANE_BYTES >= 64u
+#define EMBED_LANE_MASK_ALL ((embed_lane_mask) ~(embed_u64)0)
+#else
+#define EMBED_LANE_MASK_ALL ((embed_lane_mask)(((embed_u64)1 << EMBED_LANE_BYTES) - 1u))
+#endif
+
+/**
+ * @brief The index of the first byte set in a mask.
+ *
+ * @param mask  A mask with at least one byte set.
+ * @return      The byte, counted from the first.
+ * @note The trailing zero count where the compiler has it, else a walk of the bits.
+ */
+EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask mask)
+{
+#if EMBED_HAS_BUILTIN(__builtin_ctzll)
+    // Explicit casts widen the mask to the builtin's operand and read its count, below 64, as unsigned
+    return (embed_u32)__builtin_ctzll((unsigned long long)mask);
+#else
+    embed_u32 byte = 0u;
+    while (((mask >> byte) & 1u) == 0u)
+    {
+        byte += 1u;
+    }
+    return byte;
+#endif
+}
 
 /**
  * @brief A lane loaded from any address.
@@ -164,11 +229,13 @@ EMBED_INLINE void embed_lane_put_aligned(void *dst, embed_lane lane)
  *
  * @param val  The 32-bit value.
  * @return     The lane.
+ * @note On the vector arm a scalar added to the zero vector is the scalar in every lane.
  */
 EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 val)
 {
 #if EMBED_LANE_VECTOR
-    return (embed_lane){val, val, val, val, val, val, val, val};
+    const embed_lane zero = {0u};
+    return zero + val;
 #else
     embed_lane lane;
     for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
@@ -374,22 +441,32 @@ EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane lane, embed_u32 cou
  * @param one    A lane.
  * @param other  A lane.
  * @return       The mask.
- * @note On the vector arm the bytes are compared as a byte vector, every equal byte all ones; each
- *       32-bit lane's four bits are gathered into a nibble by one multiply over the whole lane, and
- *       the eight nibbles are read out. On the portable arm each 32-bit lane finds its zero bytes
- *       by the word's own carry test and gathers them the same way.
+ * @note On the vector arm the bytes are compared as a byte vector, every equal byte all ones. Where
+ *       the compiler has the byte mask builtin for the lane's width, EMBED_BYTE_MASK_256 or
+ *       EMBED_BYTE_MASK_128, it reads the mask in one instruction. Otherwise each 32-bit lane's four
+ *       bits are gathered into a nibble by one multiply over the whole lane, and the nibbles are
+ *       read out. On the portable arm each 32-bit lane finds its zero bytes by the word's own carry
+ *       test and gathers them the same way.
  */
 EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane one, embed_lane other)
 {
     embed_lane_mask mask = 0u;
 #if EMBED_LANE_VECTOR
     const embed_lane_bytes equal = (embed_lane_bytes)((embed_lane_bytes)one == (embed_lane_bytes)other);
+#if EMBED_HAS_BYTE_MASK_256 && (EMBED_LANE_BITS == 256)
+    // Explicit casts read the builtin's int as the 32 unsigned bits it holds
+    mask = (embed_lane_mask)(embed_u32)EMBED_BYTE_MASK_256((embed_lane_chars)equal);
+#elif EMBED_HAS_BYTE_MASK_128 && (EMBED_LANE_BITS == 128)
+    // Explicit casts read the builtin's int as the 16 unsigned bits it holds
+    mask = (embed_lane_mask)(embed_u32)EMBED_BYTE_MASK_128((embed_lane_chars)equal);
+#else
     const embed_lane bits = (embed_lane)equal & embed_lane_fill_u32(0x01010101u);
     const embed_lane nibbles = (bits * embed_lane_fill_u32(EMBED_LANE_NIBBLE_GATHER)) >> 24;
     for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
     {
         mask |= (embed_lane_mask)nibbles[at] << (4u * at);
     }
+#endif
 #else
     for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
     {
