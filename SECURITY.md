@@ -3,16 +3,18 @@
 **Purpose:** Tell what a build of embedded_types refuses to compile, what it compiles without
 diagnosing, and where to send a report.
 **Scope:** `include/embed_types.h`, `include/embed_compiler_directives.h`,
-`include/embed_dispatch_layout.h`, `CMakeLists.txt`
+`include/embed_dispatch_layout.h`, `include/embed_lane.h`, `CMakeLists.txt`
 
 ## Attack surface
 
-embedded_types declares types and expands macros. The three headers define no function and reserve
-no object, and a translation unit that includes them gains no code and no storage
+embedded_types declares types and expands macros. The first three headers define no function and
+reserve no object, and a translation unit that includes them gains no code and no storage
 (`include/embed_types.h`, `include/embed_compiler_directives.h`,
 `include/embed_dispatch_layout.h`). `EMBED_ENTRY` and `EMBED_ENTRY_V` emit a function definition,
 and that definition belongs to the translation unit that expands them
-(`include/embed_dispatch_layout.h:762-766`, `:782-786`).
+(`include/embed_dispatch_layout.h:762-766`, `:782-786`). The lane header defines inline functions
+over its type and no object; each reads only what its arguments name, and a load or a store reaches
+the `EMBED_LANE_BYTES` bytes at the address given and no byte past them (`include/embed_lane.h`).
 
 ## What fails the build
 
@@ -33,6 +35,12 @@ A compiler may accept `__attribute__((packed))` and ignore it, and no `#if` dete
 `EmbedEnumProbe` has a one-byte range and its size is asserted (`include/embed_types.h:256-265`). A
 build that ignored packing fails to compile.
 
+### A lane of another width
+
+`EMBED_LANE_BITS` is 256 unless the build defines it, and the arms carry 256 alone. A build defining
+another width fails to compile, as does a target whose word does not divide the lane
+(`include/embed_lane.h:53-54`), and a lane type that is not 32 bytes (`include/embed_lane.h:102`).
+
 ### A pre-C11 dialect
 
 No earlier revision has a static assertion. Unguarded, `EMBED_STATIC_ASSERT` would parse as a
@@ -49,6 +57,15 @@ nothing, `embed_raw_word` reverts to the natural alignment of `embed_word`, and 
 an unaligned address is undefined. Nothing diagnoses this. The `@warning` on the typedef states it
 (`include/embed_types.h:207-211`). The other attribute wrappers cost speed when they expand to
 nothing. These two cost correctness.
+
+### A lane read at any address without the attributes
+
+`embed_lane_raw` is the lane carrying `EMBED_RAW` (`include/embed_lane.h:111`), and
+`embed_lane_load` and `embed_lane_put` read and write through it. Where the compiler supports
+neither attribute, the type reverts to the lane's 32-byte alignment, and a load or a store at an
+address that is not a multiple of 32 is undefined, on either arm. Nothing diagnoses this. The
+aligned pair, `embed_lane_load_aligned` and `embed_lane_put_aligned`, is undefined at an unaligned
+address on every compiler, and its `@warning` states it.
 
 ### Dispatch table wiring
 

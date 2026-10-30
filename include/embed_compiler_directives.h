@@ -168,10 +168,10 @@
  *       value of another enum stays checked. Clang on the MSVC ABI and C++ take the fixed underlying
  *       type `: unsigned char`, which C++11 made standard and clang takes in C as the C23 form. Clang
  *       on the MSVC ABI also accepts the packed attribute and leaves the enum int-wide, as MSVC lays
- *       every enum out, so it takes the fixed type before the attribute is looked for. Every other
+ *       every enum out. It takes the fixed type before the attribute is looked for. Every other
  *       compiler with the packed attribute takes the attribute.
  * @note Where it cannot, MSVC's C among them, the enumerators are declared as constants and name_ is
- *       an unsigned char. The width is one byte either way, so a struct holding name_ is laid out the
+ *       an unsigned char. The width is one byte either way. A struct holding name_ is laid out the
  *       same whichever compiler reads it.
  * @warning An enumerator past 255 or below 0 fails the build on the fixed-type arms, widens the enum
  *          on the attribute arm and is cut to a byte where it is stored on the unsigned char arm.
@@ -179,7 +179,7 @@
  *          accepts the attribute and ignores it.
  */
 #if defined(__clang__) && defined(_MSC_VER)
-// the fixed underlying type is the width this arm exists for, so clang's note that C11 lacks it is
+// the fixed underlying type is the width this arm exists for. Clang's note that C11 lacks it is
 // silenced here, for that one warning and on this arm alone
 #pragma clang diagnostic ignored "-Wmicrosoft-fixed-enum"
 #define EMBED_ENUM_BYTE(name_, ...)                                                                                    \
@@ -253,6 +253,35 @@
  * @warning Both warnings above apply here. Neither failure is diagnosed.
  */
 #define EMBED_RAW EMBED_ALIGN(1) EMBED_ALIAS
+
+/**
+ * @brief Set to 1 where EMBED_HAS_ATTRIBUTE(vector_size) is non-zero, else 0.
+ *
+ * @note The vector_size attribute on a scalar type makes a type the compiler keeps in a vector
+ *       register, the plain operators running over every element at once. embed_lane.h takes its
+ *       vector arm where this is 1 and its portable arm where it is 0.
+ * @note Both arms define this macro. Test it with #if.
+ */
+#if EMBED_HAS_ATTRIBUTE(vector_size)
+#define EMBED_HAS_VECTOR_SIZE 1
+#else
+#define EMBED_HAS_VECTOR_SIZE 0
+#endif
+
+/**
+ * @brief Expands to __attribute__((vector_size(bytes_))) where EMBED_HAS_VECTOR_SIZE is 1.
+ *
+ * @param[in] bytes_ The vector's width in bytes, a power of two and a multiple of the scalar's size.
+ * @warning Expands to nothing where EMBED_HAS_VECTOR_SIZE is 0, ignoring bytes_: the type is the
+ *          scalar alone. A declaration that needs the width tests EMBED_HAS_VECTOR_SIZE first and
+ *          declares a struct of the elements on the other arm, as embed_lane.h does.
+ */
+#if EMBED_HAS_VECTOR_SIZE
+#define EMBED_VECTOR(bytes_) __attribute__((vector_size(bytes_)))
+#else
+
+#define EMBED_VECTOR(bytes_)
+#endif
 
 /**
  * @brief Expands to __attribute__((unused)) where EMBED_HAS_ATTRIBUTE(unused) is non-zero.
