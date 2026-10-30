@@ -36,3 +36,52 @@ function(embedded_types_add_suite suite_name)
     add_test(NAME ${suite_name} COMMAND ${suite_name})
     set_property(GLOBAL APPEND PROPERTY EMBEDDED_TYPES_SUITES_BUILT "${suite_name}")
 endfunction()
+
+# embedded_types_add_device_suite(<name>) - a suite whose cases, in <name>.c, call kernels in
+# <name>.cu, the two linked into one program: the device arm of a header checked against the host.
+# Where EMBEDDED_TYPES_DEVICE is 0 the suite is left out and said so, and the build goes on.
+function(embedded_types_add_device_suite suite_name)
+    if(NOT EMBEDDED_TYPES_DEVICE)
+        message(STATUS "embedded_types: ${suite_name} left out, no device arm in this build")
+        return()
+    endif()
+
+    set(suite_dir "${CMAKE_CURRENT_SOURCE_DIR}")
+    set(suite_src "${suite_dir}/${suite_name}.c")
+    set(suite_device "${suite_dir}/${suite_name}.cu")
+    set(runner "${suite_dir}/unity_runner.c")
+
+    if(NOT EXISTS "${suite_src}" OR NOT EXISTS "${suite_device}")
+        message(FATAL_ERROR
+                "embedded_types: ${suite_name} needs ${suite_name}.c for its cases and ${suite_name}.cu for its kernels")
+    endif()
+
+    add_custom_command(
+        OUTPUT "${runner}"
+        COMMAND ${Python3_EXECUTABLE} "${EMBEDDED_TYPES_HARNESS}" runners gen "${suite_dir}"
+                --unity "${EMBEDDED_TYPES_UNITY_RB}"
+        DEPENDS "${suite_src}" "${EMBEDDED_TYPES_HARNESS}"
+        COMMENT "embedded_types: generating Unity runner for ${suite_name}"
+        VERBATIM
+    )
+    add_custom_target(${suite_name}_runner DEPENDS "${runner}")
+    set_source_files_properties("${runner}" PROPERTIES GENERATED TRUE)
+
+    add_executable(${suite_name}
+        "${suite_src}"
+        "${suite_device}"
+        "${runner}"
+        "${unity_SOURCE_DIR}/src/unity.c")
+    add_dependencies(${suite_name} ${suite_name}_runner)
+    target_include_directories(${suite_name} PRIVATE "${unity_SOURCE_DIR}/src")
+
+    target_compile_options(${suite_name} PRIVATE $<$<COMPILE_LANGUAGE:C>:${EMBEDDED_TYPES_TEST_WARNINGS}>)
+    target_compile_features(${suite_name} PRIVATE cuda_std_17)
+    set_target_properties(${suite_name} PROPERTIES
+        CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test")
+    target_link_libraries(${suite_name} PRIVATE embedded_types::embedded_types CUDA::cudart)
+
+    add_test(NAME ${suite_name} COMMAND ${suite_name})
+    set_property(GLOBAL APPEND PROPERTY EMBEDDED_TYPES_SUITES_BUILT "${suite_name}")
+endfunction()

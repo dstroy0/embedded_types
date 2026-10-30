@@ -27,6 +27,9 @@
  *       a byte, in an integer the register holds whole.
  * @note No header of the C library is reached: a load or a store at any address goes through the
  *       lane's own raw view, as the word's does.
+ * @note Every entry carries EMBED_HOST_DEVICE. Under nvcc one definition compiles into the host pass
+ *       and the device pass, the device pass taking the portable arm at 256 bits, and a kernel calls
+ *       the same functions a host walk calls.
  * @warning EMBED_LANE_PORTABLE set to 1 by the build takes the portable arm on any target. Both
  *          values of every arm flag are defined here. Test them with #if.
  */
@@ -163,7 +166,7 @@ typedef embed_u64 embed_lane_mask;
  * @return      The byte, counted from the first.
  * @note The trailing zero count where the compiler has it, else a walk of the bits.
  */
-EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask mask)
+EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask mask)
 {
 #if EMBED_HAS_BUILTIN(__builtin_ctzll)
     // Explicit casts widen the mask to the builtin's operand and read its count, below 64, as unsigned
@@ -184,7 +187,7 @@ EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask mask)
  * @param at  Where EMBED_LANE_BYTES bytes are read from, at any alignment.
  * @return    The bytes as a lane.
  */
-EMBED_INLINE embed_lane embed_lane_load(const void *at)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
 {
     return *(const embed_lane_raw *)at;
 }
@@ -196,7 +199,7 @@ EMBED_INLINE embed_lane embed_lane_load(const void *at)
  * @return    The bytes as a lane.
  * @warning An address not aligned to the lane is undefined here; embed_lane_load reads any.
  */
-EMBED_INLINE embed_lane embed_lane_load_aligned(const void *at)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load_aligned(const void *at)
 {
     return *(const embed_lane *)at;
 }
@@ -207,7 +210,7 @@ EMBED_INLINE embed_lane embed_lane_load_aligned(const void *at)
  * @param dst   Where EMBED_LANE_BYTES bytes are written, at any alignment.
  * @param lane  The bytes.
  */
-EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
 {
     *(embed_lane_raw *)dst = lane;
 }
@@ -219,7 +222,7 @@ EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
  * @param lane  The bytes.
  * @warning An address not aligned to the lane is undefined here; embed_lane_put writes any.
  */
-EMBED_INLINE void embed_lane_put_aligned(void *dst, embed_lane lane)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put_aligned(void *dst, embed_lane lane)
 {
     *(embed_lane *)dst = lane;
 }
@@ -231,7 +234,7 @@ EMBED_INLINE void embed_lane_put_aligned(void *dst, embed_lane lane)
  * @return     The lane.
  * @note On the vector arm a scalar added to the zero vector is the scalar in every lane.
  */
-EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 val)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 val)
 {
 #if EMBED_LANE_VECTOR
     const embed_lane zero = {0u};
@@ -252,7 +255,7 @@ EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 val)
  * @param val  The byte.
  * @return     The lane.
  */
-EMBED_INLINE embed_lane embed_lane_fill_byte(embed_u8 val)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_byte(embed_u8 val)
 {
     return embed_lane_fill_u32((embed_u32)val * 0x01010101u);
 }
@@ -264,7 +267,7 @@ EMBED_INLINE embed_lane embed_lane_fill_byte(embed_u8 val)
  * @param other  A lane.
  * @return       The and.
  */
-EMBED_INLINE embed_lane embed_lane_and(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_and(embed_lane one, embed_lane other)
 {
 #if EMBED_LANE_VECTOR
     return one & other;
@@ -285,7 +288,7 @@ EMBED_INLINE embed_lane embed_lane_and(embed_lane one, embed_lane other)
  * @param other  A lane.
  * @return       The or.
  */
-EMBED_INLINE embed_lane embed_lane_or(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_or(embed_lane one, embed_lane other)
 {
 #if EMBED_LANE_VECTOR
     return one | other;
@@ -306,7 +309,7 @@ EMBED_INLINE embed_lane embed_lane_or(embed_lane one, embed_lane other)
  * @param other  A lane.
  * @return       The exclusive or.
  */
-EMBED_INLINE embed_lane embed_lane_xor(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_xor(embed_lane one, embed_lane other)
 {
 #if EMBED_LANE_VECTOR
     return one ^ other;
@@ -327,7 +330,7 @@ EMBED_INLINE embed_lane embed_lane_xor(embed_lane one, embed_lane other)
  * @param other  A lane.
  * @return       The sums.
  */
-EMBED_INLINE embed_lane embed_lane_add_u32(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_add_u32(embed_lane one, embed_lane other)
 {
 #if EMBED_LANE_VECTOR
     return one + other;
@@ -348,7 +351,7 @@ EMBED_INLINE embed_lane embed_lane_add_u32(embed_lane one, embed_lane other)
  * @param other  A lane.
  * @return       The differences.
  */
-EMBED_INLINE embed_lane embed_lane_sub_u32(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_sub_u32(embed_lane one, embed_lane other)
 {
 #if EMBED_LANE_VECTOR
     return one - other;
@@ -369,7 +372,7 @@ EMBED_INLINE embed_lane embed_lane_sub_u32(embed_lane one, embed_lane other)
  * @param other  A lane.
  * @return       The products' low halves.
  */
-EMBED_INLINE embed_lane embed_lane_mul_u32(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_mul_u32(embed_lane one, embed_lane other)
 {
 #if EMBED_LANE_VECTOR
     return one * other;
@@ -390,7 +393,7 @@ EMBED_INLINE embed_lane embed_lane_mul_u32(embed_lane one, embed_lane other)
  * @param count  The bits, below 32.
  * @return       The shifted lanes.
  */
-EMBED_INLINE embed_lane embed_lane_shift_right_u32(embed_lane lane, embed_u32 count)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_right_u32(embed_lane lane, embed_u32 count)
 {
 #if EMBED_LANE_VECTOR
     return lane >> count;
@@ -411,7 +414,7 @@ EMBED_INLINE embed_lane embed_lane_shift_right_u32(embed_lane lane, embed_u32 co
  * @param count  The bits, below 32.
  * @return       The shifted lanes.
  */
-EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane lane, embed_u32 count)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane lane, embed_u32 count)
 {
 #if EMBED_LANE_VECTOR
     return lane << count;
@@ -448,7 +451,7 @@ EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane lane, embed_u32 cou
  *       read out. On the portable arm each 32-bit lane finds its zero bytes by the word's own carry
  *       test and gathers them the same way.
  */
-EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane one, embed_lane other)
 {
     embed_lane_mask mask = 0u;
 #if EMBED_LANE_VECTOR
@@ -487,7 +490,7 @@ EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane one, embed_lane o
  * @param lane  A lane.
  * @return      The mask.
  */
-EMBED_INLINE embed_lane_mask embed_lane_bytes_zero(embed_lane lane)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_zero(embed_lane lane)
 {
     return embed_lane_bytes_equal(lane, embed_lane_fill_u32(0u));
 }

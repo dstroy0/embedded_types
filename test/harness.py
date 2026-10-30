@@ -45,6 +45,7 @@ The mechanisms here are generic. The paths and the two build trees are this proj
 """
 
 import argparse
+import glob
 import os
 import re
 import shlex
@@ -110,7 +111,7 @@ def runner_cases(path):
 def conditional_cases(path):
     """Every registered case in @p path whose definition sits inside a preprocessor conditional.
 
-    Unity's generator reads case names out of the source text, so such a case is still declared and
+    Unity's generator reads case names out of the source text. Such a case is still declared and
     called by the runner. Where the conditional went the other way the definition is gone and the
     suite fails to LINK. A failed link is a build somebody has to read, and it is louder than a case
     that quietly never ran.
@@ -183,7 +184,7 @@ def generate_runner(suite_dir, unity_rb):
                     % (os.path.relpath(os.path.join(suite_dir, name), ROOT), ", ".join(missed))
                 )
         raise SystemExit("runners: no test case found in %s" % os.path.relpath(suite_dir, ROOT))
-    # The generator takes one input file and emits one main(), so cases spread across several
+    # The generator takes one input file and emits one main(). Cases spread across several
     # sources cannot be registered from any single one of them.
     if len(sources) > 1:
         raise SystemExit(
@@ -200,10 +201,10 @@ def generate_runner(suite_dir, unity_rb):
     src = os.path.join(suite_dir, sources[0])
     out = os.path.join(suite_dir, GENERATED_RUNNER)
     subprocess.run([ruby, unity_rb, src, out], check=True)
-    # Unity's generator opens its output in text mode, so on Windows every line lands CRLF while
+    # Unity's generator opens its output in text mode. On Windows every line lands CRLF while
     # .gitattributes holds this tree at "LF in the repository and LF in the working copy". The runner
     # is tracked, so that difference shows as a modified file after every build that regenerates one.
-    # git normalizes the content it stores either way, so nothing was ever committed wrong; rewriting
+    # git normalizes the content it stores either way. Nothing was ever committed wrong; rewriting
     # the bytes here is what leaves the working copy as the build found it, on every platform. A
     # no-op where the generator already wrote LF.
     with open(out, "rb") as fh:
@@ -243,11 +244,48 @@ TREES = {
 }
 
 
+def msvc_environment_script():
+    """The script that sets MSVC's environment on this host, or None where there is none to set.
+
+    nvcc on Windows compiles through MSVC's cl and links through MSVC's link, and both read their
+    include and library paths from the environment that script sets. Outside it, Git's own link is
+    found first on PATH and the CUDA check fails on it.
+    """
+    if os.name != "nt":
+        return None
+    roots = [r"C:\Program Files (x86)\Microsoft Visual Studio", r"C:\Program Files\Microsoft Visual Studio"]
+    found = []
+    for root in roots:
+        found += glob.glob(os.path.join(root, "*", "*", "VC", "Auxiliary", "Build", "vcvarsall.bat"))
+    return sorted(found)[-1] if found else None
+
+
+def toolchain_environment():
+    """The environment cmake runs in: the process's own, with MSVC's set on top where nvcc is present on Windows.
+
+    The device suites alone need nvcc's host toolchain in the environment. A
+    host without nvcc, or without MSVC, runs cmake as it is and the device suites are left out.
+    """
+    env = dict(os.environ)
+    script = msvc_environment_script()
+    if script is None or shutil.which("nvcc") is None:
+        return env
+    told = subprocess.run(["cmd", "/c", "call", script, "x64", ">nul", "&&", "set"], capture_output=True, text=True)
+    if told.returncode != 0:
+        return env
+    for line in told.stdout.splitlines():
+        name, sep, value = line.partition("=")
+        if sep:
+            env[name] = value
+    return env
+
+
 def run(cmd, quiet=True):
-    """Run a command from the repository root and hand back its completed process."""
+    """Run a command from the repository root, in the toolchain's environment, and hand back its completed process."""
+    env = toolchain_environment()
     if quiet:
-        return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
-    return subprocess.run(cmd, cwd=ROOT, text=True)
+        return subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=env)
+    return subprocess.run(cmd, cwd=ROOT, text=True, env=env)
 
 
 def borrowed_toolchain(skip):
@@ -364,7 +402,7 @@ def cmd_suites(parsed):
         for suite, case in conditional:
             print("   %-40s %s" % (suite, case))
         print(
-            "\n  The generator does not see the conditional, so the runner declares and calls each\n"
+            "\n  The generator does not see the conditional. The runner declares and calls each\n"
             "  of these however it went. Where it went the other way the definition is gone and the\n"
             "  suite fails to link.\n"
             "\n"
@@ -404,7 +442,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    # The whole build is three small suites, so parallelism buys little and a low default keeps the
+    # The whole build is a few small suites. Parallelism buys little and a low default keeps the
     # machine usable while it runs.
     parser = sub.add_parser("build", help="configure if needed, then build")
     parser.add_argument("--tree", default="build", choices=sorted(TREES), help="which build tree")

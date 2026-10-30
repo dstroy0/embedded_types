@@ -255,6 +255,20 @@
 #define EMBED_RAW EMBED_ALIGN(1) EMBED_ALIAS
 
 /**
+ * @brief Expands to __host__ __device__ under nvcc, and to nothing elsewhere.
+ *
+ * @note A function carrying it compiles into both of nvcc's passes from one definition, and into
+ *       the one pass every other compiler has. Every entry of embed_lane.h and embed_spinlock.h
+ *       carries it, and one source runs on the host and on the device.
+ * @note Both arms define this macro.
+ */
+#if defined(__CUDACC__)
+#define EMBED_HOST_DEVICE __host__ __device__
+#else
+#define EMBED_HOST_DEVICE
+#endif
+
+/**
  * @brief Set to 1 where EMBED_HAS_ATTRIBUTE(vector_size) is non-zero, else 0.
  *
  * @note The vector_size attribute on a scalar type makes a type the compiler keeps in a vector

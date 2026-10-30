@@ -31,6 +31,29 @@ set(EMBEDDED_TYPES_TEST_WARNINGS
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+# The device arm. Where a CUDA compiler is found, the suites that hold a header's device arm compile
+# their kernels with it and run on the part the host has. Where none is found, or the architectures
+# cannot be read off the part, those suites are left out with a message and every other suite stands.
+# EMBEDDED_TYPES_DEVICE is 1 or 0 on every path.
+option(EMBEDDED_TYPES_DEVICE_TESTS "Compile the device suites where a CUDA compiler is found" ON)
+set(EMBEDDED_TYPES_DEVICE 0)
+if(EMBEDDED_TYPES_BUILD_TESTS AND EMBEDDED_TYPES_DEVICE_TESTS)
+  include(CheckLanguage)
+  check_language(CUDA)
+  if(NOT CMAKE_CUDA_COMPILER)
+    message(STATUS "embedded_types: no CUDA compiler, the device suites are left out")
+  elseif(NOT CMAKE_CUDA_ARCHITECTURES AND CMAKE_VERSION VERSION_LESS 3.24)
+    message(STATUS "embedded_types: cmake ${CMAKE_VERSION} cannot read the part's architecture, define CMAKE_CUDA_ARCHITECTURES or the device suites are left out")
+  else()
+    if(NOT CMAKE_CUDA_ARCHITECTURES)
+      set(CMAKE_CUDA_ARCHITECTURES native)
+    endif()
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    set(EMBEDDED_TYPES_DEVICE 1)
+  endif()
+endif()
+
 if(EMBEDDED_TYPES_BUILD_TESTS)
   enable_testing()
   add_subdirectory(test)

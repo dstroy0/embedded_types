@@ -77,7 +77,7 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("test/unit/test_embed_lane\\test_embed_lane.c");
+  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/embedded_types/test/unit/test_embed_lane\\test_embed_lane.c");
   run_test(test_the_lane_is_whole_32_bit_lanes_of_the_derived_width_on_one_arm, "test_the_lane_is_whole_32_bit_lanes_of_the_derived_width_on_one_arm", 89);
   run_test(test_a_lane_loaded_at_an_odd_address_puts_back_the_same_bytes, "test_a_lane_loaded_at_an_odd_address_puts_back_the_same_bytes", 106);
   run_test(test_a_lane_loaded_aligned_puts_back_aligned, "test_a_lane_loaded_aligned_puts_back_aligned", 117);

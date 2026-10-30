@@ -3,18 +3,19 @@
 **Purpose:** Take the fixed-width aliases, the machine word, and the compile-time machinery a C11
 embedded build needs from one place, instead of declaring them again in each library that uses them.
 **Scope:** `include/embed_types.h`, `include/embed_compiler_directives.h`,
-`include/embed_dispatch_layout.h`, `include/embed_spinlock.h`, `include/embed_lane.h`,
+`include/embed_dispatch_layout.h`, `include/embed_atomic.h`, `include/embed_lane.h`,
 `cmake/EmbeddedTypesSuite.cmake`, `test/harness.py`, `test/support/`, `test/unit/`
 
 Five C11 headers hold the fixed-width integer aliases, a machine word derived from the target, the
-compile-time machinery around them, a spinlock on the target's atomics, and the lane, the target's
-widest vector register derived the same way, which a bulk pass over memory moves and computes in.
-They are header only. The first three reach
-`stddef.h` and `stdint.h` (`include/embed_types.h:22`, `include/embed_compiler_directives.h:22`,
-`include/embed_dispatch_layout.h:23`). The spinlock adds `stdatomic.h` on its C11 arm and `intrin.h`
-under MSVC, and nothing on its CUDA device arm. The lane reaches `embed_types.h` alone
-(`include/embed_lane.h`). What the headers guarantee, and what they leave undiagnosed, is in
-[SECURITY.md](SECURITY.md).
+compile-time machinery around them, atomic words on the target's own atomics, and the lane, the
+target's widest vector register derived the same way, which a bulk pass over memory moves and
+computes in. They are header only. The first three reach `stddef.h` and `stdint.h`
+(`include/embed_types.h:22`, `include/embed_compiler_directives.h:22`,
+`include/embed_dispatch_layout.h:23`). The atomics add `stdatomic.h` on their C11 arm and `intrin.h`
+under MSVC, and nothing on their CUDA device arm. The lane reaches `embed_types.h` alone
+(`include/embed_lane.h`). Every entry of the atomics and the lane carries `EMBED_HOST_DEVICE`:
+one definition compiles into nvcc's host pass and device pass, and a kernel calls what a host walk
+calls. What the headers guarantee, and what they leave undiagnosed, is in [SECURITY.md](SECURITY.md).
 
 A consumer includes the headers and writes against the names directly.
 
@@ -53,7 +54,7 @@ padding between two members, fails the build.
 | [`include/embed_types.h`](include/embed_types.h)                             | the widths, the boolean, the word, the index, the raw-access word, the assertions    |
 | [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | feature probes, the static assertion, attribute wrappers, diagnostic pragmas, guards |
 | [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the machinery behind them     |
-| [`include/embed_spinlock.h`](include/embed_spinlock.h)                       | a 32-bit spinlock for host, part and GPU threads, its arm switched by the target     |
+| [`include/embed_atomic.h`](include/embed_atomic.h)                           | 32-bit and 64-bit atomic words for host, part and GPU threads, their arm switched by the target |
 | [`include/embed_lane.h`](include/embed_lane.h)                               | the lane beside the word, the widest register, its loads, fills, arithmetic and masks |
 | [`test/support/`](test/support)                                              | host threads for the contention cases, out of the runners' sight                     |
 | [`test/unit/`](test/unit)                                                    | one Unity suite per header, each its own CTest target                                |
@@ -87,6 +88,9 @@ declaration, and a guarantee or a warning is stated there once.
 | `EMBED_INLINE`, `EMBED_FLATTEN`, `EMBED_ALIGN`, `EMBED_ALIAS`, `EMBED_RAW`, `EMBED_UNUSED`, `EMBED_WEAK` | the attribute where available, empty where not                                                                                 |
 | `EMBED_HAS_VECTOR_SIZE`, `EMBED_VECTOR`                                                                  | 1 where the compiler has the `vector_size` attribute, 0 otherwise, and the attribute at a width in bytes, empty where not     |
 | `EMBED_VECTOR_REGISTER_BITS`                                                                             | the widest vector register the target compiles for: 512, 256, 128, or 0 where it has none                                      |
+| `EMBED_HOST_DEVICE`                                                                                      | `__host__ __device__` under nvcc, empty elsewhere                                                                              |
+| `embed_atomic_u32`, `embed_atomic_u64`, `embed_atomic_word`, `EMBED_ATOMIC_INIT`, `EMBED_ATOMIC_ARM`     | the two atomic words and the one of the machine word's width, a declared value, and which of the four arms is taken             |
+| `embed_atomic_u32_load`, `_store`, `_exchange`, `_swap_if`, `_fetch_add`, `_fetch_sub`, `_fetch_or`, `_fetch_and`, `_raise`, and the same for `u64` and `word` | one indivisible step each: acquire load, release store, swap, compare-and-swap, the arithmetic and the masks answering the word before, and a raise to a value where it is higher |
 | `EMBED_HAS_BYTE_MASK_256`, `EMBED_BYTE_MASK_256`, `EMBED_HAS_BYTE_MASK_128`, `EMBED_BYTE_MASK_128`       | 1 where the compiler has the builtin reading 32 or 16 bytes' sign bits into an int, 0 otherwise, and the builtin, 0 where not |
 | `embed_lane`, `embed_lane_raw`, `embed_lane_mask`, `EMBED_LANE_MASK_ALL`, `embed_lane_mask_first`       | the lane's 32-bit lanes in the compiler's vector type or an aligned struct, the same at any address, one bit a byte, every byte, the first set |
 | `EMBED_LANE_BITS`, `EMBED_LANE_BYTES`, `EMBED_LANE_U32S`, `EMBED_LANE_BITS_WAS_OVERRIDDEN`               | the lane's width in bits, derived or defined by the build, in bytes, in 32-bit lanes, and which of the two                     |

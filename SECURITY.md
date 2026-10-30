@@ -82,7 +82,20 @@ There are no bounds checks, because there is no run-time code.
 
 ### Concurrency
 
-There is no state.
+The headers hold no state of their own. `include/embed_atomic.h` is what a consumer builds shared
+state on: every operation is one indivisible step on the target's atomics, a load carries acquire
+ordering, a store release ordering, and every read-modify-write both. Nothing in it waits for another
+context. What a consumer builds over the words, a claim by compare-and-swap or a boundary moved by
+one, is correct only where every writer of the word goes through the header; a plain store beside
+the atomics is not diagnosed. A target with none of the four arms fails the build at its `#error`.
+
+### The device arm
+
+`embedded_types_add_device_suite` compiles a suite's kernels with the CUDA compiler the build found
+and runs them on the part the host has (`cmake/EmbeddedTypesSuite.cmake`). Where no compiler is
+found the suite is left out with a message, and where the compiler is found and no part is present
+each case is ignored and says so. Neither is a failure, and a build with the device arm left out
+holds the host arm alone.
 
 ## Hardening the build
 
