@@ -359,34 +359,46 @@ EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane lane, embed_u32 cou
 }
 
 /**
+ * @brief The four bytes of a 32-bit lane, each holding 1 or 0 in its lowest bit, gathered into the
+ *        lane's low nibble, the lowest byte the lowest bit.
+ *
+ * @note A multiply places the four bits at bits 24 to 27 alone: the multiplier's four powers of two
+ *       set each bit of the product once, with no carry between them. The product's top byte is the
+ *       nibble.
+ */
+#define EMBED_LANE_NIBBLE_GATHER 0x01020408u
+
+/**
  * @brief Which bytes of two lanes are equal, one bit a byte, the lowest byte the lowest bit.
  *
  * @param one    A lane.
  * @param other  A lane.
  * @return       The mask.
- * @note On the vector arm the bytes are compared as a byte vector, every equal byte all ones, and
- *       each byte's lowest bit is gathered into the mask.
+ * @note On the vector arm the bytes are compared as a byte vector, every equal byte all ones; each
+ *       32-bit lane's four bits are gathered into a nibble by one multiply over the whole lane, and
+ *       the eight nibbles are read out. On the portable arm each 32-bit lane finds its zero bytes
+ *       by the word's own carry test and gathers them the same way.
  */
 EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane one, embed_lane other)
 {
     embed_lane_mask mask = 0u;
 #if EMBED_LANE_VECTOR
     const embed_lane_bytes equal = (embed_lane_bytes)((embed_lane_bytes)one == (embed_lane_bytes)other);
-    for (embed_u32 byte = 0u; byte < EMBED_LANE_BYTES; byte += 1u)
+    const embed_lane bits = (embed_lane)equal & embed_lane_fill_u32(0x01010101u);
+    const embed_lane nibbles = (bits * embed_lane_fill_u32(EMBED_LANE_NIBBLE_GATHER)) >> 24;
+    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
     {
-        mask |= (embed_lane_mask)(equal[byte] & 1u) << byte;
+        mask |= (embed_lane_mask)nibbles[at] << (4u * at);
     }
 #else
     for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
     {
+        // a byte of the difference is zero where its high bit is clear after the carry test: the
+        // sum carries out of every byte that holds any bit, and the complement leaves the rest
         const embed_u32 difference = one.at[at] ^ other.at[at];
-        for (embed_u32 byte = 0u; byte < 4u; byte += 1u)
-        {
-            if (((difference >> (8u * byte)) & 0xffu) == 0u)
-            {
-                mask |= (embed_lane_mask)1u << ((4u * at) + byte);
-            }
-        }
+        const embed_u32 carried = (difference & 0x7f7f7f7fu) + 0x7f7f7f7fu;
+        const embed_u32 zero_bytes = (~(carried | difference | 0x7f7f7f7fu)) >> 7u;
+        mask |= (embed_lane_mask)((zero_bytes * EMBED_LANE_NIBBLE_GATHER) >> 24u) << (4u * at);
     }
 #endif
     return mask;
