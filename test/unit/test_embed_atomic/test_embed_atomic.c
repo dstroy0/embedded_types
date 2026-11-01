@@ -36,6 +36,18 @@ static embed_atomic_u32 s_slots[ATOMIC_SLOTS];
 static embed_atomic_u32 s_claimed[ATOMIC_THREADS];
 static embed_atomic_u32 s_high = EMBED_ATOMIC_INIT(0u);
 
+/** @brief The rounds of the write-then-read case, enough for a store buffer to show where the host has one. */
+#define ATOMIC_ORDER_ROUNDS 200000u
+
+/** @brief The arrivals one round makes: two gates, and the case's two threads at each. */
+#define ATOMIC_ORDER_ARRIVALS 4u
+
+static embed_atomic_u32 s_order_word[2];
+static embed_atomic_u32 s_order_read[2];
+static embed_atomic_u32 s_order_arrived = EMBED_ATOMIC_INIT(0u);
+static embed_atomic_u32 s_order_next_id = EMBED_ATOMIC_INIT(0u);
+static embed_atomic_u32 s_order_both_missed = EMBED_ATOMIC_INIT(0u);
+
 void setUp(void)
 {
     embed_atomic_u32_store(&s_count32, 0u);
@@ -154,6 +166,43 @@ void test_raise_moves_the_word_up_and_never_down(void)
     TEST_ASSERT_EQUAL_UINT64_MESSAGE(3u, embed_atomic_u64_raise(&wide, 3u), "an equal value leaves the word");
     TEST_ASSERT_EQUAL_UINT64_MESSAGE(3u, embed_atomic_u64_raise(&wide, 30u), "a higher one raises it");
     TEST_ASSERT_EQUAL_UINT64_MESSAGE(30u, embed_atomic_u64_load(&wide), "to the value given");
+}
+
+/** @brief Arrives at a gate and waits for the other thread to, so that both leave it together. */
+static void order_gate(embed_u32 arrivals)
+{
+    (void)embed_atomic_u32_fetch_add(&s_order_arrived, 1u);
+    while (embed_atomic_u32_load(&s_order_arrived) < arrivals)
+    {
+    }
+}
+
+/** @brief Each round writes this thread's word, orders that ahead of its read, and reads the other's. */
+static void order_rounds(void)
+{
+    const embed_u32 mine = embed_atomic_u32_fetch_add(&s_order_next_id, 1u);
+    const embed_u32 theirs = mine ^ 1u;
+
+    for (embed_u32 round = 1u; round <= ATOMIC_ORDER_ROUNDS; round += 1u)
+    {
+        order_gate((round * ATOMIC_ORDER_ARRIVALS) - 2u);
+        embed_atomic_u32_store(&s_order_word[mine], round);
+        embed_atomic_ordered();
+        embed_atomic_u32_store(&s_order_read[mine], embed_atomic_u32_load(&s_order_word[theirs]));
+        order_gate(round * ATOMIC_ORDER_ARRIVALS);
+        if ((mine == 0u) && (embed_atomic_u32_load(&s_order_read[0]) < round) &&
+            (embed_atomic_u32_load(&s_order_read[1]) < round))
+        {
+            (void)embed_atomic_u32_fetch_add(&s_order_both_missed, 1u);
+        }
+    }
+}
+
+void test_ordered_keeps_two_threads_from_both_missing_each_others_write(void)
+{
+    TEST_ASSERT_TRUE_MESSAGE(host_threads_run(order_rounds, 2u), "both threads started");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, embed_atomic_u32_load(&s_order_both_missed),
+                                     "whichever read comes second sees the other's write");
 }
 
 void test_contending_threads_lose_no_add_and_raise_to_the_highest(void)

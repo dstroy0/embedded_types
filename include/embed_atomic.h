@@ -102,6 +102,7 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
  */
 #define EMBED_ATOMIC_LOAD(atom_) ((atom_)->value)
 #define EMBED_ATOMIC_FENCE() __threadfence()
+#define EMBED_ATOMIC_ORDERED() __threadfence()
 #define EMBED_ATOMIC_STORE(atom_, value_) ((atom_)->value = (value_))
 #define EMBED_ATOMIC_EXCHANGE_32(atom_, value_) atomicExch((unsigned int *)&(atom_)->value, (value_))
 #define EMBED_ATOMIC_EXCHANGE_64(atom_, value_) atomicExch((unsigned long long *)&(atom_)->value, (value_))
@@ -119,6 +120,7 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 
 #define EMBED_ATOMIC_LOAD(atom_) atomic_load_explicit(&(atom_)->value, memory_order_acquire)
 #define EMBED_ATOMIC_FENCE() ((void)0)
+#define EMBED_ATOMIC_ORDERED() atomic_thread_fence(memory_order_seq_cst)
 #define EMBED_ATOMIC_STORE(atom_, value_) atomic_store_explicit(&(atom_)->value, (value_), memory_order_release)
 #define EMBED_ATOMIC_EXCHANGE_32(atom_, value_) atomic_exchange_explicit(&(atom_)->value, (value_), memory_order_acq_rel)
 #define EMBED_ATOMIC_EXCHANGE_64(atom_, value_) EMBED_ATOMIC_EXCHANGE_32(atom_, value_)
@@ -133,6 +135,7 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 
 #define EMBED_ATOMIC_LOAD(atom_) __atomic_load_n(&(atom_)->value, __ATOMIC_ACQUIRE)
 #define EMBED_ATOMIC_FENCE() ((void)0)
+#define EMBED_ATOMIC_ORDERED() __atomic_thread_fence(__ATOMIC_SEQ_CST)
 #define EMBED_ATOMIC_STORE(atom_, value_) __atomic_store_n(&(atom_)->value, (value_), __ATOMIC_RELEASE)
 #define EMBED_ATOMIC_EXCHANGE_32(atom_, value_) __atomic_exchange_n(&(atom_)->value, (value_), __ATOMIC_ACQ_REL)
 #define EMBED_ATOMIC_EXCHANGE_64(atom_, value_) EMBED_ATOMIC_EXCHANGE_32(atom_, value_)
@@ -152,6 +155,12 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
  */
 #define EMBED_ATOMIC_LOAD(atom_) ((atom_)->value)
 #define EMBED_ATOMIC_FENCE() _ReadWriteBarrier()
+#define EMBED_ATOMIC_ORDERED()                                                                                         \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        volatile long full_barrier_ = 0;                                                                               \
+        (void)_InterlockedExchange(&full_barrier_, 0);                                                                 \
+    } while (0)
 #define EMBED_ATOMIC_STORE(atom_, value_) ((atom_)->value = (value_))
 #define EMBED_ATOMIC_EXCHANGE_32(atom_, value_)                                                                        \
     ((embed_u32)_InterlockedExchange((volatile long *)&(atom_)->value, (long)(value_)))
@@ -301,6 +310,19 @@ EMBED_ATOMIC_OPERATIONS(u32, embed_u32, EMBED_ATOMIC_EXCHANGE_32, EMBED_ATOMIC_C
                         EMBED_ATOMIC_OR_32, EMBED_ATOMIC_AND_32)
 EMBED_ATOMIC_OPERATIONS(u64, embed_u64, EMBED_ATOMIC_EXCHANGE_64, EMBED_ATOMIC_CAS_64, EMBED_ATOMIC_ADD_64,
                         EMBED_ATOMIC_OR_64, EMBED_ATOMIC_AND_64)
+
+/**
+ * @brief Orders this context's earlier writes ahead of its later reads, on every arm.
+ *
+ * @note The operations above order a read against later reads and a write against earlier writes, and
+ *       none of them orders a write against a later read. Two contexts that each write their own word and
+ *       read the other's need this between the two, or each can read the other's word from before the
+ *       other's write.
+ */
+EMBED_HOST_DEVICE EMBED_INLINE void embed_atomic_ordered(void)
+{
+    EMBED_ATOMIC_ORDERED();
+}
 
 /**
  * @brief The atomic word of the machine word's width: the 64-bit word on a 64-bit word, the 32-bit

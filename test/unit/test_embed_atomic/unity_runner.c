@@ -13,6 +13,7 @@ extern void test_store_load_and_exchange_round_trip(void);
 extern void test_swap_if_takes_the_expected_word_alone(void);
 extern void test_the_fetch_operations_answer_the_word_before_and_wrap(void);
 extern void test_raise_moves_the_word_up_and_never_down(void);
+extern void test_ordered_keeps_two_threads_from_both_missing_each_others_write(void);
 extern void test_contending_threads_lose_no_add_and_raise_to_the_highest(void);
 extern void test_contending_threads_claim_each_slot_once(void);
 
@@ -76,13 +77,14 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 int main(void)
 {
   UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/embedded_types/test/unit/test_embed_atomic\\test_embed_atomic.c");
-  run_test(test_a_word_declared_holds_its_value_and_is_one_word_wide, "test_a_word_declared_holds_its_value_and_is_one_word_wide", 87);
-  run_test(test_store_load_and_exchange_round_trip, "test_store_load_and_exchange_round_trip", 98);
-  run_test(test_swap_if_takes_the_expected_word_alone, "test_swap_if_takes_the_expected_word_alone", 112);
-  run_test(test_the_fetch_operations_answer_the_word_before_and_wrap, "test_the_fetch_operations_answer_the_word_before_and_wrap", 129);
-  run_test(test_raise_moves_the_word_up_and_never_down, "test_raise_moves_the_word_up_and_never_down", 146);
-  run_test(test_contending_threads_lose_no_add_and_raise_to_the_highest, "test_contending_threads_lose_no_add_and_raise_to_the_highest", 159);
-  run_test(test_contending_threads_claim_each_slot_once, "test_contending_threads_claim_each_slot_once", 169);
+  run_test(test_a_word_declared_holds_its_value_and_is_one_word_wide, "test_a_word_declared_holds_its_value_and_is_one_word_wide", 99);
+  run_test(test_store_load_and_exchange_round_trip, "test_store_load_and_exchange_round_trip", 110);
+  run_test(test_swap_if_takes_the_expected_word_alone, "test_swap_if_takes_the_expected_word_alone", 124);
+  run_test(test_the_fetch_operations_answer_the_word_before_and_wrap, "test_the_fetch_operations_answer_the_word_before_and_wrap", 141);
+  run_test(test_raise_moves_the_word_up_and_never_down, "test_raise_moves_the_word_up_and_never_down", 158);
+  run_test(test_ordered_keeps_two_threads_from_both_missing_each_others_write, "test_ordered_keeps_two_threads_from_both_missing_each_others_write", 201);
+  run_test(test_contending_threads_lose_no_add_and_raise_to_the_highest, "test_contending_threads_lose_no_add_and_raise_to_the_highest", 208);
+  run_test(test_contending_threads_claim_each_slot_once, "test_contending_threads_claim_each_slot_once", 218);
 
   return UNITY_END();
 }
