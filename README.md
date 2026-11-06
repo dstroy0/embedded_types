@@ -3,7 +3,7 @@
 **Purpose:** Take the fixed-width aliases, the machine word, and the compile-time machinery a C11
 embedded build needs from one place, instead of declaring them again in each library that uses them.
 **Scope:** `include/embed_types.h`, `include/embed_compiler_directives.h`,
-`include/embed_dispatch_layout.h`, `include/embed_atomic.h`, `include/embed_lane.h`,
+`include/embed_dispatch_layout.h`, `include/embed_atomic.h`, `include/embed_turnstile.h`, `include/embed_lane.h`,
 `cmake/EmbeddedTypesSuite.cmake`, `test/harness.py`, `test/support/`, `test/unit/`
 
 Five C11 headers hold the fixed-width integer aliases, a machine word derived from the target, the
@@ -55,8 +55,9 @@ padding between two members, fails the build.
 | [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | feature probes, the static assertion, attribute wrappers, diagnostic pragmas, guards |
 | [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the machinery behind them     |
 | [`include/embed_atomic.h`](include/embed_atomic.h)                           | 32-bit and 64-bit atomic words for host, part and GPU threads, their arm switched by the target |
+| [`include/embed_turnstile.h`](include/embed_turnstile.h)                     | turnstiles of atomic words readers pass through and a writer drains, their lanes rising and falling with the queue's depth, and the sleep on a word's address the host defines |
 | [`include/embed_lane.h`](include/embed_lane.h)                               | the lane beside the word, the widest register, its loads, fills, arithmetic and masks |
-| [`test/support/`](test/support)                                              | host threads for the contention cases, out of the runners' sight                     |
+| [`test/support/`](test/support)                                              | host threads for the contention cases and the host's address wait, out of the runners' sight |
 | [`test/unit/`](test/unit)                                                    | one Unity suite per header, each its own CTest target                                |
 | [`test/harness.py`](test/harness.py)                                         | suite discovery, Unity runner generation, and the two build trees                    |
 | [`cmake/`](cmake)                                                            | `embedded_types_add_suite()`                                                         |
@@ -91,6 +92,8 @@ declaration, and a guarantee or a warning is stated there once.
 | `EMBED_HOST_DEVICE`                                                                                      | `__host__ __device__` under nvcc, empty elsewhere                                                                              |
 | `embed_atomic_u32`, `embed_atomic_u64`, `embed_atomic_word`, `EMBED_ATOMIC_INIT`, `EMBED_ATOMIC_ARM`     | the two atomic words and the one of the machine word's width, a declared value, and which of the four arms is taken             |
 | `embed_atomic_u32_load`, `_store`, `_exchange`, `_swap_if`, `_fetch_add`, `_fetch_sub`, `_fetch_or`, `_fetch_and`, `_raise`, and the same for `u64` and `word` | one indivisible step each: acquire load, release store, swap, compare-and-swap, the arithmetic and the masks answering the word before, and a raise to a value where it is higher |
+| `EmbedTurnstiles`, `embed_turnstile_enter`, `embed_turnstile_leave`, `embed_turnstiles_drain`, `embed_turnstile_lanes`, `EMBED_TURNSTILE_LANES_MOST` | a set of turnstiles, one lane at rest; a pass begun through a free lane and ended; every pass begun before the call waited out; the lanes open, which rise while more than one thread waits and retire as the wait empties; and the most lanes |
+| `embed_word_wait`, `embed_word_wake`, `EMBED_WAIT_FOREVER`                                               | the sleep on a word's address while it reads a value, and the wake of every sleeper, both the host's to define on its futex, WaitOnAddress or __ulock_wait |
 | `EMBED_HAS_BYTE_MASK_256`, `EMBED_BYTE_MASK_256`, `EMBED_HAS_BYTE_MASK_128`, `EMBED_BYTE_MASK_128`       | 1 where the compiler has the builtin reading 32 or 16 bytes' sign bits into an int, 0 otherwise, and the builtin, 0 where not |
 | `embed_lane`, `embed_lane_raw`, `embed_lane_mask`, `EMBED_LANE_MASK_ALL`, `embed_lane_mask_first`       | the lane's 32-bit lanes in the compiler's vector type or an aligned struct, the same at any address, one bit a byte, every byte, the first set |
 | `EMBED_LANE_BITS`, `EMBED_LANE_BYTES`, `EMBED_LANE_U32S`, `EMBED_LANE_BITS_WAS_OVERRIDDEN`               | the lane's width in bits, derived or defined by the build, in bytes, in 32-bit lanes, and which of the two                     |

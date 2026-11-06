@@ -20,8 +20,8 @@
  * @note Two arms, every operation defined on both. The vector arm is the compiler's vector type,
  *       EMBED_LANE_U32S 32-bit lanes the compiler keeps in its widest registers and runs the plain
  *       operators over; the compiler lowers it to the target's own instructions. The portable arm is
- *       a struct of the same 32-bit lanes with the same operations written as loops, which a CUDA
- *       thread holds in registers.
+ *       a struct of the same 32-bit lanes with the same operations written one statement a word,
+ *       which a CUDA thread holds in registers.
  * @note The 32-bit lanes are the unit of the arithmetic, since a pixel is one and a byte's share of
  *       255 times a byte fits in one. The byte masks answer where bytes are equal or zero, one bit
  *       a byte, in an integer the register holds whole.
@@ -81,6 +81,28 @@ EMBED_STATIC_ASSERT((EMBED_LANE_BITS % 32u) == 0u, "EMBED_LANE_BITS must be whol
 EMBED_STATIC_ASSERT(EMBED_LANE_BITS >= 32u, "EMBED_LANE_BITS must hold at least one 32-bit lane");
 EMBED_STATIC_ASSERT(EMBED_LANE_BITS <= 512u, "EMBED_LANE_BITS must be at most 512: the byte mask holds 64 bytes");
 EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must be whole words");
+
+/**
+ * @brief word_ expanded once a 32-bit lane of the lane, with the lane's place, so that an operation of the
+ *        portable arm is one statement a word and no counted walk.
+ *
+ * @param word_ A macro of one parameter, the word's place from 0.
+ */
+#if EMBED_LANE_U32S == 1u
+#define EMBED_LANE_WORDS(word_) word_(0)
+#elif EMBED_LANE_U32S == 2u
+#define EMBED_LANE_WORDS(word_) word_(0) word_(1)
+#elif EMBED_LANE_U32S == 4u
+#define EMBED_LANE_WORDS(word_) word_(0) word_(1) word_(2) word_(3)
+#elif EMBED_LANE_U32S == 8u
+#define EMBED_LANE_WORDS(word_) word_(0) word_(1) word_(2) word_(3) word_(4) word_(5) word_(6) word_(7)
+#elif EMBED_LANE_U32S == 16u
+#define EMBED_LANE_WORDS(word_)                                                                                        \
+    word_(0) word_(1) word_(2) word_(3) word_(4) word_(5) word_(6) word_(7) word_(8) word_(9) word_(10) word_(11)      \
+        word_(12) word_(13) word_(14) word_(15)
+#else
+#error "EMBED_LANE_U32S must be 1, 2, 4, 8 or 16"
+#endif
 
 /**
  * @brief Set to 1 by the build to take the portable arm on any target, else 0.
@@ -164,7 +186,8 @@ typedef embed_u64 embed_lane_mask;
  *
  * @param mask  A mask with at least one byte set.
  * @return      The byte, counted from the first.
- * @note The trailing zero count where the compiler has it, else a walk of the bits.
+ * @note The trailing zero count where the compiler has it, else the lowest bit isolated and placed by six masked
+ *       steps.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask mask)
 {
@@ -172,11 +195,15 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask m
     // Explicit casts widen the mask to the builtin's operand and read its count, below 64, as unsigned
     return (embed_u32)__builtin_ctzll((unsigned long long)mask);
 #else
+    const unsigned long long low = (unsigned long long)mask & (0ull - (unsigned long long)mask);
     embed_u32 byte = 0u;
-    while (((mask >> byte) & 1u) == 0u)
-    {
-        byte += 1u;
-    }
+
+    byte += ((low & 0xFFFFFFFF00000000ull) != 0u) ? 32u : 0u;
+    byte += ((low & 0xFFFF0000FFFF0000ull) != 0u) ? 16u : 0u;
+    byte += ((low & 0xFF00FF00FF00FF00ull) != 0u) ? 8u : 0u;
+    byte += ((low & 0xF0F0F0F0F0F0F0F0ull) != 0u) ? 4u : 0u;
+    byte += ((low & 0xCCCCCCCCCCCCCCCCull) != 0u) ? 2u : 0u;
+    byte += ((low & 0xAAAAAAAAAAAAAAAAull) != 0u) ? 1u : 0u;
     return byte;
 #endif
 }
@@ -241,10 +268,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 val)
     return zero + val;
 #else
     embed_lane lane;
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        lane.at[at] = val;
-    }
+#define EMBED_LANE_FILL_WORD(at_) lane.at[at_] = val;
+    EMBED_LANE_WORDS(EMBED_LANE_FILL_WORD)
+#undef EMBED_LANE_FILL_WORD
     return lane;
 #endif
 }
@@ -273,10 +299,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_and(embed_lane one, embed_l
     return one & other;
 #else
     embed_lane lane;
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        lane.at[at] = one.at[at] & other.at[at];
-    }
+#define EMBED_LANE_AND_WORD(at_) lane.at[at_] = one.at[at_] & other.at[at_];
+    EMBED_LANE_WORDS(EMBED_LANE_AND_WORD)
+#undef EMBED_LANE_AND_WORD
     return lane;
 #endif
 }
@@ -294,10 +319,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_or(embed_lane one, embed_la
     return one | other;
 #else
     embed_lane lane;
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        lane.at[at] = one.at[at] | other.at[at];
-    }
+#define EMBED_LANE_OR_WORD(at_) lane.at[at_] = one.at[at_] | other.at[at_];
+    EMBED_LANE_WORDS(EMBED_LANE_OR_WORD)
+#undef EMBED_LANE_OR_WORD
     return lane;
 #endif
 }
@@ -315,10 +339,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_xor(embed_lane one, embed_l
     return one ^ other;
 #else
     embed_lane lane;
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        lane.at[at] = one.at[at] ^ other.at[at];
-    }
+#define EMBED_LANE_XOR_WORD(at_) lane.at[at_] = one.at[at_] ^ other.at[at_];
+    EMBED_LANE_WORDS(EMBED_LANE_XOR_WORD)
+#undef EMBED_LANE_XOR_WORD
     return lane;
 #endif
 }
@@ -336,10 +359,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_add_u32(embed_lane one, emb
     return one + other;
 #else
     embed_lane lane;
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        lane.at[at] = one.at[at] + other.at[at];
-    }
+#define EMBED_LANE_ADD_U32_WORD(at_) lane.at[at_] = one.at[at_] + other.at[at_];
+    EMBED_LANE_WORDS(EMBED_LANE_ADD_U32_WORD)
+#undef EMBED_LANE_ADD_U32_WORD
     return lane;
 #endif
 }
@@ -357,10 +379,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_sub_u32(embed_lane one, emb
     return one - other;
 #else
     embed_lane lane;
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        lane.at[at] = one.at[at] - other.at[at];
-    }
+#define EMBED_LANE_SUB_U32_WORD(at_) lane.at[at_] = one.at[at_] - other.at[at_];
+    EMBED_LANE_WORDS(EMBED_LANE_SUB_U32_WORD)
+#undef EMBED_LANE_SUB_U32_WORD
     return lane;
 #endif
 }
@@ -378,10 +399,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_mul_u32(embed_lane one, emb
     return one * other;
 #else
     embed_lane lane;
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        lane.at[at] = one.at[at] * other.at[at];
-    }
+#define EMBED_LANE_MUL_U32_WORD(at_) lane.at[at_] = one.at[at_] * other.at[at_];
+    EMBED_LANE_WORDS(EMBED_LANE_MUL_U32_WORD)
+#undef EMBED_LANE_MUL_U32_WORD
     return lane;
 #endif
 }
@@ -399,10 +419,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_right_u32(embed_lane 
     return lane >> count;
 #else
     embed_lane shifted;
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        shifted.at[at] = lane.at[at] >> count;
-    }
+#define EMBED_LANE_SHIFT_RIGHT_U32_WORD(at_) shifted.at[at_] = lane.at[at_] >> count;
+    EMBED_LANE_WORDS(EMBED_LANE_SHIFT_RIGHT_U32_WORD)
+#undef EMBED_LANE_SHIFT_RIGHT_U32_WORD
     return shifted;
 #endif
 }
@@ -420,10 +439,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane l
     return lane << count;
 #else
     embed_lane shifted;
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        shifted.at[at] = lane.at[at] << count;
-    }
+#define EMBED_LANE_SHIFT_LEFT_U32_WORD(at_) shifted.at[at_] = lane.at[at_] << count;
+    EMBED_LANE_WORDS(EMBED_LANE_SHIFT_LEFT_U32_WORD)
+#undef EMBED_LANE_SHIFT_LEFT_U32_WORD
     return shifted;
 #endif
 }
@@ -465,21 +483,20 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
 #else
     const embed_lane bits = (embed_lane)equal & embed_lane_fill_u32(0x01010101u);
     const embed_lane nibbles = (bits * embed_lane_fill_u32(EMBED_LANE_NIBBLE_GATHER)) >> 24;
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        mask |= (embed_lane_mask)nibbles[at] << (4u * at);
-    }
+#define EMBED_LANE_NIBBLE_WORD(at_) mask |= (embed_lane_mask)nibbles[at_] << (4u * (at_));
+    EMBED_LANE_WORDS(EMBED_LANE_NIBBLE_WORD)
+#undef EMBED_LANE_NIBBLE_WORD
 #endif
 #else
-    for (embed_u32 at = 0u; at < EMBED_LANE_U32S; at += 1u)
-    {
-        // a byte of the difference is zero where its high bit is clear after the carry test: the
-        // sum carries out of every byte that holds any bit, and the complement leaves the rest
-        const embed_u32 difference = one.at[at] ^ other.at[at];
-        const embed_u32 carried = (difference & 0x7f7f7f7fu) + 0x7f7f7f7fu;
-        const embed_u32 zero_bytes = (~(carried | difference | 0x7f7f7f7fu)) >> 7u;
-        mask |= (embed_lane_mask)((zero_bytes * EMBED_LANE_NIBBLE_GATHER) >> 24u) << (4u * at);
-    }
+    // a byte of a word's difference is zero where its high bit is clear after the carry test: the sum
+    // carries out of every byte that holds any bit, and the complement leaves the rest
+#define EMBED_LANE_ZERO_BYTES(at_)                                                                                    \
+    ((~((((one.at[at_] ^ other.at[at_]) & 0x7f7f7f7fu) + 0x7f7f7f7fu) | (one.at[at_] ^ other.at[at_]) | 0x7f7f7f7fu)) >> 7u)
+#define EMBED_LANE_EQUAL_WORD(at_)                                                                                    \
+    mask |= (embed_lane_mask)((EMBED_LANE_ZERO_BYTES(at_) * EMBED_LANE_NIBBLE_GATHER) >> 24u) << (4u * (at_));
+    EMBED_LANE_WORDS(EMBED_LANE_EQUAL_WORD)
+#undef EMBED_LANE_EQUAL_WORD
+#undef EMBED_LANE_ZERO_BYTES
 #endif
     return mask;
 }
