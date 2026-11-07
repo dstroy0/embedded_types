@@ -236,7 +236,7 @@ def main(argv):
                 shown += 1
     if write is not None:
         allowed = ratchet_read(write)
-        with open(write, "w", encoding="utf-8") as handle:
+        with open(write, "w", encoding="utf-8", newline="\n") as handle:
             for key in sorted(counts):
                 handle.write("%s\t%d\n" % (key, min(counts[key], allowed.get(key, counts[key]))))
         print("ste: %d documents written to %s" % (len(counts), write))
