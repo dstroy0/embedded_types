@@ -62,6 +62,10 @@ def genmc_ready(root):
     ]
     for step in steps:
         r = linux(root, step)
+        # GenMC's configure names the LLVM it found, and a build that fails needs that version to read
+        for line in (r.stdout + r.stderr).splitlines():
+            if "Using LLVM" in line:
+                print("  genmc     " + line.strip().lstrip("-").strip())
         if r.returncode != 0:
             # The compiler's own error lines name the cause. The last lines are only make's summary of them.
             text = r.stdout + r.stderr

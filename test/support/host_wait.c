@@ -75,17 +75,18 @@ int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value seen, embed
 {
 #if defined(__linux__)
     // the futex compares 32 bits: on this little-endian host the word's low half, where the completion and sleeper
-    // bits lie; the sleeper tests the whole word again on waking
+    // bits lie; the sleeper tests the whole word again on waking. The system call takes the address of an atomic
+    // word as a plain pointer, and the address goes through uintptr_t so that no cast removes the qualifier.
     struct timespec span;
     span.tv_sec = (time_t)(milliseconds / 1000u);
     span.tv_nsec = (long)((milliseconds % 1000u) * 1000000u);
-    (void)syscall(SYS_futex, (void *)&word->value, FUTEX_WAIT_PRIVATE, (unsigned int)seen,
+    (void)syscall(SYS_futex, (void *)(uintptr_t)&word->value, FUTEX_WAIT_PRIVATE, (unsigned int)seen,
                   (milliseconds == EMBED_WAIT_FOREVER) ? NULL : &span, NULL, 0);
 #elif defined(__APPLE__)
     const uint32_t timeout = (milliseconds == EMBED_WAIT_FOREVER) ? 0u : ((milliseconds != 0u) ? milliseconds * 1000u : 1u);
     (void)__ulock_wait((sizeof(seen) == 8u ? HOST_ULOCK_COMPARE_AND_WAIT64 : HOST_ULOCK_COMPARE_AND_WAIT) |
                            HOST_ULOCK_NO_ERRNO,
-                       (void *)&word->value, (uint64_t)seen, timeout);
+                       (void *)(uintptr_t)&word->value, (uint64_t)seen, timeout);
 #else
     const unsigned int slept = (milliseconds == EMBED_WAIT_FOREVER) ? 1u : milliseconds;
     struct timespec span;
@@ -102,11 +103,11 @@ int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value seen, embed
 void embed_word_wake(embed_atomic_word *word)
 {
 #if defined(__linux__)
-    (void)syscall(SYS_futex, (void *)&word->value, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+    (void)syscall(SYS_futex, (void *)(uintptr_t)&word->value, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
 #elif defined(__APPLE__)
     (void)__ulock_wake((sizeof(embed_atomic_word_value) == 8u ? HOST_ULOCK_COMPARE_AND_WAIT64 : HOST_ULOCK_COMPARE_AND_WAIT) |
                            HOST_ULOCK_WAKE_ALL | HOST_ULOCK_NO_ERRNO,
-                       (void *)&word->value, 0u);
+                       (void *)(uintptr_t)&word->value, 0u);
 #else
     (void)word;
 #endif
