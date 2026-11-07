@@ -116,8 +116,8 @@ void test_a_lane_loaded_at_an_odd_address_puts_back_the_same_bytes(void)
 
 void test_a_lane_loaded_aligned_puts_back_aligned(void)
 {
-    static embed_u8 aligned[EMBED_LANE_BYTES] EMBED_ALIGN(EMBED_LANE_BYTES);
-    static embed_u8 out[EMBED_LANE_BYTES] EMBED_ALIGN(EMBED_LANE_BYTES);
+    static EMBED_ALIGN(EMBED_LANE_BYTES) embed_u8 aligned[EMBED_LANE_BYTES];
+    static EMBED_ALIGN(EMBED_LANE_BYTES) embed_u8 out[EMBED_LANE_BYTES];
     bytes_copy(aligned, s_bytes, EMBED_LANE_BYTES);
     embed_lane_put_aligned(out, embed_lane_load_aligned(aligned));
     TEST_ASSERT_EQUAL_MEMORY_MESSAGE(aligned, out, EMBED_LANE_BYTES, "the aligned bytes come back");

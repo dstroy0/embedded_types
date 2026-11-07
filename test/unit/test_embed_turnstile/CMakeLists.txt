@@ -12,5 +12,5 @@ target_sources(test_embed_turnstile PRIVATE
 target_include_directories(test_embed_turnstile PRIVATE "${EMBEDDED_TYPES_TEST_ROOT}/support")
 target_link_libraries(test_embed_turnstile PRIVATE Threads::Threads)
 if(WIN32)
-    target_link_libraries(test_embed_turnstile PRIVATE -lsynchronization)
+    target_link_libraries(test_embed_turnstile PRIVATE synchronization)
 endif()

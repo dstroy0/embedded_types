@@ -397,6 +397,9 @@ EMBED_INLINE void embed_turnstile_leave(EmbedTurnstiles *set, unsigned int at)
  *       or where the lane's badge has moved in id or stamp from the live badge the drain first read on it: the
  *       next pass through the lane. A lane whose badge is not live is a pass between its claim and its badge,
  *       or one ending, and is waited on until its bit leaves `busy`.
+ * @note The backoff sleeps on `busy` with the flag EMBED_TURNSTILE_SLEEPERS, at the value of `busy` that the
+ *       round read. A pass is over only after the fetch-and of its end on `busy`. That fetch-and changes the
+ *       word, clears the flag, and wakes each sleeper where the flag was set.
  */
 EMBED_INLINE void embed_turnstiles_drain(EmbedTurnstiles *set)
 {
@@ -415,8 +418,8 @@ EMBED_INLINE void embed_turnstiles_drain(EmbedTurnstiles *set)
         const embed_atomic_word_value bit = (embed_atomic_word_value)1u << at;
         embed_atomic_word *const word = &set->lane[at].badge;
         const embed_atomic_word_value read = embed_atomic_word_load(word);
-        const embed_atomic_word_value gone =
-            0u - (embed_atomic_word_value)((embed_atomic_word_load(&set->busy) & bit) == 0u);
+        const embed_atomic_word_value busy = embed_atomic_word_load(&set->busy);
+        const embed_atomic_word_value gone = 0u - (embed_atomic_word_value)((busy & bit) == 0u);
         const embed_atomic_word_value live = 0u - (embed_atomic_word_value)((read & EMBED_TURNSTILE_COMPLETE) != 0u);
         // the live badge first read on this lane: taken from this read where the lane is new or none is held yet
         const embed_atomic_word_value take = (0u - (embed_atomic_word_value)(seen != bit)) | ~held;
@@ -429,7 +432,9 @@ EMBED_INLINE void embed_turnstiles_drain(EmbedTurnstiles *set)
         const unsigned int over = (unsigned int)((gone | moved) != 0u);
 
         pending &= ~(bit & (0u - (embed_atomic_word_value)over));
-        step = embed_turnstile_backed_off(word, read, EMBED_TURNSTILE_SLEEPER, step, over ^ 1u);
+        // The sleep is on `busy` at the value this round read. Each event that ends the wait starts with the
+        // fetch-and of a pass's end on `busy`, which clears the flag and wakes the word.
+        step = embed_turnstile_backed_off(&set->busy, busy, EMBED_TURNSTILE_SLEEPERS, step, over ^ 1u);
     }
 }
 

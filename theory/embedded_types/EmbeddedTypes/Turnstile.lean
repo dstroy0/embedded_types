@@ -16,9 +16,12 @@ its growth and its trim have no part in the theorem: a trim or a growth at any t
 `TurnstileBits.lean` holds the bit arithmetic: one fetch-or sets each lane's bit for one claim only.
 
 The drain takes its snapshot of `busy` and the lanes' occupants, then runs rounds. A round reads one pending lane's
-badge, then reads the lane's `busy` bit, and decides. The steps of the passes run between the two reads.
+badge, then reads the lane's `busy` bit, and decides. The steps of the passes run between the two reads. The drain's
+backoff sleeps on `busy`, which `TurnstileWake.lean` holds, and it changes no badge.
 
-The theorem `drained`: when the drain has no lane pending, each pass of its snapshot has ended.
+The theorem `drained`: when the drain has no lane pending, each pass of its snapshot has ended. The theorem
+`over_after_end`: a lane leaves the pending set only after the pass of the snapshot has ended, so its `busy` bit has
+been cleared.
 -/
 
 namespace EmbeddedTypes.Turnstile
@@ -85,9 +88,6 @@ inductive Step : State → State → Prop where
   /-- The second fetch-and: the lane's `busy` bit cleared. -/
   | clearBusy {s : State} (l n : Nat) (h : s.phase l = .leaving n) :
       Step s { s with phase := set s.phase l .free }
-  /-- The drain's backoff sets the sleeper bit on a lane's badge with one fetch-or. -/
-  | flag {s : State} (l : Nat) :
-      Step s { s with badge := set s.badge l { s.badge l with sleeper := true } }
   /-- The snapshot: the lanes with their `busy` bit set, and the passes that hold them. -/
   | snapshot {s : State} (h : s.drain = .idle) :
       Step s { s with drain := .rounds, pending := fun l => (s.phase l).serial.isSome,
@@ -177,7 +177,6 @@ theorem ended_step {s s' : State} {n : Nat} (st : Step s s') (he : Ended s n) : 
     by_cases hk : k = l
     · subst hk; simp [set_same, Phase.serial]
     · simp only [set_other _ _ _ _ hk]; exact hl k
-  | flag l => exact ⟨hn, hl⟩
   | snapshot h => exact ⟨hn, hl⟩
   | readBadge l h hp => exact ⟨hn, hl⟩
   | decide l r h => exact ⟨hn, hl⟩
@@ -432,17 +431,6 @@ theorem inv_step {s s' : State} (hs : Inv s) (st : Step s s') : Inv s' := by
       · exact hkeep k _ (Or.inr hp)
       · exact Or.inr (Or.inr (hend _ hp))
     · intro k r hd he hh hne; exact hend _ (hs.readMoved k r hd he hh hne)
-  | flag l =>
-    refine ⟨hs.fresh, hs.single, ?_, ?_, hs.snapFresh, hs.snapLane, hs.pendingSnap, hs.doneEnded, hs.heldNext,
-      hs.heldOwned, hs.readNext, hs.readOwned, hs.readMoved⟩
-    · intro k hk
-      by_cases hkl : k = l
-      · subst hkl; simp [set_same] at hk ⊢; exact hs.liveOwned k hk
-      · simp only [set_other _ _ _ _ hkl] at hk ⊢; exact hs.liveOwned k hk
-    · intro k n hk
-      by_cases hkl : k = l
-      · subst hkl; simp [set_same]; exact hs.tokenOwned k n hk
-      · simp only [set_other _ _ _ _ hkl]; exact hs.tokenOwned k n hk
   | snapshot h =>
     refine ⟨hs.fresh, hs.single, hs.liveOwned, hs.tokenOwned, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
     · intro _ k n hk; exact hs.fresh k n hk
@@ -557,5 +545,11 @@ theorem drained {s : State} (h : Reach s) (hd : s.drain = .rounds) (hp : ∀ l, 
   intro l n hn
   have hne : s.drain ≠ .idle := by rw [hd]; intro e; cases e
   exact (inv_reach h).doneEnded hne l n (hp l) hn
+
+/-- A lane leaves the pending set only after the pass of the snapshot on it has ended: no lane holds that pass, so
+the fetch-and of its end has cleared its `busy` bit. Each such fetch-and wakes a drain asleep on `busy`. -/
+theorem over_after_end {s : State} (h : Reach s) (hd : s.drain ≠ .idle) {l n : Nat} (hp : s.pending l = false)
+    (hn : s.snap l = some n) : Ended s n :=
+  (inv_reach h).doneEnded hd l n hp hn
 
 end EmbeddedTypes.Turnstile

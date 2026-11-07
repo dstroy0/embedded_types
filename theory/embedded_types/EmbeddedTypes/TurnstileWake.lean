@@ -10,17 +10,19 @@ limit. A word here is its flag and a version that each other change to the word 
 and every open lane busy. `embed_turnstile_leave` clears its lane's bit and the flag with one fetch-and, and wakes
 the word where the flag was set. A claim sets a bit with a fetch-or and keeps the flag.
 
-`embed_turnstiles_drain` sleeps on a lane's badge with the flag `EMBED_TURNSTILE_SLEEPER`. The end of a pass clears
-the badge's state bits with one fetch-and, and wakes the badge where the flag was set. These steps on a badge are
-the steps of `Step` with no claim, and `busy_woken` holds them too. The badge write of the next pass through the lane
-is a store: it puts a new badge with the flag clear, and it wakes nothing.
+`embed_turnstiles_drain` sleeps on `busy` with the same flag, at the value of `busy` that its round read. These are
+the same steps, and `busy_woken` holds the drain too. By `Turnstile.over_after_end`, a lane leaves the drain's pending
+set only after the fetch-and of a pass's end on `busy`. Each such fetch-and owes a wake to a drain asleep on `busy`.
+
+A sleep on a lane's badge would not have this property. The badge write of the next pass through the lane is a
+store: it puts a new badge with the flag clear, and it wakes nothing. Thus the drain does not sleep on a badge.
 
 The theorems:
 
-- `busy_woken`: a sleeper asleep on its word has the flag on the word or a wake owed to it. Thus each pass that
-  ends while the sleeper sleeps owes it a wake (`leave_owes`).
-- `badge_write_sleeps`: a badge write while the drain sleeps leaves the drain asleep, its flag gone, and no wake
-  owed. The drain sleeps until its time limit: at most 64 ms, by `TurnstileBits.step_bounded`.
+- `busy_woken`: a sleeper asleep on `busy` has the flag on the word or a wake owed to it. Thus each pass that ends
+  while the sleeper sleeps owes it a wake (`leave_owes`).
+- `badge_write_sleeps`: on a badge, a badge write while a sleeper sleeps leaves it asleep, its flag gone, and no
+  wake owed.
 -/
 
 namespace EmbeddedTypes.TurnstileWake
@@ -112,7 +114,7 @@ theorem leave_owes {s : State} (h : Reach s) {t : Word} (ht : s.sleeper = .aslee
   · simp [hf]
   · simp [ho]
 
-/-! ## The badge write of the next pass -/
+/-! ## Why the drain does not sleep on a badge -/
 
 /-- The steps on a badge: those of `Step`, and the next pass's badge write, a store with the flag clear and no wake. -/
 inductive BadgeStep : State → State → Prop where
@@ -123,8 +125,8 @@ inductive BadgeReach : State → Prop where
   | start : BadgeReach start
   | step {s s' : State} : BadgeReach s → BadgeStep s s' → BadgeReach s'
 
-/-- The drain flags the badge and sleeps; the next pass's badge write then leaves the drain asleep with no flag on
-the badge and no wake owed. -/
+/-- A sleeper flags a badge and sleeps. The next pass's badge write then leaves it asleep with no flag on the badge
+and no wake owed. -/
 theorem badge_write_sleeps :
     ∃ s, BadgeReach s ∧ (∃ t, s.sleeper = .asleep t) ∧ s.word.flag = false ∧ s.owed = false := by
   let s1 : State := ⟨⟨0, false⟩, .read ⟨0, false⟩, false⟩
