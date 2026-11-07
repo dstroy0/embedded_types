@@ -1,0 +1,367 @@
+/* embedded_types - Copyright (C) 2026 Douglas Quigg (dstroy0) <dquigg123@gmail.com>
+ * SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational
+ *
+ * The site theme. The colors come from the thin-film colors of oxide on silicon: violet for a bit of
+ * the word, gold for a bit of the lane. The type is Archivo, narrow in the headings and at its normal
+ * width in the text, and Red Hat Mono in the code.
+ */
+
+:root {
+    --embed-wafer: #edeff3;
+    --embed-die: #1a2233;
+    --embed-violet: #6b47c8;
+    --embed-gold: #b8860b;
+    --embed-rule: #c3c9d4;
+    --embed-index: #a995e6;
+
+    --md-text-font: "Archivo";
+    --md-code-font: "Red Hat Mono";
+}
+
+[data-md-color-scheme="default"] {
+    --md-default-bg-color: var(--embed-wafer);
+    --md-default-fg-color: var(--embed-die);
+    --md-default-fg-color--light: #3d4659;
+    --md-default-fg-color--lighter: #5f687a;
+    --md-default-fg-color--lightest: var(--embed-rule);
+    --md-primary-fg-color: var(--embed-wafer);
+    --md-primary-fg-color--dark: var(--embed-wafer);
+    --md-primary-bg-color: var(--embed-die);
+    --md-primary-bg-color--light: #3d4659;
+    --md-accent-fg-color: var(--embed-violet);
+    --md-typeset-a-color: var(--embed-violet);
+    --md-code-bg-color: #e2e5ec;
+    --md-code-fg-color: var(--embed-die);
+    --md-footer-bg-color: var(--embed-die);
+    --md-footer-bg-color--dark: #121826;
+}
+
+[data-md-color-scheme="slate"] {
+    --embed-violet: #a58ff0;
+    --embed-gold: #d9a62e;
+    --embed-rule: #3a4459;
+    --embed-index: #6e5aa8;
+    --md-hue: 222;
+    --md-default-bg-color: var(--embed-die);
+    --md-default-fg-color: #e3e6ec;
+    --md-default-fg-color--light: #c0c6d2;
+    --md-default-fg-color--lighter: #98a1b3;
+    --md-default-fg-color--lightest: var(--embed-rule);
+    --md-primary-fg-color: var(--embed-die);
+    --md-primary-fg-color--dark: var(--embed-die);
+    --md-primary-bg-color: #e3e6ec;
+    --md-primary-bg-color--light: #c0c6d2;
+    --md-accent-fg-color: var(--embed-violet);
+    --md-typeset-a-color: var(--embed-violet);
+    --md-code-bg-color: #222c40;
+    --md-code-fg-color: #e3e6ec;
+    --md-footer-bg-color: #222c40;
+    --md-footer-bg-color--dark: #1a2233;
+}
+
+/* The header bar stays the color of the page, with one rule under it */
+.md-header,
+.md-header--shadow {
+    box-shadow: 0 1px 0 var(--embed-rule);
+}
+
+.md-header__title,
+.md-nav__title {
+    font-stretch: 75%;
+    font-weight: 600;
+}
+
+/* The scale: 16 for the text, 18, 24 and 36 for the headings, 60 for the title of the home page */
+.md-typeset {
+    font-size: 0.8rem;
+    line-height: 1.6;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+    color: var(--md-default-fg-color);
+    font-stretch: 75%;
+    font-weight: 600;
+    letter-spacing: 0;
+}
+
+.md-typeset h1 {
+    font-size: 2.25em;
+    line-height: 1.15;
+    margin-bottom: 0.75em;
+}
+
+.md-typeset h2 {
+    font-size: 1.5em;
+    line-height: 1.25;
+    margin-top: 2em;
+}
+
+.md-typeset h3 {
+    font-size: 1.125em;
+    line-height: 1.35;
+    margin-top: 2em;
+}
+
+.md-typeset h3 code {
+    font-size: 0.95em;
+    font-weight: 500;
+}
+
+.md-typeset p,
+.md-typeset ul,
+.md-typeset ol,
+.md-typeset blockquote {
+    max-width: 70ch;
+}
+
+.md-typeset table:not([class]) {
+    font-size: 0.85em;
+}
+
+/* A note is a rule in the rule color, and a warning is a rule in gold with a gold label */
+.md-typeset blockquote {
+    border-left: 0.2rem solid var(--embed-rule);
+    color: var(--md-default-fg-color);
+    margin-left: 0;
+    padding-left: 0.9rem;
+}
+
+.md-typeset blockquote:has(> p > em:first-child > strong) {
+    border-left-color: var(--embed-gold);
+}
+
+.md-typeset blockquote > p > em:first-child > strong {
+    font-style: normal;
+}
+
+/* The home page title */
+.embed-hero h1 {
+    font-size: 3.75em;
+    font-stretch: 62.5%;
+    font-weight: 700;
+    line-height: 1;
+    margin: 0.4em 0 0.3em;
+}
+
+.embed-hero p {
+    font-size: 1.125em;
+    max-width: 58ch;
+}
+
+/* The register strip */
+.embed-register {
+    border-top: 1px solid var(--embed-rule);
+    border-bottom: 1px solid var(--embed-rule);
+    margin: 1.5em 0 2em;
+    padding: 1.2em 0 1em;
+}
+
+.embed-targets {
+    border: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em;
+    margin: 0 0 1.2em;
+    padding: 0;
+}
+
+.embed-targets legend {
+    font-stretch: 75%;
+    font-weight: 600;
+    margin-bottom: 0.5em;
+    padding: 0;
+}
+
+.embed-targets label {
+    border: 1px solid var(--embed-rule);
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 0.9em;
+    padding: 0.25em 0.7em;
+    user-select: none;
+}
+
+.embed-targets input {
+    height: 1px;
+    opacity: 0;
+    position: absolute;
+    width: 1px;
+}
+
+.embed-targets label:has(input:checked) {
+    background: var(--md-default-fg-color);
+    border-color: var(--md-default-fg-color);
+    color: var(--md-default-bg-color);
+}
+
+.embed-targets label:has(input:focus-visible) {
+    outline: 2px solid var(--embed-violet);
+    outline-offset: 2px;
+}
+
+.embed-rows {
+    display: grid;
+    gap: 0.45em;
+}
+
+.embed-row {
+    align-items: center;
+    display: grid;
+    gap: 0.8em;
+    grid-template-columns: 3.2em 1fr;
+}
+
+.embed-row__name {
+    font-family: var(--md-code-font);
+    font-size: 0.8em;
+    text-align: right;
+}
+
+.embed-row__cells {
+    display: grid;
+    gap: 2px;
+    grid-template-columns: repeat(64, minmax(0, 1fr));
+}
+
+.embed-row__cells i {
+    aspect-ratio: 1 / 2.4;
+    border: 1px solid var(--embed-rule);
+    border-radius: 1px;
+    transition:
+        background-color 160ms ease-out calc(var(--i) * 7ms),
+        border-color 160ms ease-out calc(var(--i) * 7ms);
+}
+
+/* Each second group of four bytes in the lane, one 32-bit lane, stands a shade darker */
+.embed-row--lane i:nth-child(8n + 5),
+.embed-row--lane i:nth-child(8n + 6),
+.embed-row--lane i:nth-child(8n + 7),
+.embed-row--lane i:nth-child(8n + 8) {
+    filter: brightness(0.86);
+}
+
+.embed-defines {
+    margin: 1.2em 0 0;
+}
+
+.embed-defines code {
+    font-size: 0.8em;
+}
+
+.embed-v {
+    color: var(--embed-violet);
+    font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .embed-row__cells i {
+        transition: none;
+    }
+}
+
+@media (max-width: 40em) {
+    .embed-hero h1 {
+        font-size: 2.75em;
+    }
+
+    .embed-row__cells {
+        grid-template-columns: repeat(32, minmax(0, 1fr));
+    }
+}
+
+/* The widths of each target: word, index and lane, in bytes */
+.embed-register:has([value="mcu16"]:checked)
+    .embed-row--word
+    i:nth-child(-n + 2),
+.embed-register:has([value="mcu32"]:checked)
+    .embed-row--word
+    i:nth-child(-n + 4),
+.embed-register:has([value="neon"]:checked)
+    .embed-row--word
+    i:nth-child(-n + 8),
+.embed-register:has([value="sse2"]:checked)
+    .embed-row--word
+    i:nth-child(-n + 8),
+.embed-register:has([value="avx2"]:checked)
+    .embed-row--word
+    i:nth-child(-n + 8),
+.embed-register:has([value="avx512"]:checked)
+    .embed-row--word
+    i:nth-child(-n + 8),
+.embed-register:has([value="cuda"]:checked)
+    .embed-row--word
+    i:nth-child(-n + 8) {
+    background-color: var(--embed-violet);
+    border-color: var(--embed-violet);
+}
+
+.embed-register:has([value="mcu16"]:checked)
+    .embed-row--index
+    i:nth-child(-n + 2),
+.embed-register:not(:has([value="mcu16"]:checked))
+    .embed-row--index
+    i:nth-child(-n + 4) {
+    background-color: var(--embed-index);
+    border-color: var(--embed-index);
+}
+
+.embed-register:has([value="mcu16"]:checked)
+    .embed-row--lane
+    i:nth-child(-n + 4),
+.embed-register:has([value="mcu32"]:checked)
+    .embed-row--lane
+    i:nth-child(-n + 4),
+.embed-register:has([value="neon"]:checked)
+    .embed-row--lane
+    i:nth-child(-n + 16),
+.embed-register:has([value="sse2"]:checked)
+    .embed-row--lane
+    i:nth-child(-n + 16),
+.embed-register:has([value="avx2"]:checked)
+    .embed-row--lane
+    i:nth-child(-n + 32),
+.embed-register:has([value="avx512"]:checked)
+    .embed-row--lane
+    i:nth-child(-n + 64),
+.embed-register:has([value="cuda"]:checked)
+    .embed-row--lane
+    i:nth-child(-n + 32) {
+    background-color: var(--embed-gold);
+    border-color: var(--embed-gold);
+}
+
+.embed-register:has([value="mcu16"]:checked) .embed-v--word::after {
+    content: "16";
+}
+.embed-register:has([value="mcu32"]:checked) .embed-v--word::after {
+    content: "32";
+}
+.embed-register:not(:has([value="mcu16"]:checked, [value="mcu32"]:checked))
+    .embed-v--word::after {
+    content: "64";
+}
+
+.embed-register:has([value="mcu16"]:checked) .embed-v--index::after {
+    content: "16";
+}
+.embed-register:not(:has([value="mcu16"]:checked)) .embed-v--index::after {
+    content: "32";
+}
+
+.embed-register:has([value="mcu16"]:checked) .embed-v--lane::after,
+.embed-register:has([value="mcu32"]:checked) .embed-v--lane::after {
+    content: "32";
+}
+.embed-register:has([value="neon"]:checked) .embed-v--lane::after,
+.embed-register:has([value="sse2"]:checked) .embed-v--lane::after {
+    content: "128";
+}
+.embed-register:has([value="avx2"]:checked) .embed-v--lane::after,
+.embed-register:has([value="cuda"]:checked) .embed-v--lane::after {
+    content: "256";
+}
+.embed-register:has([value="avx512"]:checked) .embed-v--lane::after {
+    content: "512";
+}

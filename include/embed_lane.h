@@ -6,32 +6,33 @@
  */
 /**
  * @file embed_lane.h
- * @brief The lane: the widest unit the target moves and computes in one operation, beside the
- *        machine word, and the operations every bulk pass over memory runs in.
+ * @brief The lane beside the machine word: the widest unit that the target moves and computes in one
+ *        operation. Also the operations that each bulk pass over memory runs in.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-10-29
  *
- * @note The word, embed_word, is the register, and every count, mask and carry runs in it. The
- *       lane is the target's widest vector register, EMBED_LANE_BITS wide, derived here as the
- *       word's width is derived in embed_types.h: 512 bits under AVX-512, 256 under AVX2 and on a
- *       CUDA device, 128 under SSE2 or NEON, and the word's own width where the target has no
- *       vector unit. A bulk operation, a copy, a fill, a compare, a blend of pixels, steps one lane
- *       at a time on every target, and the lane partitions at compile time to what the target has.
- * @note Two arms, every operation defined on both. The vector arm is the compiler's vector type,
- *       EMBED_LANE_U32S 32-bit lanes the compiler keeps in its widest registers and runs the plain
- *       operators over; the compiler lowers it to the target's own instructions. The portable arm is
- *       a struct of the same 32-bit lanes with the same operations written one statement a word,
- *       which a CUDA thread holds in registers.
- * @note The 32-bit lanes are the unit of the arithmetic, since a pixel is one and a byte's share of
- *       255 times a byte fits in one. The byte masks answer where bytes are equal or zero, one bit
- *       a byte, in an integer the register holds whole.
- * @note No header of the C library is reached: a load or a store at any address goes through the
- *       lane's own raw view, as the word's does.
- * @note Every entry carries EMBED_HOST_DEVICE. Under nvcc one definition compiles into the host pass
- *       and the device pass, the device pass taking the portable arm at 256 bits, and a kernel calls
- *       the same functions a host walk calls.
- * @warning EMBED_LANE_PORTABLE set to 1 by the build takes the portable arm on any target. Both
- *          values of every arm flag are defined here. Test them with #if.
+ * @note The word, embed_word, is the register, and each count, mask and carry runs in it. The lane is
+ *       the widest vector register of the target, EMBED_LANE_BITS wide. This header derives its width,
+ *       as embed_types.h derives the width of the word. It is 512 bits under AVX-512, and 256 under
+ *       AVX2 and on a CUDA device. It is 128 under SSE2 or NEON, and the width of the word where the
+ *       target has no vector unit.
+ * @note A bulk operation steps one lane at a time on each target: a copy, a fill, a compare, a blend
+ *       of pixels. At compile time, the lane takes the width that the target has.
+ * @note There are two arms, and each defines every operation. The vector arm is the vector type of the
+ *       compiler: EMBED_LANE_U32S lanes of 32 bits in its widest registers. The plain operators run
+ *       over it, and the compiler lowers it to the instructions of the target. The portable arm is a
+ *       struct of the same 32-bit lanes, with one statement for each word in each operation. A CUDA
+ *       thread holds that struct in registers.
+ * @note The 32-bit lanes are the unit of the arithmetic. A pixel is one, and the product of two bytes
+ *       fits in one. The byte masks tell where bytes are equal or zero, with one bit for each byte.
+ *       The register holds the mask whole, as one integer.
+ * @note This header includes no header of the C library. A load or a store at any address goes
+ *       through the raw view of the lane, as for the word.
+ * @note Each entry has EMBED_HOST_DEVICE. Under nvcc one definition compiles into the host pass and
+ *       the device pass. The device pass takes the portable arm at 256 bits. So a kernel calls the
+ *       same functions that a host walk calls.
+ * @warning Where the build sets EMBED_LANE_PORTABLE to 1, the header takes the portable arm on any
+ *          target. This header defines both values of each arm flag. Test them with #if.
  */
 #ifndef EMBED_LANE_H
 #define EMBED_LANE_H
@@ -44,13 +45,13 @@
  * @note EMBED_VECTOR_REGISTER_BITS comes from the compiler's own instruction set macros. A CUDA
  *       device takes 256, a thread's eight 32-bit registers. A target with no vector unit takes the
  *       word's width, and 32 where the word is narrower, since a lane holds whole 32-bit lanes.
- * @note A build wanting another width defines this ahead of this header, as EMBED_WORD_BITS is
- *       defined. The assertions below hold any width to whole 32-bit lanes, whole words, and at
- *       most 512 bits, the width the byte mask can hold.
+ * @note A build that wants another width defines this macro ahead of this header, as for
+ *       EMBED_WORD_BITS. The assertions below hold any width to whole 32-bit lanes, whole words, and
+ *       at most 512 bits, the width that the byte mask can hold.
  */
 #ifndef EMBED_LANE_BITS
 /**
- * @brief Set to 0 where the lane width was derived here, 1 where the build defined it.
+ * @brief Set to 0 where this header derives the lane width, 1 where the build defines it.
  *
  * @note Both arms define this macro. Test it with #if.
  */
@@ -83,8 +84,8 @@ EMBED_STATIC_ASSERT(EMBED_LANE_BITS <= 512u, "EMBED_LANE_BITS must be at most 51
 EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must be whole words");
 
 /**
- * @brief word_ expanded once a 32-bit lane of the lane, with the lane's place, so that an operation of the
- *        portable arm is one statement a word and no counted walk.
+ * @brief word_ expanded one time for each 32-bit lane of the lane, with the place of that lane. So an
+ *        operation of the portable arm is one statement for each word, with no counted walk.
  *
  * @param word_ A macro of one parameter, the word's place from 0.
  */
@@ -107,8 +108,8 @@ EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must 
 /**
  * @brief Set to 1 by the build to take the portable arm on any target, else 0.
  *
- * @note A check of the portable arm on a host with the vector type builds with this on, which holds
- *       the arm the device takes on the host.
+ * @note To check the portable arm on a host with the vector type, build with this macro at 1. Then
+ *       the host runs the arm that the device takes.
  */
 #ifndef EMBED_LANE_PORTABLE
 #define EMBED_LANE_PORTABLE 0
@@ -120,8 +121,8 @@ EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must 
 /**
  * @brief The arm the lane takes: EMBED_LANE_VECTOR is 1 and EMBED_LANE_PLAIN 0, or the other way.
  *
- * @note The vector arm needs the compiler's vector type, EMBED_HAS_VECTOR_SIZE, and is left on a
- *       CUDA device, whose compiler keeps a thread's lanes in registers from the struct.
+ * @note The vector arm needs the vector type of the compiler, EMBED_HAS_VECTOR_SIZE. A CUDA device
+ *       does not take it, because its compiler keeps the lanes of a thread in registers from the struct.
  */
 #if EMBED_HAS_VECTOR_SIZE && !EMBED_LANE_PORTABLE && !defined(__CUDA_ARCH__)
 #define EMBED_LANE_VECTOR 1
@@ -159,14 +160,15 @@ EMBED_STATIC_ASSERT(sizeof(embed_lane) == EMBED_LANE_BYTES, "embed_lane must be 
  * @brief The lane again, readable and writable at an address that is not a multiple of its width,
  *        as embed_raw_word is the word.
  *
- * @note EMBED_RAW lowers the alignment to one and permits the aliasing. A load or a store through
- *       this type is defined at any address, and one instruction on either arm.
+ * @note EMBED_RAW lowers the alignment to one and permits access through an alias. A load or a
+ *       store through this type has a defined result at any address. It is one instruction on either
+ *       arm.
  */
 typedef embed_lane embed_lane_raw EMBED_RAW;
 
 /**
- * @brief The byte mask a lane's byte operations answer in, one bit a byte, the lowest byte the
- *        lowest bit: 32 bits wide up to a 32-byte lane, 64 above it.
+ * @brief The byte mask that the byte operations of a lane give, one bit for each byte, the lowest
+ *        byte at the lowest bit. It is 32 bits wide up to a 32-byte lane, and 64 above it.
  */
 #if EMBED_LANE_BYTES <= 32u
 typedef embed_u32 embed_lane_mask;
@@ -211,12 +213,12 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask m
 /**
  * @brief A lane loaded from any address.
  *
- * @param at  Where EMBED_LANE_BYTES bytes are read from, at any alignment.
+ * @param at  The address of the EMBED_LANE_BYTES bytes to read, at any alignment.
  * @return    The bytes as a lane.
  */
 #if EMBED_LANE_PLAIN && !EMBED_HAS_ATTRIBUTE(aligned)
-// Where EMBED_RAW cannot lower an alignment, embed_lane_raw keeps the lane's, and a load through it is an aligned
-// load the compiler may emit as one: the lane is read a raw word at a time instead, as the word is read
+// Where EMBED_RAW cannot lower an alignment, embed_lane_raw keeps the alignment of the lane. A load through it is an
+// aligned load, and the compiler can emit one. So this arm reads the lane one raw word at a time, as for the word.
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
 {
     embed_lane lane;
@@ -239,9 +241,10 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
 /**
  * @brief A lane loaded from an address aligned to the lane.
  *
- * @param at  Where EMBED_LANE_BYTES bytes are read from, a multiple of EMBED_LANE_BYTES.
+ * @param at  The address of the EMBED_LANE_BYTES bytes to read, a multiple of EMBED_LANE_BYTES.
  * @return    The bytes as a lane.
- * @warning An address not aligned to the lane is undefined here; embed_lane_load reads any.
+ * @warning C leaves a load from an address not aligned to the lane undefined here. embed_lane_load
+ *          reads from any address.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load_aligned(const void *at)
 {
@@ -251,11 +254,11 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load_aligned(const void *at
 /**
  * @brief A lane put at any address.
  *
- * @param dst   Where EMBED_LANE_BYTES bytes are written, at any alignment.
+ * @param dst   The address of the EMBED_LANE_BYTES bytes to write, at any alignment.
  * @param lane  The bytes.
  */
 #if EMBED_LANE_PLAIN && !EMBED_HAS_ATTRIBUTE(aligned)
-// The store embed_lane_load's arm above reads, a raw word at a time, for the same reason
+// The store that matches the load arm above, one raw word at a time, for the same reason.
 EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
 {
     embed_raw_word *const to = (embed_raw_word *)dst;
@@ -276,9 +279,10 @@ EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
 /**
  * @brief A lane put at an address aligned to the lane.
  *
- * @param dst   Where EMBED_LANE_BYTES bytes are written, a multiple of EMBED_LANE_BYTES.
+ * @param dst   The address of the EMBED_LANE_BYTES bytes to write, a multiple of EMBED_LANE_BYTES.
  * @param lane  The bytes.
- * @warning An address not aligned to the lane is undefined here; embed_lane_put writes any.
+ * @warning C leaves a store to an address not aligned to the lane undefined here. embed_lane_put
+ *          writes to any address.
  */
 EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put_aligned(void *dst, embed_lane lane)
 {
@@ -378,7 +382,7 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_xor(embed_lane one, embed_l
 }
 
 /**
- * @brief The 32-bit lanes of two lanes added, each wrapping at 32 bits.
+ * @brief The 32-bit lanes of two lanes added, each with wrap around at 32 bits.
  *
  * @param one    A lane.
  * @param other  A lane.
@@ -398,7 +402,7 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_add_u32(embed_lane one, emb
 }
 
 /**
- * @brief The 32-bit lanes of `other` taken from those of `one`, each wrapping at 32 bits.
+ * @brief The 32-bit lanes of `other` taken from those of `one`, each with wrap around at 32 bits.
  *
  * @param one    A lane.
  * @param other  A lane.
@@ -478,12 +482,12 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane l
 }
 
 /**
- * @brief The four bytes of a 32-bit lane, each holding 1 or 0 in its lowest bit, gathered into the
- *        lane's low nibble, the lowest byte the lowest bit.
+ * @brief The multiplier that gathers the four bytes of a 32-bit lane into one nibble. Each byte holds
+ *        1 or 0 in its lowest bit, and the lowest byte goes to the lowest bit.
  *
- * @note A multiply places the four bits at bits 24 to 27 alone: the multiplier's four powers of two
- *       set each bit of the product once, with no carry between them. The product's top byte is the
- *       nibble.
+ * @note A multiply puts the four bits at bits 24 to 27 alone. The four powers of two in the multiplier
+ *       set each bit of the product one time, with no carry between them. The top byte of the product
+ *       is the nibble.
  */
 #define EMBED_LANE_NIBBLE_GATHER 0x01020408u
 
@@ -493,12 +497,12 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane l
  * @param one    A lane.
  * @param other  A lane.
  * @return       The mask.
- * @note On the vector arm the bytes are compared as a byte vector, every equal byte all ones. Where
- *       the compiler has the byte mask builtin for the lane's width, EMBED_BYTE_MASK_256 or
- *       EMBED_BYTE_MASK_128, it reads the mask in one instruction. Otherwise each 32-bit lane's four
- *       bits are gathered into a nibble by one multiply over the whole lane, and the nibbles are
- *       read out. On the portable arm each 32-bit lane finds its zero bytes by the word's own carry
- *       test and gathers them the same way.
+ * @note On the vector arm, the code compares the bytes as a byte vector, and each equal byte becomes
+ *       all ones. Where the compiler has the byte mask builtin for the width of the lane, it reads the
+ *       mask in one instruction. That builtin is EMBED_BYTE_MASK_256 or EMBED_BYTE_MASK_128. Otherwise
+ *       one multiply over the full lane gathers the four bits of each 32-bit lane into a nibble, and the
+ *       code reads out the nibbles. On the portable arm, each 32-bit lane finds its zero bytes by the
+ *       carry test of the word, and gathers them the same way.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane one, embed_lane other)
 {
@@ -519,8 +523,8 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
 #undef EMBED_LANE_NIBBLE_WORD
 #endif
 #else
-    // a byte of a word's difference is zero where its high bit is clear after the carry test: the sum
-    // carries out of every byte that holds any bit, and the complement leaves the rest
+    // A byte of the difference of a word is zero where its high bit is clear after the carry test. The sum
+    // carries out of each byte that holds a bit, and the complement keeps the other bytes.
 #define EMBED_LANE_ZERO_BYTES(at_)                                                                                    \
     ((~((((one.at[at_] ^ other.at[at_]) & 0x7f7f7f7fu) + 0x7f7f7f7fu) | (one.at[at_] ^ other.at[at_]) | 0x7f7f7f7fu)) >> 7u)
 #define EMBED_LANE_EQUAL_WORD(at_)                                                                                    \

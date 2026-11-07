@@ -1,0 +1,104 @@
+# embedded_types - Copyright (C) 2026 Douglas Quigg (dstroy0) <dquigg123@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational
+#
+# The site configuration. tools/api_pages.py writes the pages in docs/api from the Doxygen comments
+# in include/, and each other page in docs/ is a hand-written page. The hook in tools/api_pages.py
+# stops the build where docs/api does not match the headers, and at an ASD-STE100 finding in a page.
+#
+#   pip install -r requirements-docs.txt
+#   python tools/api_pages.py           # docs/api written again after an edit to a header
+#   python test/harness.py site --serve # http://127.0.0.1:8000, and a new build at each edit
+#   python test/harness.py site         # the build that CI runs, into build/site
+#
+# The workflow in .github/workflows/docs.yml builds each pull request and publishes main.
+
+site_name: embedded_types
+site_description: C11 headers for the fixed-width integers, the machine word, the lane, and atomic words of an embedded build.
+site_url: https://dstroy0.github.io/embedded_types/
+repo_url: https://github.com/dstroy0/embedded_types
+repo_name: dstroy0/embedded_types
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 Douglas Quigg (dstroy0). AGPL-3.0-or-later, commercial, or educator license.
+
+docs_dir: docs
+site_dir: build/site
+strict: true
+
+hooks:
+  - tools/api_pages.py
+
+watch:
+  - include
+  - tools
+
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+  icon:
+    repo: fontawesome/brands/github
+  # The stylesheet loads Archivo and Red Hat Mono beside the theme, so the theme loads no font.
+  font: false
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Dark
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Light
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+
+extra_css:
+  - https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Red+Hat+Mono:wght@400;500&display=swap
+  - stylesheets/embedded_types.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/dstroy0/embedded_types
+
+nav:
+  - Home: index.md
+  - The word and the lane: word.md
+  - Build and use: build.md
+  - API:
+      - embed_types.h: api/embed_types.md
+      - embed_compiler_directives.h: api/embed_compiler_directives.md
+      - embed_dispatch_layout.h: api/embed_dispatch_layout.md
+      - embed_atomic.h: api/embed_atomic.md
+      - embed_turnstile.h: api/embed_turnstile.md
+      - embed_lane.h: api/embed_lane.md
+  - Licensing: licensing.md
+  - Security: https://github.com/dstroy0/embedded_types/blob/main/SECURITY.md
+  - Contributing: https://github.com/dstroy0/embedded_types/blob/main/CONTRIBUTING.md

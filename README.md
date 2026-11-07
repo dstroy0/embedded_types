@@ -17,6 +17,8 @@ under MSVC, and nothing on their CUDA device arm. The lane reaches `embed_types.
 one definition compiles into nvcc's host pass and device pass, and a kernel calls what a host walk
 calls. What the headers guarantee, and what they leave undiagnosed, is in [SECURITY.md](SECURITY.md).
 
+The site at <https://dstroy0.github.io/embedded_types/> shows the API from the Doxygen comments in the headers.
+
 A consumer includes the headers and writes against the names directly.
 
 ```c

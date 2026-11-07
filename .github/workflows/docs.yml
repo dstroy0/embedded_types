@@ -1,0 +1,95 @@
+# embedded_types - Copyright (C) 2026 Douglas Quigg (dstroy0) <dquigg123@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational
+#
+# Builds the site from docs/ and from the Doxygen comments in include/, and publishes it to GitHub
+# Pages at https://dstroy0.github.io/embedded_types/.
+#
+# Two jobs. The build job runs the site tools and holds contents:read alone. The deploy job holds
+# pages:write and id-token:write, and it runs no code of this repository: it takes the artifact of
+# the build job. A pull request gets the build job and no deploy.
+#
+# The build is strict, so a broken link or a bad nav entry stops it. The hook in tools/api_pages.py
+# also stops it where docs/api does not match the headers, and at an ASD-STE100 finding in a page.
+
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "include/**"
+      - "tools/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "test/ste_check.py"
+      - "test/ste_names.txt"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "include/**"
+      - "tools/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "test/ste_check.py"
+      - "test/ste_names.txt"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    env:
+      NO_MKDOCS_2_WARNING: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      # requirements-docs.txt pins the versions. The site looks the same until a commit changes a pin.
+      - name: Install the site tools
+        run: python -m pip install -r requirements-docs.txt
+
+      - name: Build
+        run: python test/harness.py site
+
+      - name: Upload the Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    # This group is not the group of the build, and it never cancels a deploy. A deploy that stops
+    # half way leaves the Pages service with a part of the site.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/configure-pages@v6
+
+      - id: deploy
+        uses: actions/deploy-pages@v5

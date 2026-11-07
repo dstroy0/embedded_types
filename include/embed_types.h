@@ -11,10 +11,10 @@
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-08-30
  *
- * @note Every name here is defined once. A consumer that wants its own vocabulary aliases these
- *       names. Two libraries in one build then agree on what a word is.
- * @note uint8_t is optional in C11, and a part whose byte is not eight bits has none. Porting to
- *       such a part means editing this header.
+ * @note This header defines each name one time. A consumer that wants its own vocabulary makes
+ *       aliases of these names. Then two libraries in one build agree on what a word is.
+ * @note C11 makes uint8_t optional, and a part whose byte is not eight bits has none. To port to
+ *       such a part, edit this header.
  */
 #ifndef EMBED_TYPES_H
 #define EMBED_TYPES_H
@@ -29,7 +29,7 @@ EMBED_BEGIN_DECLS
  * @brief The eight-bit unsigned integer that every scan and copy walks.
  *
  * @note The assertion below pins the width. On a part whose byte is not eight bits, stdint omits
- *       uint8_t and this typedef fails before the assertion is reached.
+ *       uint8_t, and this typedef fails before the compiler reaches the assertion.
  */
 typedef uint8_t embed_u8;
 
@@ -51,24 +51,24 @@ typedef uint64_t embed_u64;
  */
 typedef int8_t embed_i8;
 
-/** @brief The sixteen-bit signed integer, carrying no assertion for the reason given on embed_i8. */
+/** @brief The sixteen-bit signed integer. It has no assertion, for the reason on embed_i8. */
 typedef int16_t embed_i16;
 
-/** @brief The thirty-two-bit signed integer, carrying no assertion for the reason given on embed_i8. */
+/** @brief The thirty-two-bit signed integer. It has no assertion, for the reason on embed_i8. */
 typedef int32_t embed_i32;
 
-/** @brief The sixty-four-bit signed integer, carrying no assertion for the reason given on embed_i8. */
+/** @brief The sixty-four-bit signed integer. It has no assertion, for the reason on embed_i8. */
 typedef int64_t embed_i64;
 
 /**
  * @brief The truth value.
  *
  * @note C++ gets bool and C gets _Bool. Both are keywords, so this typedef needs no header.
- * @note <stdbool.h> is not included here. Its bool macro collides with the bool that some embedded
- *       SDKs define for themselves.
- * @note Both types normalize any nonzero value to 1 on conversion. A value crossing between a
- *       library and its caller then compares equal on either side. A plain eight-bit alias keeps
- *       the value it was given, and two true values can differ.
+ * @note This header does not include <stdbool.h>. Its bool macro collides with the bool that some
+ *       embedded SDKs define for themselves.
+ * @note Both types change any nonzero value to 1 on conversion. Then a value that crosses between a
+ *       library and its caller compares equal on either side. A plain eight-bit alias keeps the
+ *       value that it gets, and two true values can differ.
  */
 #ifdef __cplusplus
 typedef bool embed_bool;
@@ -98,21 +98,21 @@ typedef _Bool embed_bool;
  * @note UINTPTR_MAX comes from the compiler. The build supplies no width of its own here, and it
  *       cannot supply a wrong one.
  * @note A build whose register width differs from its pointer width defines this on the command
- *       line ahead of this header. x32 and ILP32-on-64 are that case. A large-model eight-bit
- *       target is another, with a pointer wider than the register that indexes with it.
- * @warning The #error arms below fire where UINTPTR_MAX is absent and where it is not 16, 32 or 64
- *          bits wide. C11 makes uintptr_t optional, so its absence is legal. Neither case is
- *          guessed at. Falling silently to the narrowest width would halve every lane on a machine
+ *       line ahead of this header. The x32 and ILP32-on-64 ABIs are examples. A large-model eight-bit
+ *       target is another: its pointer is wider than the register that indexes with it.
+ * @warning The #error arms below fire where UINTPTR_MAX is absent, and where it is not 16, 32 or 64
+ *          bits wide. C11 makes uintptr_t optional, so its absence is legal. This header guesses
+ *          neither case. A silent fall to the narrowest width would halve every lane on a machine
  *          that has more.
  */
 #ifndef EMBED_WORD_BITS
 /**
- * @brief Set to 0 where the word width was derived here, 1 where the build defined it.
+ * @brief Set to 0 where this header derives the word width, 1 where the build defines it.
  *
- * @note This header sets the flag itself. A build that overrode the width would otherwise have to
- *       set a second macro to match, and the two would drift apart.
+ * @note This header sets the flag itself. Otherwise a build that overrides the width must set a
+ *       second macro to match, and the two can drift apart.
  * @note A check that the word width matches the pointer width holds only where the derivation ran.
- *       A build that overrides the width has declared that the two differ.
+ *       A build that overrides the width declares that the two differ.
  * @note Both arms define this macro, so #ifdef EMBED_WORD_BITS_WAS_OVERRIDDEN is always true. Test
  *       it with #if.
  */
@@ -138,12 +138,12 @@ typedef _Bool embed_bool;
 /**
  * @brief The width of an offset or a length in bits.
  *
- * @note This is separate from the word width because an offset does not need the register's full
- *       width. A 64-bit host carrying 32-bit offsets halves what a descriptor costs.
+ * @note This width is separate from the word width, because an offset does not need the full width
+ *       of the register. A 64-bit host with 32-bit offsets halves the cost of a descriptor.
  * @note The default is the word width at 16 bits and 32 above it. That gives 16 on a 16-bit word,
  *       32 on a 32-bit word, and 32 on a 64-bit word, so the index fits the register in all three.
- * @warning A build wanting 16-bit offsets on a wider register defines this ahead of this header.
- *          The assertion below catches an override wider than the word.
+ * @warning A build that wants 16-bit offsets on a wider register defines this ahead of this header.
+ *          The assertion below stops an override wider than the word.
  */
 #ifndef EMBED_INDEX_BITS
 #if EMBED_WORD_BITS == 16
@@ -156,8 +156,8 @@ typedef _Bool embed_bool;
 /**
  * @brief The unsigned word that every lane operation runs in, EMBED_WORD_BITS wide.
  *
- * @note A consumer reasons in this register. A lane mask, a zero test and a byte count are all
- *       built to this width, so changing EMBED_WORD_BITS changes what a single operation covers.
+ * @note A consumer reasons in this register. A lane mask, a zero test and a byte count all have this
+ *       width, so a change to EMBED_WORD_BITS changes what one operation covers.
  * @note All three arms below declare this type. The 64-bit arm carries this block because the
  *       compiler reaches it first.
  */
@@ -167,8 +167,8 @@ typedef embed_u64 embed_word;
 /**
  * @brief The signed word, the same register as embed_word.
  *
- * @note This type carries a result that has gone negative. An unsigned word would wrap it. The
- *       assertion below holds this type to embed_word's size.
+ * @note This type holds a result that goes below zero. An unsigned word would wrap it. The
+ *       assertion below holds this type to the size of embed_word.
  */
 typedef embed_i64 embed_iword;
 #elif EMBED_WORD_BITS == 32
@@ -182,9 +182,9 @@ typedef embed_i16 embed_iword;
 #endif
 
 /**
- * @brief The index type, EMBED_INDEX_BITS wide, carrying every offset and length.
+ * @brief The index type, EMBED_INDEX_BITS wide, for every offset and length.
  *
- * @note This type is not size_t. size_t is as wide as the target's pointer, so the same expression
+ * @note This type is not size_t. size_t is as wide as the target's pointer. Then one expression
  *       would be 32-bit index arithmetic on a device and 64-bit on the host that tests it. One
  *       source would then emit different code on the two.
  * @note Both arms below declare this type. The 32-bit arm carries this block because the compiler
@@ -201,20 +201,20 @@ typedef embed_u16 embed_index;
 /**
  * @brief The word again, readable from an address that is not a multiple of its width.
  *
- * @note EMBED_RAW lowers the alignment to one and permits the aliasing. Both are needed for a load
- *       through this type to be defined at any address. A load through the plain embed_word at an
- *       unaligned address stays undefined.
- * @warning Where either attribute is unavailable this type is the plain word, and reads through it
- *          are undefined. Nothing diagnoses that. The warnings on EMBED_ALIGN and EMBED_ALIAS in
- *          embed_compiler_directives.h cover the same failure.
+ * @note EMBED_RAW lowers the alignment to one and permits access through an alias. A load through
+ *       this type has a defined result at any address only with both. A load through the plain
+ *       embed_word at an unaligned address stays undefined.
+ * @warning Where either attribute is not available, this type is the plain word, and C leaves a read
+ *          through it undefined. Nothing diagnoses that. The warnings on EMBED_ALIGN and EMBED_ALIAS
+ *          in embed_compiler_directives.h cover the same failure.
  */
 typedef embed_word embed_raw_word EMBED_RAW;
 
 /**
  * @brief Asserts embed_u8 is exactly eight bits.
  *
- * @note A conforming stdint defines uint8_t at exactly eight bits, so this assertion guards against
- *       a stdint that does not conform.
+ * @note A stdint that conforms to C defines uint8_t at exactly eight bits, so this assertion guards
+ *       against a stdint that does not conform.
  */
 EMBED_STATIC_ASSERT(sizeof(embed_u8) == 1u, "embed_u8 must be exactly 8 bits: this target has no 8-bit type");
 
@@ -249,8 +249,8 @@ EMBED_STATIC_ASSERT(sizeof(embed_index) <= sizeof(embed_word), "an index must fi
  *
  * @note Its range needs a single byte, so the assertion below fails only where the compiler accepted
  *       the packed attribute and disregarded it.
- * @warning A failure means every enum a consumer declares through EMBED_ENUM_BYTE widens, and any
- *          offset computed from a struct holding one is wrong.
+ * @warning A failure means that every enum a consumer declares through EMBED_ENUM_BYTE widens. Then
+ *          any offset that comes from a struct with such an enum is wrong.
  */
 EMBED_ENUM_BYTE(EmbedEnumProbe, EMBED_ENUM_PROBE_MIN = 0, /**< Low end of the probe range. */
                 EMBED_ENUM_PROBE_MAX = 255                /**< High end, the largest value eight bits hold. */

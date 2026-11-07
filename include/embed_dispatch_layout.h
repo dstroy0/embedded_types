@@ -11,11 +11,11 @@
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-08-30
  *
- * @note This catches two mistakes, and neither shows up at a call site. Adding a member to the
- *       struct and leaving it out of the list moves every member below it off its slot. Padding
- *       appearing between two members does the same with no edit to the list at all.
- * @note The preprocessor has no loop. Each member count needs its own line. The family below runs
- *       out to twenty-four for that reason.
+ * @note This header finds two mistakes, and a call site shows neither. A member added to the struct
+ *       but not to the list moves each member below it off its slot. Padding between two members
+ *       does the same, with no edit to the list.
+ * @note The preprocessor has no loop. Each count of members needs its own line. For that reason, the
+ *       family below goes up to twenty-four.
  */
 #ifndef EMBED_DISPATCH_LAYOUT_H
 #define EMBED_DISPATCH_LAYOUT_H
@@ -38,9 +38,9 @@
  * @param[in] Table_  Struct type passed to offsetof.
  * @param[in] member_ Member name passed to offsetof.
  * @param[in] slot_   Index, cast to size_t and multiplied by EMBED_FUNCTION_POINTER_BYTES.
- * @note Every EMBED_TABLE_SLOTS_N line below is built from this one check.
- * @note Table_, member_, and slot_ are stringized into the assertion message. A failure names the
- *       table, the member, and the index it was expected at.
+ * @note Each EMBED_TABLE_SLOTS_N line below expands to this one check.
+ * @note The assertion message holds Table_, member_, and slot_ as strings. A failure names the
+ *       table, the member, and the index where the member should be.
  */
 #define EMBED_TABLE_SLOT(Table_, member_, slot_)                                                                       \
     EMBED_STATIC_ASSERT(offsetof(Table_, member_) == (size_t)(slot_) * EMBED_FUNCTION_POINTER_BYTES,                   \
@@ -620,8 +620,8 @@
  * @param[in] member24_ Member at slot 23, asserted after EMBED_TABLE_SLOTS_23 covers the first twenty-three.
  * @note EMBED_TABLE_LAYOUT selects this line for a table with twenty-four members.
  * @warning This is the longest line in the family. A table with twenty-five members has no line to
- *          expand to. EMBED_NARG stops at twenty-four as well. Raising the limit takes a new line
- *          here, one more constant in EMBED_NARG, and one more parameter in EMBED_ARG_N.
+ *          expand to. EMBED_NARG also stops at twenty-four. To raise the limit, add a new line here,
+ *          one more constant in EMBED_NARG, and one more parameter in EMBED_ARG_N.
  */
 #define EMBED_TABLE_SLOTS_24(Table_, member1_, member2_, member3_, member4_, member5_, member6_, member7_, member8_,   \
                              member9_, member10_, member11_, member12_, member13_, member14_, member15_, member16_,    \
@@ -650,8 +650,8 @@
 /**
  * @brief Expands to static const.
  *
- * @note Declares a dispatch table. static gives internal linkage. Each translation unit including
- *       the header gets its own copy. The copies do not collide at link time.
+ * @note Declares a dispatch table. static gives internal linkage. Each translation unit that
+ *       includes the header gets its own copy. The copies do not collide at link time.
  * @note const lets the compiler resolve a call through a table entry to the function directly. That
  *       needs a table no other translation unit can reach and no code assigns to.
  * @note This macro does not supply EMBED_UNUSED. Write it on the table as well. A translation unit
@@ -664,9 +664,9 @@
  *
  * @param[in] left_  Left operand of ##.
  * @param[in] right_ Right operand of ##.
- * @return           The single token formed by joining left_ and right_.
- * @note EMBED_CAT calls this. ## does not expand its own operands, and EMBED_CAT expands them
- *       before handing them here. Call EMBED_CAT when either operand is itself a macro.
+ * @return           The single token that left_ and right_ make together.
+ * @note EMBED_CAT calls this macro. ## does not expand its own operands, and EMBED_CAT expands them
+ *       before it gives them to this macro. Call EMBED_CAT when either operand is itself a macro.
  */
 #define EMBED_CAT_(left_, right_) left_##right_
 
@@ -675,7 +675,7 @@
  *
  * @param[in] left_  Left operand, forwarded to EMBED_CAT_.
  * @param[in] right_ Right operand, forwarded to EMBED_CAT_.
- * @return           The single token formed by joining left_ and right_.
+ * @return           The single token that left_ and right_ make together.
  * @note This expands its arguments first, then EMBED_CAT_ pastes the results. A macro operand
  *       reaches EMBED_CAT_ as its value.
  * @note EMBED_TABLE_LAYOUT uses this to build an EMBED_TABLE_SLOTS_<n> name from EMBED_NARG's
@@ -688,9 +688,9 @@
  *
  * @param[in] ... The list to count.
  * @return        The number of arguments, for one to twenty-four arguments.
- * @note Counting the arguments turns an arity into a number EMBED_CAT can paste into a macro name.
- *       The preprocessor has no loop.
- * @warning An empty list gives 1. The preprocessor cannot tell an empty argument from a missing one.
+ * @note A count of the arguments turns an arity into a number that EMBED_CAT can paste into a macro
+ *       name. The preprocessor has no loop.
+ * @warning An empty list gives 1. The preprocessor cannot tell an empty argument from no argument.
  * @warning Twenty-five or more arguments make EMBED_ARG_N select an argument instead of a constant.
  */
 #define EMBED_NARG(...)                                                                                                \
@@ -701,7 +701,7 @@
  *
  * @param[in] ... The list from EMBED_NARG, followed by the constants 24 down to 0.
  * @return        The value EMBED_ARG_N selects.
- * @note EMBED_NARG calls this. Going through one more macro expands the caller's list before
+ * @note EMBED_NARG calls this macro. One more macro level expands the list of the caller before
  *       EMBED_ARG_N picks a slot from it.
  */
 #define EMBED_NARG_(...) EMBED_ARG_N(__VA_ARGS__)
@@ -731,20 +731,21 @@
  * @return              The value entry_ returns.
  * @note One pointer costs one register at any arity. A long parameter list fills the registers and
  *       spills the rest onto the stack.
- * @note C zero initializes any member the initializer does not name. A compound literal in argument
- *       position lives until the end of the enclosing block, so entry_ may hold the pointer for the
- *       whole call.
- * @note Use this from C only. Compound literals are not C++ in any revision. GNU C++ accepts one as
- *       an extension. Its lifetime there ends at the full-expression. That breaks the [BORROWS]
- *       contract below. EMBED_ENTRY and EMBED_ENTRY_V expand this macro at a definition site, which
- *       is a .c compiled as C. A C++ translation unit sees the emitted prototype under
- *       EMBED_BEGIN_DECLS and never the expansion.
+ * @note C sets to zero each member that the initializer does not name. A compound literal in an
+ *       argument lives to the end of the block around it. So entry_ can keep the pointer for the full
+ *       call.
+ * @note Use this macro from C only. No revision of C++ has compound literals. GNU C++ accepts one as
+ *       an extension, but its lifetime there ends at the full-expression. That breaks the [BORROWS]
+ *       contract below.
+ * @note EMBED_ENTRY and EMBED_ENTRY_V expand this macro at a definition site, which is a .c file that
+ *       compiles as C. A C++ translation unit sees the prototype under EMBED_BEGIN_DECLS and never
+ *       the expansion.
  * @warning entry_ receives the address of the literal [BORROWS].
  */
 #define EMBED_CALL(entry_, ArgsType_, ...) entry_(&(ArgsType_){__VA_ARGS__})
 
 /**
- * @brief Defines a value-returning entry point that forwards an argument pack.
+ * @brief Defines an entry point that returns a value and forwards an argument pack.
  *
  * @param[in] entry_prefix_   Prefix of the emitted entry point, pasted ahead of name_.
  * @param[in] backend_prefix_ Prefix of the backend the entry calls, pasted ahead of name_.
@@ -754,9 +755,8 @@
  * @param[in] name_           Core name, pasted onto both prefixes.
  * @param[in] ...             Initializers for the CtxType_ literal, written from members of args.
  * @return                    What the backend returns.
- * @note One shape for every entry in the library. A caller writes the same call at each module.
- *       The entry tests nothing. Whatever checking an operation needs belongs in the backend it
- *       names.
+ * @note One shape for each entry in the library. A caller writes the same call at each module.
+ *       The entry tests nothing. The backend that it names does each check that an operation needs.
  * @warning The initializers dereference args, so it must not be NULL [BORROWS].
  */
 #define EMBED_ENTRY(entry_prefix_, backend_prefix_, CtxType_, CfgType_, ReturnType_, name_, ...)                       \
@@ -775,8 +775,8 @@
  * @param[in] name_           Core name, pasted onto both prefixes.
  * @param[in] ...             Initializers for the CtxType_ literal, written from members of args.
  * @note The same body as EMBED_ENTRY, without the return. Two macros exist because void does not
- *       work as ReturnType_. Writing `void` there would still emit `return backend(...)`, and C
- *       forbids a return with an expression in a function returning void.
+ *       work as ReturnType_. With `void` there, the macro still emits `return backend(...)`, and C
+ *       forbids a return with an expression in a function that returns void.
  * @warning The initializers dereference args, so it must not be NULL [BORROWS].
  */
 #define EMBED_ENTRY_V(entry_prefix_, backend_prefix_, CtxType_, CfgType_, name_, ...)                                  \

@@ -13,6 +13,7 @@
   harness.py runners gen <dir>... --unity <rb>   write <dir>/unity_runner.c
   harness.py ste [--show [DOC ...]] [--lower]  every technical document checked against ASD-STE100 with the ratchet
   harness.py prove [--client C]               each GenMC client under test/prove, under each memory model
+  harness.py site [--serve]                   the site built into build/site, as the docs workflow builds it
 
 There are four build trees. Each carries its own flags here, and running one takes no remembered
 shell invocation:
@@ -458,21 +459,34 @@ def cmd_runners_gen(parsed):
 
 STE_CHECK = os.path.join(ROOT, "test", "ste_check.py")
 STE_RATCHET = os.path.join(ROOT, "test", "ste_ratchet.tsv")
+API_PAGES = os.path.join(ROOT, "tools", "api_pages.py")
 
 
 def cmd_ste(parsed):
-    """Hold every technical document to ASD-STE100: no document carries more findings than test/ste_ratchet.tsv.
+    """Hold each technical document to ASD-STE100: no document can have more findings than test/ste_ratchet.tsv.
 
-    test/ste_check.py is the checker, the same file in orior, MMgr and embedded_types. --show lists the findings
-    of the documents named, or of the tree; --lower writes each count into the ratchet, lowered and never raised.
-    The pre-commit hook and the ste test in the suite run the ratchet. Vocabulary is orior's banned-word check's
-    to hold, and this check reads no word list.
+    test/ste_check.py does the check, and orior, MMgr and embedded_types hold the same file. --show lists the
+    findings of the documents that it names, or of the tree. --lower writes the count of each document into the
+    ratchet, and it can lower a count but it cannot raise one. The pre-commit hook and the ste test in the suite
+    run the ratchet. Vocabulary belongs to the banned-word check of orior, and this check reads no word list.
+
+    The ratchet run also checks the API pages in docs/api. tools/api_pages.py makes them from the Doxygen comments
+    in include/. A page that does not match its header stops the run, and so does one finding in a page.
     """
     if parsed.show is not None:
         return subprocess.run([sys.executable, STE_CHECK] + (parsed.show or ["."]), cwd=ROOT).returncode
     if parsed.lower:
         return subprocess.run([sys.executable, STE_CHECK, "--ratchet-write", STE_RATCHET, "."], cwd=ROOT).returncode
-    return subprocess.run([sys.executable, STE_CHECK, "--ratchet", STE_RATCHET, "."], cwd=ROOT).returncode
+    documents = subprocess.run([sys.executable, STE_CHECK, "--ratchet", STE_RATCHET, "."], cwd=ROOT).returncode
+    pages = subprocess.run([sys.executable, API_PAGES, "--check"], cwd=ROOT).returncode
+    return documents or pages
+
+
+def cmd_site(parsed):
+    """Build the site into build/site, as the docs workflow builds it: strict, and stopped by an ASD-STE100 finding."""
+    env = dict(os.environ, NO_MKDOCS_2_WARNING="1")
+    command = [sys.executable, "-m", "mkdocs", "serve" if parsed.serve else "build", "--strict"]
+    return subprocess.run(command, cwd=ROOT, env=env).returncode
 
 
 def cmd_prove(parsed):
@@ -529,6 +543,10 @@ def main():
     parser = sub.add_parser("prove", help="each GenMC client under test/prove, under each memory model")
     parser.add_argument("--client", action="append", help="a client by name, without _genmc.c, any number of times")
     parser.set_defaults(fn=cmd_prove)
+
+    parser = sub.add_parser("site", help="the site built into build/site, as the docs workflow builds it")
+    parser.add_argument("--serve", action="store_true", help="serve the site and build it again at each edit")
+    parser.set_defaults(fn=cmd_site)
 
     parsed = ap.parse_args()
     return parsed.fn(parsed)
