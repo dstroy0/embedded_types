@@ -214,10 +214,27 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask m
  * @param at  Where EMBED_LANE_BYTES bytes are read from, at any alignment.
  * @return    The bytes as a lane.
  */
+#if EMBED_LANE_PLAIN && !EMBED_HAS_ATTRIBUTE(aligned)
+// Where EMBED_RAW cannot lower an alignment, embed_lane_raw keeps the lane's, and a load through it is an aligned
+// load the compiler may emit as one: the lane is read a raw word at a time instead, as the word is read
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
+{
+    embed_lane lane;
+    const embed_raw_word *const from = (const embed_raw_word *)at;
+    embed_word *const to = (embed_word *)(void *)lane.at;
+
+    for (size_t place = 0u; place < (EMBED_LANE_BYTES / sizeof(embed_word)); place += 1u)
+    {
+        to[place] = from[place];
+    }
+    return lane;
+}
+#else
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
 {
     return *(const embed_lane_raw *)at;
 }
+#endif
 
 /**
  * @brief A lane loaded from an address aligned to the lane.
@@ -237,10 +254,24 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load_aligned(const void *at
  * @param dst   Where EMBED_LANE_BYTES bytes are written, at any alignment.
  * @param lane  The bytes.
  */
+#if EMBED_LANE_PLAIN && !EMBED_HAS_ATTRIBUTE(aligned)
+// The store embed_lane_load's arm above reads, a raw word at a time, for the same reason
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
+{
+    embed_raw_word *const to = (embed_raw_word *)dst;
+    const embed_word *const from = (const embed_word *)(const void *)lane.at;
+
+    for (size_t place = 0u; place < (EMBED_LANE_BYTES / sizeof(embed_word)); place += 1u)
+    {
+        to[place] = from[place];
+    }
+}
+#else
 EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
 {
     *(embed_lane_raw *)dst = lane;
 }
+#endif
 
 /**
  * @brief A lane put at an address aligned to the lane.

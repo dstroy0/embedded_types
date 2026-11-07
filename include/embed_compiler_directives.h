@@ -419,6 +419,41 @@
 #endif
 
 /**
+ * @brief The name a weak default is defined under: name_ itself where EMBED_HAS_ATTRIBUTE(weak) is non-zero,
+ *        name_ with _default appended under MSVC without the attribute.
+ *
+ * @param[in] name_ The name callers reach and a port defines.
+ * @return          The name the default's definition carries.
+ * @note The MSVC linker has no weak definition. Its /alternatename resolves a name no unit defines to a second
+ *       name, and so the default stands under the second name and a port's definition of name_ wins with no
+ *       duplicate. EMBED_WEAK_DEFAULT emits that alternate name. Write both at the default:
+ *       EMBED_WEAK_DEFAULT(name_) at file scope, then the definition with EMBED_WEAK and EMBED_WEAK_NAME(name_).
+ * @warning A unit that calls the default by name_ in the same unit that defines it reaches it through the linker,
+ *          never inline, under MSVC.
+ */
+#if !EMBED_HAS_ATTRIBUTE(weak) && defined(_MSC_VER)
+#define EMBED_WEAK_NAME(name_) name_##_default
+#else
+#define EMBED_WEAK_NAME(name_) name_
+#endif
+
+/**
+ * @brief Emits the linker's alternate name for a weak default under MSVC without the weak attribute, and nothing
+ *        elsewhere.
+ *
+ * @param[in] name_ The name callers reach and a port defines.
+ * @note A 32-bit x86 C symbol carries a leading underscore, and the linker reads the decorated names, and so the
+ *       x86 arm adds one to each side.
+ */
+#if !EMBED_HAS_ATTRIBUTE(weak) && defined(_MSC_VER) && defined(_M_IX86)
+#define EMBED_WEAK_DEFAULT(name_) __pragma(comment(linker, "/alternatename:_" #name_ "=_" #name_ "_default"))
+#elif !EMBED_HAS_ATTRIBUTE(weak) && defined(_MSC_VER)
+#define EMBED_WEAK_DEFAULT(name_) __pragma(comment(linker, "/alternatename:" #name_ "=" #name_ "_default"))
+#else
+#define EMBED_WEAK_DEFAULT(name_)
+#endif
+
+/**
  * @brief Expands to #text_.
  *
  * @param[in] text_ Token sequence to stringize.
