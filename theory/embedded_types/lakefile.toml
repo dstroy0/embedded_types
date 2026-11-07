@@ -1,0 +1,5 @@
+name = "EmbeddedTypes"
+defaultTargets = ["EmbeddedTypes"]
+
+[[lean_lib]]
+name = "EmbeddedTypes"

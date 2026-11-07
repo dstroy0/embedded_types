@@ -1,6 +1,6 @@
 {
   "name": "embedded_types",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "Fixed-width integer aliases, a machine word derived from the target's pointer width, and the compile-time machinery a C11 embedded library is written in. Header only, no allocation, nothing at startup; the only headers it reaches for are stddef and stdint.",
   "keywords": [
     "types",
