@@ -22,6 +22,10 @@ set_property(GLOBAL PROPERTY EMBEDDED_TYPES_SUITES_BUILT "")
 
 add_subdirectory(unit)
 
+# Every technical document held to ASD-STE100 against test/ste_ratchet.tsv, in every suite run as in the hook
+add_test(NAME ste COMMAND "${Python3_EXECUTABLE}" "${EMBEDDED_TYPES_HARNESS}" ste WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+set_tests_properties(ste PROPERTIES LABELS "docs")
+
 get_property(EMBEDDED_TYPES_BUILT GLOBAL PROPERTY EMBEDDED_TYPES_SUITES_BUILT)
 list(LENGTH EMBEDDED_TYPES_BUILT EMBEDDED_TYPES_BUILT_COUNT)
 if(EMBEDDED_TYPES_BUILT_COUNT EQUAL 0)

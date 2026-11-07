@@ -11,6 +11,7 @@
   harness.py suites [--strict]                every suite, its cases, and what will never run
   harness.py cases <dir>...                   what Unity will register, and what it will walk past
   harness.py runners gen <dir>... --unity <rb>   write <dir>/unity_runner.c
+  harness.py ste [--show [DOC ...]] [--lower]  every technical document held to ASD-STE100 against the ratchet
 
 There are two build trees. Each carries its own flags here, and running one takes no remembered
 shell invocation:
@@ -438,6 +439,25 @@ def cmd_runners_gen(parsed):
     return 0
 
 
+STE_CHECK = os.path.join(ROOT, "test", "ste_check.py")
+STE_RATCHET = os.path.join(ROOT, "test", "ste_ratchet.tsv")
+
+
+def cmd_ste(parsed):
+    """Hold every technical document to ASD-STE100: no document carries more findings than test/ste_ratchet.tsv.
+
+    test/ste_check.py is the checker, the same file in orior, MMgr and embedded_types. --show lists the findings
+    of the documents named, or of the tree; --lower writes each count into the ratchet, lowered and never raised.
+    The pre-commit hook and the ste test in the suite run the ratchet. Vocabulary is orior's banned-word check's
+    to hold, and this check reads no word list.
+    """
+    if parsed.show is not None:
+        return subprocess.run([sys.executable, STE_CHECK] + (parsed.show or ["."]), cwd=ROOT).returncode
+    if parsed.lower:
+        return subprocess.run([sys.executable, STE_CHECK, "--ratchet-write", STE_RATCHET, "."], cwd=ROOT).returncode
+    return subprocess.run([sys.executable, STE_CHECK, "--ratchet", STE_RATCHET, "."], cwd=ROOT).returncode
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -469,6 +489,11 @@ def main():
     gen.add_argument("suite", nargs="+")
     gen.add_argument("--unity", required=True, help="path to Unity's auto/generate_test_runner.rb")
     gen.set_defaults(fn=cmd_runners_gen)
+
+    parser = sub.add_parser("ste", help="every technical document held to ASD-STE100 against the ratchet")
+    parser.add_argument("--show", nargs="*", help="list the findings of these documents, or of the tree")
+    parser.add_argument("--lower", action="store_true", help="write each document's count into the ratchet")
+    parser.set_defaults(fn=cmd_ste)
 
     parsed = ap.parse_args()
     return parsed.fn(parsed)
