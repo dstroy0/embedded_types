@@ -1,0 +1,64 @@
+name: Proofs
+
+# The Lean proofs of theory/embedded_types, and each GenMC client of test/prove under each memory model, through
+# test/harness.py prove.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proofs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lean:
+    name: Lean
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: theory/embedded_types
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install elan
+        # elan installs the toolchain that lean-toolchain names, at the first lake command.
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Build the proofs
+        run: lake build
+
+      - name: No proof is open
+        # lake build passes a theorem that sorry closes, and only shows a warning. This step fails on it.
+        run: |
+          if grep -rn --include='*.lean' -w sorry EmbeddedTypes EmbeddedTypes.lean; then
+            echo "::error title=sorry::a proof is open"
+            exit 1
+          fi
+
+  genmc:
+    name: GenMC
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run each client under each memory model
+        # The first run on a host installs the packages of GenMC, then builds and installs the tag that
+        # test/prove/prove.py names.
+        run: python3 test/harness.py prove
+
+      - name: Keep the run
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: genmc-${{ github.run_id }}
+          path: build/prove-*
+          if-no-files-found: ignore

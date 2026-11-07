@@ -12,12 +12,15 @@
   harness.py cases <dir>...                   what Unity will register, and what it will walk past
   harness.py runners gen <dir>... --unity <rb>   write <dir>/unity_runner.c
   harness.py ste [--show [DOC ...]] [--lower]  every technical document checked against ASD-STE100 with the ratchet
+  harness.py prove [--client C]               each GenMC client under test/prove, under each memory model
 
-There are two build trees. Each carries its own flags here, and running one takes no remembered
+There are four build trees. Each carries its own flags here, and running one takes no remembered
 shell invocation:
 
   build          the library, as it ships
   build-werror   the same, with EMBEDDED_TYPES_WERROR on
+  build-tsan     the same, under the thread sanitizer, with GCC or Clang
+  build-asan     the same, under the address and undefined behavior sanitizers, with GCC or Clang
 
 The second one matters because this library is headers a consumer compiles inside its own
 translation unit. A warning it introduces is raised in the consumer's build and attributed to the
@@ -242,6 +245,18 @@ TREES = {
         # to fix here is one somebody else has to read.
         "args": ["-DEMBEDDED_TYPES_WERROR=ON"],
     },
+    "build-tsan": {
+        "what": "the same, under the thread sanitizer",
+        # The turnstile's suite runs threads on one set, and the sanitizer reports each race between them. GCC and
+        # Clang have it; MSVC does not.
+        "args": ["-DCMAKE_C_FLAGS=-fsanitize=thread -g -O1", "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread"],
+    },
+    "build-asan": {
+        "what": "the same, under the address and undefined behavior sanitizers",
+        # Each fault the two sanitizers find stops the suite, and the case that ran it fails.
+        "args": ["-DCMAKE_C_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g",
+                 "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"],
+    },
 }
 
 
@@ -460,6 +475,20 @@ def cmd_ste(parsed):
     return subprocess.run([sys.executable, STE_CHECK, "--ratchet", STE_RATCHET, "."], cwd=ROOT).returncode
 
 
+def cmd_prove(parsed):
+    """Run each GenMC client under test/prove under each memory model, or the clients named.
+
+    test/prove/prove.py does the work, and its docstring states what each run holds. The run's logs go under the
+    build root as prove-<stamp>.
+    """
+    sys.path.insert(0, os.path.join(ROOT, "test", "prove"))
+    import prove  # noqa: PLC0415  the module is only importable once its folder is on the path
+    import time  # noqa: PLC0415
+
+    run_root = os.path.join(BUILD_ROOT, "build", "prove-" + time.strftime("%Y%m%d-%H%M%S"))
+    return prove.prove(ROOT, run_root, parsed.client)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -496,6 +525,10 @@ def main():
     parser.add_argument("--show", nargs="*", help="list the findings of these documents, or of the tree")
     parser.add_argument("--lower", action="store_true", help="write each document's count into the ratchet")
     parser.set_defaults(fn=cmd_ste)
+
+    parser = sub.add_parser("prove", help="each GenMC client under test/prove, under each memory model")
+    parser.add_argument("--client", action="append", help="a client by name, without _genmc.c, any number of times")
+    parser.set_defaults(fn=cmd_prove)
 
     parsed = ap.parse_args()
     return parsed.fn(parsed)

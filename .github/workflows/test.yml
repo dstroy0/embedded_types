@@ -1,0 +1,51 @@
+name: Test
+
+# The suite on each compiler, through test/harness.py. Each tree is one that the harness defines, with its flags.
+# A flag that this file also writes is a second copy of that flag.
+#
+# GCC and Clang run all four trees: as the library ships, with each warning an error, under the thread sanitizer,
+# and under the address and undefined behavior sanitizers. MSVC has no thread sanitizer, and it runs the first two.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: ${{ matrix.cc }} ${{ matrix.tree }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+        tree: [build, build-werror, build-tsan, build-asan]
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build and test
+        run: python3 test/harness.py test --tree ${{ matrix.tree }} --jobs 4
+
+  windows:
+    name: msvc ${{ matrix.tree }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tree: [build, build-werror]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build and test
+        run: python test/harness.py test --tree ${{ matrix.tree }} --jobs 4
