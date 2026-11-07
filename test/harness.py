@@ -11,7 +11,7 @@
   harness.py suites [--strict]                every suite, its cases, and what will never run
   harness.py cases <dir>...                   what Unity will register, and what it will walk past
   harness.py runners gen <dir>... --unity <rb>   write <dir>/unity_runner.c
-  harness.py ste [--show [DOC ...]] [--lower]  every technical document held to ASD-STE100 against the ratchet
+  harness.py ste [--show [DOC ...]] [--lower]  every technical document checked against ASD-STE100 with the ratchet
 
 There are two build trees. Each carries its own flags here, and running one takes no remembered
 shell invocation:
@@ -490,7 +490,7 @@ def main():
     gen.add_argument("--unity", required=True, help="path to Unity's auto/generate_test_runner.rb")
     gen.set_defaults(fn=cmd_runners_gen)
 
-    parser = sub.add_parser("ste", help="every technical document held to ASD-STE100 against the ratchet")
+    parser = sub.add_parser("ste", help="every technical document checked against ASD-STE100 with the ratchet")
     parser.add_argument("--show", nargs="*", help="list the findings of these documents, or of the tree")
     parser.add_argument("--lower", action="store_true", help="write each document's count into the ratchet")
     parser.set_defaults(fn=cmd_ste)
