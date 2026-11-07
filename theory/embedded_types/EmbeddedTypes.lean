@@ -3,3 +3,5 @@ import EmbeddedTypes.Turnstile
 import EmbeddedTypes.TurnstileWake
 import EmbeddedTypes.TurnstileOrder
 import EmbeddedTypes.Lane
+import EmbeddedTypes.Atomic
+import EmbeddedTypes.Widths

@@ -100,6 +100,7 @@ EMBED_ENUM_BYTE(ByteEnumProbe, TEST_BYTE_ENUM_MIN = 0, /**< Low end of the probe
  *       and no other declaration here aligns to sixteen. A reported alignment of sixteen came from
  *       the attribute.
  */
+#if EMBED_HAS_ATTRIBUTE(aligned)
 typedef uint32_t RaisedAlignmentProbe EMBED_ALIGN(16);
 
 /**
@@ -110,6 +111,7 @@ typedef uint32_t RaisedAlignmentProbe EMBED_ALIGN(16);
  *       still reads it from any address.
  */
 typedef uint32_t LoweredAlignmentProbe EMBED_ALIGN(1);
+#endif
 
 /**
  * @brief A word carrying both halves of EMBED_RAW, readable from any address.
@@ -329,6 +331,10 @@ void test_the_alignment_attribute_raises_and_lowers(void)
 #if EMBED_HAS_ATTRIBUTE(aligned)
     TEST_ASSERT_EQUAL_size_t_MESSAGE(16u, _Alignof(RaisedAlignmentProbe), "the raised type aligns to sixteen");
     TEST_ASSERT_EQUAL_size_t_MESSAGE(1u, _Alignof(LoweredAlignmentProbe), "the lowered type aligns to one");
+#elif defined(_MSC_VER)
+    // MSVC's form stands before an object and raises its alignment only, as the header states
+    static EMBED_ALIGN(16) uint32_t raised;
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(0u, (size_t)((uintptr_t)&raised % 16u), "the raised object aligns to sixteen");
 #else
     TEST_IGNORE_MESSAGE("EMBED_HAS_ATTRIBUTE(aligned) is 0 here, so EMBED_ALIGN expands to nothing");
 #endif

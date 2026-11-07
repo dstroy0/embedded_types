@@ -338,7 +338,8 @@ def build(tree, jobs):
     """Build @p tree, reporting only what went wrong."""
     if configure(tree) != 0:
         return 1
-    completed = run(["cmake", "--build", tree_path(tree), "-j", str(jobs)])
+    # A generator with many configurations builds the one named here, which ctest below runs
+    completed = run(["cmake", "--build", tree_path(tree), "--config", "Debug", "-j", str(jobs)])
     if completed.returncode != 0:
         sys.stdout.write(completed.stdout[-4000:])
         sys.stderr.write(completed.stderr[-4000:])
@@ -350,7 +351,8 @@ def build(tree, jobs):
 
 def ctest(tree, pattern):
     """Run @p tree's suites, and name the ones that failed."""
-    cmd = ["ctest", "--test-dir", tree_path(tree), "--output-on-failure"]
+    # A generator with many configurations has each test once a configuration, and ctest runs none unnamed
+    cmd = ["ctest", "--test-dir", tree_path(tree), "-C", "Debug", "--output-on-failure"]
     if pattern:
         cmd += ["-R", pattern]
     completed = run(cmd)
