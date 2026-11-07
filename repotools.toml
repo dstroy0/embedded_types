@@ -9,7 +9,7 @@
 
 [project]
 name = "embedded_types"
-version = "1.0.4"
+version = "1.0.5"
 spdx = "AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational"
 copyright = "Copyright (C) 2026 Douglas Quigg (dstroy0) <dquigg123@gmail.com>"
 prefix = "EMBED"
