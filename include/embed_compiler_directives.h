@@ -220,6 +220,16 @@
  */
 #if EMBED_HAS_ATTRIBUTE(aligned)
 #define EMBED_ALIGN(bytes_) __attribute__((aligned(bytes_)))
+#elif defined(_MSC_VER)
+// MSVC takes the C11 _Alignas, which stands before a member or an object, takes a constant
+// expression, and raises an alignment and never lowers one: a request for 1 keeps the natural
+// alignment there, as the warning above states. C++, as nvcc compiles a device source with cl as
+// its host compiler, spells the same specifier alignas.
+#if defined(__cplusplus)
+#define EMBED_ALIGN(bytes_) alignas(bytes_)
+#else
+#define EMBED_ALIGN(bytes_) _Alignas(bytes_)
+#endif
 #else
 
 #define EMBED_ALIGN(bytes_)
@@ -252,7 +262,14 @@
  *       apart the first time someone edits one.
  * @warning Both warnings above apply here. Neither failure is diagnosed.
  */
+#if EMBED_HAS_ATTRIBUTE(aligned)
 #define EMBED_RAW EMBED_ALIGN(1) EMBED_ALIAS
+#else
+// _Alignas stands before a declaration and never lowers an alignment, and so EMBED_RAW, which
+// stands after the name and asks for 1, has no form there: the type is the plain word, as the
+// warning above states.
+#define EMBED_RAW EMBED_ALIAS
+#endif
 
 /**
  * @brief Expands to __host__ __device__ under nvcc, and to nothing elsewhere.

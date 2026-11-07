@@ -149,8 +149,8 @@ typedef char embed_lane_chars EMBED_VECTOR(EMBED_LANE_BYTES);
 #else
 typedef struct
 {
-    embed_u32 at[EMBED_LANE_U32S]; /**< The 32-bit lanes, the lowest address first. */
-} embed_lane EMBED_ALIGN(EMBED_LANE_BYTES);
+    EMBED_ALIGN(EMBED_LANE_BYTES) embed_u32 at[EMBED_LANE_U32S]; /**< The 32-bit lanes, the lowest address first. */
+} embed_lane;
 #endif
 
 EMBED_STATIC_ASSERT(sizeof(embed_lane) == EMBED_LANE_BYTES, "embed_lane must be exactly EMBED_LANE_BYTES wide");
