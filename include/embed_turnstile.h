@@ -142,8 +142,11 @@ void embed_word_wake(embed_atomic_word *word);
  */
 embed_u64 embed_clock_ns(void);
 
-/** @brief The processor's pause in a spin, a compiler barrier alone where the processor has none the compiler reaches. */
-#if defined(__has_builtin)
+/**
+ * @brief The processor's pause in a spin, a compiler barrier alone where the processor has none the compiler reaches.
+ * @note A build that defines it before this header keeps its own, as a model checker's build does with no processor.
+ */
+#if !defined(EMBED_TURNSTILE_PAUSE) && defined(__has_builtin)
 #if __has_builtin(__builtin_ia32_pause)
 #define EMBED_TURNSTILE_PAUSE() __builtin_ia32_pause()
 #elif __has_builtin(__builtin_arm_yield)
@@ -304,8 +307,13 @@ EMBED_INLINE unsigned int embed_turnstile_enter(EmbedTurnstiles *set, embed_atom
     embed_atomic_word_store(&lane->badge, embed_turnstile_badge(id));
     // the pass begun before anything it reads is read, which the fence of a writer's drain pairs with
     EMBED_ATOMIC_ORDERED();
-    (void)embed_turnstile_backed_off(&set->busy, embed_atomic_word_load(&set->busy), EMBED_TURNSTILE_SLEEPERS,
-                                     (unsigned int)1u << EMBED_TURNSTILE_SLEEP_SHIFT, none);
+    // The sleep needs every open lane busy in the value read: a pass's end wakes only a bank it frees, and a value
+    // read with a lane free has no pass's end to wake it
+    const embed_atomic_word_value seen = embed_atomic_word_load(&set->busy);
+    const unsigned int full =
+        (unsigned int)(((embed_atomic_word_load(&set->open) | 1u) & ~seen & EMBED_TURNSTILE_LANE_BITS) == 0u);
+    (void)embed_turnstile_backed_off(&set->busy, seen, EMBED_TURNSTILE_SLEEPERS,
+                                     (unsigned int)1u << EMBED_TURNSTILE_SLEEP_SHIFT, none & full);
     (void)embed_atomic_u32_fetch_sub(&set->waiting, 1u);
     return at;
 }
