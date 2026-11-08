@@ -11,17 +11,21 @@ extern void setUp(void);
 extern void tearDown(void);
 extern void test_a_sleep_on_a_word_that_moved_ends_at_once_reporting_the_move(void);
 extern void test_a_sleep_on_a_still_word_ends_with_its_time_and_reports_no_move(void);
+extern void test_a_sleep_of_no_time_answers_at_once(void);
 extern void test_the_clock_moves_forward(void);
 extern void test_a_thread_asleep_on_a_word_wakes_as_another_moves_it_and_wakes_its_address(void);
+extern void test_a_backoff_inside_its_first_unit_only_pauses(void);
+extern void test_a_backoff_past_its_first_unit_waits_and_raises_its_exponent_to_the_ceiling(void);
+extern void test_a_backoff_that_may_not_sleep_only_pauses(void);
 extern void test_a_set_at_rest_is_one_lane(void);
-extern void test_a_pass_badges_its_lane_with_its_id_and_stamp_and_its_end_clears_the_state(void);
+extern void test_an_entry_takes_a_free_lane_and_its_leave_clears_busy_and_counts_the_pass(void);
+extern void test_an_entry_on_a_full_set_grows_it_and_the_last_leave_on_top_closes_the_lane(void);
+extern void test_a_growth_reopens_a_closed_lane(void);
+extern void test_an_entry_on_a_busy_lane_spills_to_the_next_open_lane(void);
 extern void test_a_drain_with_no_pass_under_way_returns_at_once(void);
-extern void test_a_reader_with_no_free_lane_opens_the_next_and_passes_of_one_id_spill_in_stamp_order(void);
-extern void test_an_idle_lane_under_a_busy_one_stays_open_until_the_busy_one_ends(void);
 extern void test_a_drain_waits_out_a_pass_begun_before_it(void);
-extern void test_a_drain_waits_out_a_lane_claimed_before_its_badge_is_written(void);
-extern void test_a_crowd_opens_lanes_to_its_pressure_and_the_bank_retires_them_as_it_empties(void);
-extern void test_readers_never_read_a_record_the_writer_released_after_its_drain(void);
+extern void test_a_crowd_grows_the_set_to_its_pressure_and_no_lane_stays_busy(void);
+extern void test_workers_never_read_a_record_the_writer_released_after_its_drain(void);
 
 
 /*=======Mock Management=====*/
@@ -82,20 +86,24 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/embedded_types/test/unit/test_embed_turnstile\\test_embed_turnstile.c");
-  run_test(test_a_sleep_on_a_word_that_moved_ends_at_once_reporting_the_move, "test_a_sleep_on_a_word_that_moved_ends_at_once_reporting_the_move", 86);
-  run_test(test_a_sleep_on_a_still_word_ends_with_its_time_and_reports_no_move, "test_a_sleep_on_a_still_word_ends_with_its_time_and_reports_no_move", 95);
-  run_test(test_the_clock_moves_forward, "test_the_clock_moves_forward", 102);
-  run_test(test_a_thread_asleep_on_a_word_wakes_as_another_moves_it_and_wakes_its_address, "test_a_thread_asleep_on_a_word_wakes_as_another_moves_it_and_wakes_its_address", 135);
-  run_test(test_a_set_at_rest_is_one_lane, "test_a_set_at_rest_is_one_lane", 145);
-  run_test(test_a_pass_badges_its_lane_with_its_id_and_stamp_and_its_end_clears_the_state, "test_a_pass_badges_its_lane_with_its_id_and_stamp_and_its_end_clears_the_state", 152);
-  run_test(test_a_drain_with_no_pass_under_way_returns_at_once, "test_a_drain_with_no_pass_under_way_returns_at_once", 178);
-  run_test(test_a_reader_with_no_free_lane_opens_the_next_and_passes_of_one_id_spill_in_stamp_order, "test_a_reader_with_no_free_lane_opens_the_next_and_passes_of_one_id_spill_in_stamp_order", 187);
-  run_test(test_an_idle_lane_under_a_busy_one_stays_open_until_the_busy_one_ends, "test_an_idle_lane_under_a_busy_one_stays_open_until_the_busy_one_ends", 208);
-  run_test(test_a_drain_waits_out_a_pass_begun_before_it, "test_a_drain_waits_out_a_pass_begun_before_it", 249);
-  run_test(test_a_drain_waits_out_a_lane_claimed_before_its_badge_is_written, "test_a_drain_waits_out_a_lane_claimed_before_its_badge_is_written", 288);
-  run_test(test_a_crowd_opens_lanes_to_its_pressure_and_the_bank_retires_them_as_it_empties, "test_a_crowd_opens_lanes_to_its_pressure_and_the_bank_retires_them_as_it_empties", 316);
-  run_test(test_readers_never_read_a_record_the_writer_released_after_its_drain, "test_readers_never_read_a_record_the_writer_released_after_its_drain", 390);
+  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/mmgr/deps/embedded_types/test/unit/test_embed_turnstile\\test_embed_turnstile.c");
+  run_test(test_a_sleep_on_a_word_that_moved_ends_at_once_reporting_the_move, "test_a_sleep_on_a_word_that_moved_ends_at_once_reporting_the_move", 84);
+  run_test(test_a_sleep_on_a_still_word_ends_with_its_time_and_reports_no_move, "test_a_sleep_on_a_still_word_ends_with_its_time_and_reports_no_move", 93);
+  run_test(test_a_sleep_of_no_time_answers_at_once, "test_a_sleep_of_no_time_answers_at_once", 100);
+  run_test(test_the_clock_moves_forward, "test_the_clock_moves_forward", 110);
+  run_test(test_a_thread_asleep_on_a_word_wakes_as_another_moves_it_and_wakes_its_address, "test_a_thread_asleep_on_a_word_wakes_as_another_moves_it_and_wakes_its_address", 143);
+  run_test(test_a_backoff_inside_its_first_unit_only_pauses, "test_a_backoff_inside_its_first_unit_only_pauses", 153);
+  run_test(test_a_backoff_past_its_first_unit_waits_and_raises_its_exponent_to_the_ceiling, "test_a_backoff_past_its_first_unit_waits_and_raises_its_exponent_to_the_ceiling", 171);
+  run_test(test_a_backoff_that_may_not_sleep_only_pauses, "test_a_backoff_that_may_not_sleep_only_pauses", 187);
+  run_test(test_a_set_at_rest_is_one_lane, "test_a_set_at_rest_is_one_lane", 199);
+  run_test(test_an_entry_takes_a_free_lane_and_its_leave_clears_busy_and_counts_the_pass, "test_an_entry_takes_a_free_lane_and_its_leave_clears_busy_and_counts_the_pass", 206);
+  run_test(test_an_entry_on_a_full_set_grows_it_and_the_last_leave_on_top_closes_the_lane, "test_an_entry_on_a_full_set_grows_it_and_the_last_leave_on_top_closes_the_lane", 218);
+  run_test(test_a_growth_reopens_a_closed_lane, "test_a_growth_reopens_a_closed_lane", 237);
+  run_test(test_an_entry_on_a_busy_lane_spills_to_the_next_open_lane, "test_an_entry_on_a_busy_lane_spills_to_the_next_open_lane", 258);
+  run_test(test_a_drain_with_no_pass_under_way_returns_at_once, "test_a_drain_with_no_pass_under_way_returns_at_once", 278);
+  run_test(test_a_drain_waits_out_a_pass_begun_before_it, "test_a_drain_waits_out_a_pass_begun_before_it", 316);
+  run_test(test_a_crowd_grows_the_set_to_its_pressure_and_no_lane_stays_busy, "test_a_crowd_grows_the_set_to_its_pressure_and_no_lane_stays_busy", 342);
+  run_test(test_workers_never_read_a_record_the_writer_released_after_its_drain, "test_workers_never_read_a_record_the_writer_released_after_its_drain", 422);
 
   return UNITY_END();
 }

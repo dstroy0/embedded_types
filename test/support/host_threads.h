@@ -31,4 +31,12 @@
  */
 int host_threads_run(void (*each)(void), unsigned int count);
 
+/**
+ * @brief The rest of this thread's time slice given to another thread.
+ *
+ * @note A wait loop calls it on each turn. Thus a thread that waits does not keep a core from the thread that it
+ *       waits for, on a host with fewer cores than threads.
+ */
+void host_threads_yield(void);
+
 #endif

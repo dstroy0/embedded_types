@@ -1,7 +1,9 @@
-import EmbeddedTypes.TurnstileBits
-import EmbeddedTypes.Turnstile
-import EmbeddedTypes.TurnstileWake
-import EmbeddedTypes.TurnstileOrder
 import EmbeddedTypes.Lane
 import EmbeddedTypes.Atomic
 import EmbeddedTypes.Widths
+import EmbeddedTypes.Manifold.LaneWord
+import EmbeddedTypes.Manifold.Backoff
+import EmbeddedTypes.Manifold.Open
+import EmbeddedTypes.Manifold.Queue
+import EmbeddedTypes.Manifold.Drain
+import EmbeddedTypes.Manifold.Wake

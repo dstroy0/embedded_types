@@ -9,8 +9,8 @@ and `decide` checks each theorem on every arm of the chain.
 - `index_fits`: `EMBED_INDEX_BITS` fits the word on every arm, the assertion `sizeof(embed_index) <= sizeof(embed_word)`.
 - `lane_holds`: on every arm, `EMBED_LANE_BITS` is whole 32-bit lanes, at least one, at most 512, and whole words;
   `EMBED_LANE_U32S` is 1, 2, 4, 8 or 16, the arms of `EMBED_LANE_WORDS`; and the byte mask holds a bit for each byte.
-- `badge_fields`: at each word width, the badge's id, completion bit, sleeper bit and stamp fill the word, with the
-  stamp 46 bits wide at 64, 20 at 32 and 4 at 16.
+- `lane_fields`, `generation_widths` and `lanes_fit`: at each word width, the lane word's busy, closed and sleeper bits
+  and its generation fill the word, the generation 61 bits wide at 64, 29 at 32 and 13 at 16, and the open count fits.
 - `narg_counts`: `EMBED_NARG` gives n for each n from 1 to 24.
 -/
 
@@ -59,14 +59,16 @@ theorem lane_holds : ∀ cuda ∈ [true, false], ∀ v ∈ vectorArms, ∀ w ∈
       bits / 8 ≤ maskBits (bits / 8) := by
   decide
 
-/-- The badge at a word width: id bits, the completion and sleeper bits, and the stamp's bits. -/
-def idBits (w : Nat) : Nat := if w ≥ 64 then 16 else 10
-def stampBits (w : Nat) : Nat := w - idBits w - 2
+/-- The lane word at a word width: the busy, closed and sleeper bits, and the generation's bits. -/
+def generationBits (w : Nat) : Nat := w - 3
 
-/-- The four fields fill the word at each width, and the stamp is 46, 20 or 4 bits wide. -/
-theorem badge_fields : ∀ w ∈ [64, 32, 16], idBits w + 2 + stampBits w = w ∧ 0 < stampBits w := by decide
+/-- The four fields fill the word at each width, and the generation is 61, 29 or 13 bits wide. -/
+theorem lane_fields : ∀ w ∈ [64, 32, 16], 3 + generationBits w = w ∧ 0 < generationBits w := by decide
 
-theorem stamp_widths : stampBits 64 = 46 ∧ stampBits 32 = 20 ∧ stampBits 16 = 4 := by decide
+theorem generation_widths : generationBits 64 = 61 ∧ generationBits 32 = 29 ∧ generationBits 16 = 13 := by decide
+
+/-- `EMBED_TURNSTILE_LANES` is from 1 to 64, and the open count less one fits each word width. -/
+theorem lanes_fit : ∀ w ∈ [64, 32, 16], 64 - 1 < 2 ^ w := by decide
 
 /-- `EMBED_NARG`: the caller's arguments, then the constants 24 down to 0; `EMBED_ARG_N` takes the 25th. -/
 def narg (n : Nat) : Option Nat :=

@@ -20,6 +20,11 @@
 /** @brief The work the threads of the current run do, read by each as it starts. */
 static void (*s_each)(void);
 
+void host_threads_yield(void)
+{
+    (void)SwitchToThread();
+}
+
 /** @brief A Windows thread's entry, doing the run's work once. */
 static DWORD WINAPI host_threads_entry(LPVOID unused)
 {
@@ -54,6 +59,12 @@ int host_threads_run(void (*each)(void), unsigned int count)
 }
 #else
 #include <pthread.h>
+#include <sched.h>
+
+void host_threads_yield(void)
+{
+    (void)sched_yield();
+}
 
 /** @brief The work the threads of the current run do, read by each as it starts. */
 static void (*s_each)(void);

@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational
 """harness.py prove: each client under test/prove named *_genmc.c, run by GenMC under each memory model.
 
-GenMC explores each execution that the model allows. It reports a failed assertion, a data race, or a thread
-blocked in a sleep that no wake ends (genmc_host.h). A client that passes under one model and fails under another
-names the order that the code needs.
+GenMC explores each execution that the model allows. It reports a failed assertion, a data race, or a liveness
+violation: a thread asleep in a wait of genmc_host.h that no later wake ends. A client that passes under one model
+and fails under another names the order that the code needs.
 
 GenMC runs in WSL on a Windows host and directly on Linux. Its source is at ~/src/genmc, at the tag GENMC_TAG. The
 first run that needs it builds it and installs it to ~/.local. Each run writes its logs to one folder under build/.
@@ -18,10 +18,11 @@ import subprocess
 # The models: sequential consistency, x86, C11, the hardware model under C11, and Armv8.
 GENMC = "~/.local/bin/genmc"
 GENMC_MODELS = ["--sc", "--tso", "--rc11", "--imm", "--arm8"]
-# GenMC's load annotation, spin-assume and loop jump threading read each address in a loop's condition, and stop on
-# a constant address other than NULL. With the three off, each loop runs to the unroll bound.
-GENMC_FLAGS = ["--disable-estimation", "--unroll=12", "--disable-load-annotation", "--disable-spin-assume",
-               "--disable-loop-jump-threading"]
+# No unroll bound is set: each loop of a client ends by its finite passes and by the wakes of genmc_host.h. The wait
+# of genmc_host.h is a loop that reads only the count of wakes. GenMC's spin-assume takes it as a wait, and
+# --check-liveness reports an execution where no later wake ends it. A blocked execution is a branch where a read
+# took a value that an assume refused, which GenMC drops; it is not a fault.
+GENMC_FLAGS = ["--disable-estimation", "--check-liveness"]
 GENMC_SOURCE = "https://github.com/MPI-SWS/genmc.git"
 # The release that the clients use. Each host builds this tag. Thus, each host runs the same checker.
 GENMC_TAG = "v0.20.0"
@@ -83,12 +84,10 @@ def genmc(root, client, model, run_root, name):
     with open(os.path.join(run_root, "%s_genmc_%s.txt" % (name, model.lstrip("-"))), "w", encoding="utf-8") as log:
         log.write(text)
     explored = [line for line in text.splitlines() if line.startswith("Number of complete executions explored")]
-    blocked = [line for line in text.splitlines() if "blocked" in line.lower() and any(c.isdigit() and c != "0"
-                                                                                     for c in line.split(":")[-1])]
-    if "No errors were detected" in text and not blocked:
+    if "No errors were detected" in text and r.returncode == 0:
         return "proved, %s executions" % (explored[-1].split(":")[-1].strip() if explored else "?")
     faults = [line.strip() for line in text.splitlines()
-              if line.startswith(("Error", "Assertion violation", "INTERNAL", "LLVM ERROR"))] + blocked
+              if line.startswith(("Error", "Assertion violation", "INTERNAL", "LLVM ERROR"))]
     return "FAILED: " + (faults[0] if faults else text.strip()[-200:])
 
 

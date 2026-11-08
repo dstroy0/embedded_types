@@ -4,27 +4,25 @@
 
 Source: [`include/embed_turnstile.h`](https://github.com/dstroy0/embedded_types/blob/main/include/embed_turnstile.h)
 
-Turnstiles, and the sleep on the address of a word that their waits use.
+Turnstiles as a manifold of lanes, and the sleep on the address of a word that their waits use.
 
-A set of turnstiles is a bank of lanes, with one badge word for each lane. One lane mask shows the open lanes, and a second shows the lanes with a pass under way. A reader badges in with a time stamp, waits in the queue, and takes the next free lane. A writer swaps a published pointer, then drains the lanes of a snapshot of the mask. The bank changes its size to match the pressure of the queue.
+A set of turnstiles is a manifold of lanes. Each lane is one word on a cache line of its own. A worker enters at the lane that its address selects, and where that lane is busy it spills to the next. A writer swaps a published pointer, then drains: it waits until each pass that holds a lane at the drain ends. The manifold opens lanes under pressure and closes them as the pressure goes.
 
-> **Note:** Three words hold the state of the set. `open` has one bit for each open lane, with the low lanes from bit 0. `busy` has one bit for each lane with a pass under way. Its top bit is the flag that shows a thread asleep on the word.
+> **Note:** The lane word holds four fields, from bit 0 up: busy, closed, sleeper, and the generation. The busy bit shows that a pass or a contraction holds the lane. The closed bit shows a lane that a contraction closed. The sleeper bit shows that a thread sleeps on the word. The generation counts each pass end, each close and each reopen, and rolls in its bits.
 
-> **Note:** The badge word of each lane holds four fields, from high to low. They are the id of the reader in the lane, the completion bit, the sleeper bit, and the time of the pass. The time is the nanosecond on the clock of the host, and it rolls over in the bits below the sleeper bit. The id is an immutable place, the owner place of MMgr, and the field holds it whole.
+> **Note:** Each change to a lane word is one atomic operation. An entry is a fetch-or of busy. It takes the lane where the old value has busy clear. Where the old value has busy, it changes nothing. A leave, a close, a release and a reopen are each one fetch-add, which changes the low 32 bits that the futex compares.
 
-> **Note:** A badge-in adds one to the queue. It takes the lowest bit of `open & ~busy` with one fetch-or on `busy`. Where no lane is free, it opens the next lane of the bank and takes it. Then it writes the badge with the time from the clock, and it gives the lane. Where no lane is free and the bank is full, it does one backoff step on `busy` and gives [`EMBED_TURNSTILE_NONE`](#EMBED_TURNSTILE_NONE). The reader then badges in again.
+> **Note:** `open` holds the count of open lanes less one, so a set in storage of zeros has one lane. Arrivals only read it. A growth and a contraction write it, each with one compare-and-swap. `queue` counts the workers that found every open lane busy. An entry on a free lane writes no word but the lane word.
 
-> **Note:** The passes of one id start one after the other, each with a later stamp. So the passes of an id come one after the other in time, across the lanes that they spill to. A pass ends with two fetch-and operations. One clears the state bits of the badge, and one clears the bit of the lane in `busy`.
+> **Note:** The order of the passes is not the turnstile's. A consumer that needs an order keys it by the address of the worker and the worker's own sequence.
 
-> **Note:** The drain of a writer takes a snapshot of `busy`. It waits on each lane of the snapshot until the completion bit of the lane clears, or until its id or stamp moves. A pass that starts after the fence of the drain reads the swapped pointer, and the drain does not wait for it.
+> **Note:** A backoff keeps its start on the clock and its exponent in the caller's locals. No shared word holds a time. Inside the first unit, `2^EMBED_TURNSTILE_UNIT_SHIFT` ns, a step is a pause and no call. From one unit on, a step waits on the word for 2^([`EMBED_TURNSTILE_UNIT_SHIFT`](#EMBED_TURNSTILE_UNIT_SHIFT) + k) ns at most, and k goes up to [`EMBED_TURNSTILE_K_MOST`](#EMBED_TURNSTILE_K_MOST). A wake or a moved word ends the wait first.
 
-> **Note:** No branch occurs in a badge-in or at the end of a pass. Each choice is a mask, a select, or a row of a table of two entries, and the flag bit picks the row. A set at rest has one lane. When a pass ends with the queue empty, it trims `open` to the highest busy lane, and to one lane at least. A caller only enters and leaves, and the bank sets its own size.
+> **Note:** The host defines [`embed_word_wait`](#embed_word_wait), [`embed_word_wake`](#embed_word_wake) and [`embed_clock_ns`](#embed_clock_ns). A build that defines none of the three fails at the link, and the error names them.
 
-> **Note:** A backoff step is one pause, then the wait of the host on the word for the milliseconds of the step. The first steps wait 0 milliseconds, and the host answers at once with no sleep. Each step doubles. The waits use [`embed_word_wait`](#embed_word_wait), which the host defines on its address wait: a futex, WaitOnAddress or `__ulock_wait`. Where the system has none of these, a timed sleep takes their place.
+> **Note:** theory/`embedded_types`/EmbeddedTypes/Manifold proves the lane word, the backoff, the open count, the queue, the drain and the sleeps.
 
-> **Note:** At its end, a pass wakes the sleepers on its lane and on `busy` through [`embed_word_wake`](#embed_word_wake). The clock is [`embed_clock_ns`](#embed_clock_ns), which the host supplies. A build that defines none of the three fails at the link, and the error names them.
-
-> _**Warning:**_ The stamp rolls over after `2^EMBED_TURNSTILE_TIME_BITS` nanoseconds. A drain that waits on a lane can see a pass end and a new pass of the same id start with the same stamp. Then the drain waits until the new pass ends too.
+> _**Warning:**_ The generation rolls after 2^([`EMBED_WORD_BITS`](embed_types.md#EMBED_WORD_BITS) - 3) counts. A drain that reads one lane twice, with exactly that count of passes between the two reads, waits for the next pass to end too.
 
 ## Types
 
@@ -33,111 +31,101 @@ A set of turnstiles is a bank of lanes, with one badge word for each lane. One l
 ```c
 typedef struct
 {
-    EMBED_ALIGN(64) embed_atomic_word badge; /**< The lane's badge word. */
+    EMBED_ALIGN(64) embed_atomic_word word; /**< The lane word. */
 } EmbedTurnstileLane;
 EMBED_STATIC_ASSERT(sizeof(EmbedTurnstileLane) == 64u, "a lane takes one cache line");
 ```
 
-One lane: its badge word on a cache line of its own, so that no reader's pass shares another's line.
+One lane: its word on a cache line of its own, so that no pass shares the line of another.
 
-- `badge`: The lane's badge word.
+- `word`: The lane word.
 
 ### `EmbedTurnstiles` { #EmbedTurnstiles }
 
 ```c
 typedef struct
 {
-    EmbedTurnstileLane lane[EMBED_TURNSTILE_LANES_MOST]; /**< The lanes, those of `open` open. */
-    EmbedTurnstileLane spare;                            /**< The badge of a badge-in with no lane. */
-    EMBED_ALIGN(64) embed_atomic_word open;              /**< One bit for each open lane, bit 0 read as set. */
-    EMBED_ALIGN(64) embed_atomic_word busy;              /**< One bit for each busy lane, the sleeper flag above. */
-    embed_atomic_u32 waiting;                            /**< Readers queued for a lane. */
+    EmbedTurnstileLane lane[EMBED_TURNSTILE_LANES]; /**< The lanes, those below the open count open. */
+    EMBED_ALIGN(64) embed_atomic_word open;         /**< The count of open lanes less one. */
+    EMBED_ALIGN(64) embed_atomic_u32 queue;         /**< The workers that found every open lane busy. */
 } EmbedTurnstiles;
 ```
 
-A set of turnstiles, zeros at rest: one to each thing readers read while a writer releases its parts.
+A set of turnstiles, zeros at rest: one to each thing workers read while a writer releases its parts.
 
-> **Note:** `open` holds the open lanes. Each read of `open` takes bit 0 as set, because a set in storage of zeros has one lane. `busy` holds the lanes with a pass under way, and the sleeper flag above them. `waiting` is the pressure of the queue: the readers between their badge-in and their lane. `spare` is the word that gets the badge of a badge-in with no lane. So the write occurs on each path.
+> **Note:** `open` is the count of open lanes less one. `queue` is the count of workers that found every open lane busy.
 
-- `lane`: The lanes, those of `open` open.
-- `spare`: The badge of a badge-in with no lane.
-- `open`: One bit for each open lane, bit 0 read as set.
-- `busy`: One bit for each busy lane, the sleeper flag above.
-- `waiting`: Readers queued for a lane.
+- `lane`: The lanes, those below the open count open.
+- `open`: The count of open lanes less one.
+- `queue`: The workers that found every open lane busy.
+
+### `EmbedTurnstileBackoff` { #EmbedTurnstileBackoff }
+
+```c
+typedef struct
+{
+    embed_u64 start;  /**< The nanosecond that embed_clock_ns read at the start. */
+    unsigned int exponent; /**< The exponent of the next wait, from 0 to EMBED_TURNSTILE_K_MOST. */
+} EmbedTurnstileBackoff;
+```
+
+A backoff's state, in the caller's locals: the clock at its start, and its exponent.
+
+- `start`: The nanosecond that [`embed_clock_ns`](#embed_clock_ns) read at the start.
+- `exponent`: The exponent of the next wait, from 0 to [`EMBED_TURNSTILE_K_MOST`](#EMBED_TURNSTILE_K_MOST).
 
 ## Macros
 
-### `EMBED_TURNSTILE_LANES_MOST` { #EMBED_TURNSTILE_LANES_MOST }
+### `EMBED_TURNSTILE_LANES` { #EMBED_TURNSTILE_LANES }
 
 ```c
-#define EMBED_TURNSTILE_LANES_MOST (EMBED_WORD_BITS - 1u)
+#if !defined(EMBED_TURNSTILE_LANES)
+#define EMBED_TURNSTILE_LANES 64u
+#endif
+EMBED_STATIC_ASSERT((EMBED_TURNSTILE_LANES >= 1u) && (EMBED_TURNSTILE_LANES <= 64u),
+                    "EMBED_TURNSTILE_LANES must be from 1 to 64");
 ```
 
-The lanes a set can open: every bit of the word but the sleeper flag's.
+The lanes of a set. A build can set its own count before this header, from 1 to 64.
 
-### `EMBED_TURNSTILE_LANE_BITS` { #EMBED_TURNSTILE_LANE_BITS }
+### `EMBED_TURNSTILE_UNIT_SHIFT` { #EMBED_TURNSTILE_UNIT_SHIFT }
 
 ```c
-#define EMBED_TURNSTILE_LANE_BITS ((((embed_atomic_word_value)1u << EMBED_TURNSTILE_LANES_MOST)) - 1u)
-#define EMBED_TURNSTILE_SLEEPERS ((embed_atomic_word_value)1u << EMBED_TURNSTILE_LANES_MOST)
+#if !defined(EMBED_TURNSTILE_UNIT_SHIFT)
+#define EMBED_TURNSTILE_UNIT_SHIFT 10u
+#endif
+EMBED_STATIC_ASSERT(EMBED_TURNSTILE_UNIT_SHIFT <= 10u, "EMBED_TURNSTILE_UNIT_SHIFT must be 10 at most");
 ```
 
-The bits of `busy` that are lanes, and the flag above them that a thread sleeps on the word.
+The shift of the backoff's unit, `2^shift` ns: 10 for a CPU host, about 1.024 us, and 0 for a device. A build can set its own before this header.
 
-### `EMBED_TURNSTILE_NONE` { #EMBED_TURNSTILE_NONE }
+### `EMBED_TURNSTILE_K_MOST` { #EMBED_TURNSTILE_K_MOST }
 
 ```c
-#define EMBED_TURNSTILE_NONE 0xffffffffu
+#define EMBED_TURNSTILE_K_MOST 20u
 ```
 
-No lane: a badge-in that found none free with the bank full, after its backoff step.
+The most the backoff's exponent reaches: a wait of 2^([`EMBED_TURNSTILE_UNIT_SHIFT`](#EMBED_TURNSTILE_UNIT_SHIFT) + 20) ns at most.
+
+### `EMBED_TURNSTILE_BUSY` { #EMBED_TURNSTILE_BUSY }
+
+```c
+#define EMBED_TURNSTILE_BUSY ((embed_atomic_word_value)1u)
+#define EMBED_TURNSTILE_CLOSED ((embed_atomic_word_value)2u)
+#define EMBED_TURNSTILE_SLEEPER ((embed_atomic_word_value)4u)
+#define EMBED_TURNSTILE_GENERATION ((embed_atomic_word_value)8u)
+#define EMBED_TURNSTILE_GENERATION_SHIFT 3u
+```
+
+The fields of a lane word, and the unit of its generation.
 
 ### `EMBED_WAIT_FOREVER` { #EMBED_WAIT_FOREVER }
 
 ```c
-#define EMBED_WAIT_FOREVER 0xffffffffu
+#define EMBED_WAIT_FOREVER (~(embed_u64)0u)
 ```
 
 A sleep with no end, for [`embed_word_wait`](#embed_word_wait).
-
-### `EMBED_TURNSTILE_ID_BITS` { #EMBED_TURNSTILE_ID_BITS }
-
-```c
-#if EMBED_WORD_BITS >= 64u
-#define EMBED_TURNSTILE_ID_BITS 16u
-#else
-#define EMBED_TURNSTILE_ID_BITS 10u
-#endif
-#define EMBED_TURNSTILE_ID_SHIFT (EMBED_WORD_BITS - EMBED_TURNSTILE_ID_BITS)
-#define EMBED_TURNSTILE_ID_MASK ((((embed_atomic_word_value)1u << EMBED_TURNSTILE_ID_BITS) - 1u) << EMBED_TURNSTILE_ID_SHIFT)
-#define EMBED_TURNSTILE_COMPLETE_SHIFT (EMBED_TURNSTILE_ID_SHIFT - 1u)
-#define EMBED_TURNSTILE_SLEEPER_SHIFT (EMBED_TURNSTILE_ID_SHIFT - 2u)
-#define EMBED_TURNSTILE_COMPLETE ((embed_atomic_word_value)1u << EMBED_TURNSTILE_COMPLETE_SHIFT)
-#define EMBED_TURNSTILE_SLEEPER ((embed_atomic_word_value)1u << EMBED_TURNSTILE_SLEEPER_SHIFT)
-#define EMBED_TURNSTILE_TIME_BITS EMBED_TURNSTILE_SLEEPER_SHIFT
-#define EMBED_TURNSTILE_TIME_MASK (((embed_atomic_word_value)1u << EMBED_TURNSTILE_TIME_BITS) - 1u)
-```
-
-The badge word's fields, high to low: the id in [`EMBED_TURNSTILE_ID_BITS`](#EMBED_TURNSTILE_ID_BITS) bits, the completion bit, the sleeper bit, and the stamp in the bits left.
-
-### `EMBED_TURNSTILE_PASS_MASK` { #EMBED_TURNSTILE_PASS_MASK }
-
-```c
-#define EMBED_TURNSTILE_PASS_MASK (EMBED_TURNSTILE_ID_MASK | EMBED_TURNSTILE_TIME_MASK)
-#define EMBED_TURNSTILE_STATE_MASK (EMBED_TURNSTILE_COMPLETE | EMBED_TURNSTILE_SLEEPER)
-```
-
-The bits that tell one pass from another, its id and stamp. Then the bits that a pass clears at its end.
-
-### `EMBED_TURNSTILE_SLEEP_SHIFT` { #EMBED_TURNSTILE_SLEEP_SHIFT }
-
-```c
-#define EMBED_TURNSTILE_SLEEP_SHIFT 7u
-#define EMBED_TURNSTILE_BACKOFF_MOST_MS 64u
-#define EMBED_TURNSTILE_STEP_MOST (EMBED_TURNSTILE_BACKOFF_MOST_MS << EMBED_TURNSTILE_SLEEP_SHIFT)
-```
-
-The shift that turns a backoff's step into its sleep in milliseconds, 0 for the first steps; and the longest step, whose sleep is [`EMBED_TURNSTILE_BACKOFF_MOST_MS`](#EMBED_TURNSTILE_SLEEP_SHIFT).
 
 ### `EMBED_TURNSTILE_PAUSE` { #EMBED_TURNSTILE_PAUSE }
 
@@ -158,19 +146,27 @@ The processor's pause in a spin, a compiler barrier alone where the processor ha
 
 > **Note:** A build that defines it before this header keeps its own, as a model checker's build does with no processor.
 
+### `EMBED_TURNSTILE_NONE` { #EMBED_TURNSTILE_NONE }
+
+```c
+#define EMBED_TURNSTILE_NONE 0xffffffffu
+```
+
+No lane: a growth that took none.
+
 ## Functions
 
 ### `embed_word_wait` { #embed_word_wait }
 
 ```c
-int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value seen, embed_u32 milliseconds);
+int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value seen, embed_u64 nanoseconds);
 ```
 
-A sleep on word while it reads seen, at most milliseconds, [`EMBED_WAIT_FOREVER`](#EMBED_WAIT_FOREVER) for no end, and none at all for 0.
+A sleep on word while it reads seen, at most nanoseconds, [`EMBED_WAIT_FOREVER`](#EMBED_WAIT_FOREVER) for no end, and none at all for 0.
 
 - `[in]`: word The word slept on \[BORROWS\].
 - `[in]`: seen The value that the caller read.
-- `[in]`: milliseconds The most the sleep lasts; 0 answers at once with no sleep and no system call.
+- `[in]`: nanoseconds The most the sleep lasts. 0 answers at once with no sleep and no system call.
 
 \*\*Returns:\*\* 1 where the word moved off seen, 0 where it did not. A sleep is free to end early, so a sleeper tests what it waits for in a loop.
 
@@ -194,39 +190,41 @@ Every thread asleep on word woken.
 embed_u64 embed_clock_ns(void);
 ```
 
-The host's clock in nanoseconds, which a badge carries the low [`EMBED_TURNSTILE_TIME_BITS`](#EMBED_TURNSTILE_ID_BITS) bits of.
+The host's clock in nanoseconds, which the backoff measures its time on.
 
 \*\*Returns:\*\* The nanoseconds, from a start that the host selects.
 
 > **Note:** The host defines this beside [`embed_word_wait`](#embed_word_wait).
 
-### `embed_turnstile_lowest` { #embed_turnstile_lowest }
+### `embed_turnstile_backoff_begin` { #embed_turnstile_backoff_begin }
 
 ```c
-EMBED_INLINE unsigned int embed_turnstile_lowest(embed_atomic_word_value mask);
+EMBED_INLINE void embed_turnstile_backoff_begin(EmbedTurnstileBackoff *backoff);
 ```
 
-The place of the lowest bit set in mask.
+The start of a backoff: the clock read, and the exponent at 0.
 
-- `[in]`: mask A word with a bit set.
+- `[out]`: backoff The backoff \[BORROWS\].
 
-\*\*Returns:\*\* The bit's place from 0.
-
-> **Note:** The trailing zero count where the compiler has it, else the lowest bit isolated and placed by six masked steps.
-
-### `embed_turnstile_count` { #embed_turnstile_count }
+### `embed_turnstile_backed_off` { #embed_turnstile_backed_off }
 
 ```c
-EMBED_INLINE unsigned int embed_turnstile_count(embed_atomic_word_value mask);
+EMBED_INLINE void embed_turnstile_backed_off(embed_atomic_word *word, embed_atomic_word_value read,
+                                             embed_atomic_word_value flag, EmbedTurnstileBackoff *backoff,
+                                             unsigned int on);
 ```
 
-The bits of mask set, counted.
+One step of a backoff on word, which the caller last read as read.
 
-- `[in]`: mask A word.
+The step does one pause. Where the time since the start is less than one unit, or where `on` is 0, that is all. Otherwise the step sets the sleeper bit `flag` on the word, and the host waits on the word for the limit of the exponent. Then the exponent goes up by one, to [`EMBED_TURNSTILE_K_MOST`](#EMBED_TURNSTILE_K_MOST) at most.
 
-\*\*Returns:\*\* The count of its set bits.
+- `[in]`: word The word \[BORROWS\].
+- `[in]`: read What it was last read as.
+- `[in]`: flag The word's sleeper bit.
+- `[in,out]`: backoff The backoff \[BORROWS\].
+- `[in]`: on 1 where the value read lets the caller sleep, 0 for a pause alone.
 
-> **Note:** The population count where the compiler has it, else the SWAR count.
+> **Note:** The sleep needs a value that a later change ends. A caller sleeps only on a value whose change comes with a wake, such as a lane word that has the busy bit.
 
 ### `embed_turnstile_lanes` { #embed_turnstile_lanes }
 
@@ -234,104 +232,76 @@ The bits of mask set, counted.
 EMBED_INLINE unsigned int embed_turnstile_lanes(const EmbedTurnstiles *set);
 ```
 
-The lanes a set has open: the bits of `open`, bit 0 read as set.
+The lanes a set has open.
 
 - `[in]`: set The set \[BORROWS\].
 
-\*\*Returns:\*\* The lanes open, from 1 to [`EMBED_TURNSTILE_LANES_MOST`](#EMBED_TURNSTILE_LANES_MOST).
+\*\*Returns:\*\* The lanes open, from 1 to [`EMBED_TURNSTILE_LANES`](#EMBED_TURNSTILE_LANES).
 
-### `embed_turnstile_badge` { #embed_turnstile_badge }
-
-```c
-EMBED_INLINE embed_atomic_word_value embed_turnstile_badge(embed_atomic_word_value id);
-```
-
-The badge of id at the current time of the clock: the id in its field, the completion bit, and the stamp.
-
-- `[in]`: id The reader's id, nonzero, its low [`EMBED_TURNSTILE_ID_BITS`](#EMBED_TURNSTILE_ID_BITS) bits the badge.
-
-\*\*Returns:\*\* The badge word of a pass that starts now.
-
-### `embed_turnstile_backed_off` { #embed_turnstile_backed_off }
+### `embed_turnstile_changed` { #embed_turnstile_changed }
 
 ```c
-EMBED_INLINE unsigned int embed_turnstile_backed_off(embed_atomic_word *word, embed_atomic_word_value read,
-                                                     embed_atomic_word_value flag, unsigned int step, unsigned int on);
+EMBED_INLINE void embed_turnstile_changed(EmbedTurnstileLane *lane, embed_atomic_word_value change);
 ```
 
-One step of a backoff on word, which the caller last read as read.
+A fetch-add on a lane word that the caller holds, and the wake of its sleepers where the old value had the sleeper bit.
 
-The step does one pause. Where the step is at its sleeps, it sets the sleeper bit `flag` on the word. Then the host waits on the word for the milliseconds of the step. That time is 0 below the sleeps, and 0 where `on` is 0, and the host then answers at once.
+- `[in,out]`: lane The lane \[BORROWS\].
+- `[in]`: change The constant of the fetch-add.
 
-- `[in]`: word The word \[BORROWS\].
-- `[in]`: read What it was last read as.
-- `[in]`: flag The word's sleeper bit.
-- `[in]`: step The step.
-- `[in]`: on 1 for a step, 0 for none: the pause alone, the flag and the sleep masked to nothing.
-
-\*\*Returns:\*\* The step after it, doubled up to [`EMBED_TURNSTILE_STEP_MOST`](#EMBED_TURNSTILE_SLEEP_SHIFT), or the step itself where `on` is 0.
-
-### `embed_turnstile_claim` { #embed_turnstile_claim }
+### `embed_turnstile_grow` { #embed_turnstile_grow }
 
 ```c
-EMBED_INLINE unsigned int embed_turnstile_claim(EmbedTurnstiles *set, embed_atomic_word_value permit);
+EMBED_INLINE unsigned int embed_turnstile_grow(EmbedTurnstiles *set, unsigned int count, embed_atomic_word_value *held);
 ```
 
-One claim on set: the lowest free lane's bit set in `busy` with one fetch-or, where `permit` allows it.
+The growth from count lanes to count + 1, which gives the caller lane count as its pass.
+
+The growth takes lane count with one compare-and-swap on the lane word. From a free word it sets busy. From a closed word it clears closed and counts the takeover, and busy stays set. Then one compare-and-swap moves `open` up by one.
+
+Where that swap lands, the lane is the caller's pass. Where it fails, the growth gives the lane back as it was. A lane that had the closed bit gets a close, and a lane that was free gets a release.
 
 - `[in,out]`: set The set \[BORROWS\].
-- `[in]`: permit Every bit set for a claim, none for a claim that takes nothing.
+- `[in]`: count The lanes the caller read open.
+- `[out]`: held The value of lane count where another thread holds it, and 0 in each other case \[BORROWS\].
 
-\*\*Returns:\*\* The lane's place, or [`EMBED_TURNSTILE_NONE`](#EMBED_TURNSTILE_NONE). That is where no lane was free, where `permit` stops the claim, or where the fetch-or of another reader set the same bit first.
+\*\*Returns:\*\* count, the lane the caller now holds, or [`EMBED_TURNSTILE_NONE`](#EMBED_TURNSTILE_NONE) where it holds none.
 
-> **Note:** The code has no branch. It does two loads, makes the free mask, and takes the trailing zero count. The bit of the sleeper flag is the sentinel, where the count of a full bank lands. Then it does the fetch-or, and on the sentinel a mask takes its bit to nothing.
+> **Note:** A lane that a pass, a contraction or another growth holds refuses the first compare-and-swap, and nothing changes. A contraction holds its lane from its claim to its close, so no growth takes a lane between a contraction's swap and its close. The caller sleeps on `held`: the end of that hold changes the word and wakes it.
+
+### `embed_turnstile_contract` { #embed_turnstile_contract }
+
+```c
+EMBED_INLINE embed_bool embed_turnstile_contract(EmbedTurnstiles *set, unsigned int count);
+```
+
+The contraction from count lanes to count - 1.
+
+The contraction claims lane count - 1 as an entry does. Then one compare-and-swap moves `open` down by one. Where the swap lands, the contraction closes the lane. Where the swap fails, the contraction releases the lane.
+
+- `[in,out]`: set The set \[BORROWS\].
+- `[in]`: count The lanes the caller read open, above 1.
+
+\*\*Returns:\*\* 1 where the lane closed, 0 where a pass held it or the swap failed.
+
+> **Note:** A lane that a pass holds refuses the claim, and nothing changes. So each pass stays below the open count.
 
 ### `embed_turnstile_enter` { #embed_turnstile_enter }
 
 ```c
-EMBED_INLINE unsigned int embed_turnstile_enter(EmbedTurnstiles *set, embed_atomic_word_value id);
+EMBED_INLINE unsigned int embed_turnstile_enter(EmbedTurnstiles *set, embed_atomic_uptr_value address);
 ```
 
-A badge-in by the reader id, which gives a lane or [`EMBED_TURNSTILE_NONE`](#EMBED_TURNSTILE_NONE).
+An entry by the worker at address: a lane taken, which the end of the pass takes back.
 
-The badge-in adds one to the queue and claims the lowest free lane. Where no lane is free, it opens the next lane of the bank and claims it. It writes the badge with the time from the clock, and gives the lane. Where it gets no lane and the bank is full, it does one backoff step on `busy` and gives [`EMBED_TURNSTILE_NONE`](#EMBED_TURNSTILE_NONE). The reader then badges in again.
+The entry reads the open count and starts at the lane of the address's cache line. A fetch-or of busy takes the lane where the old value has busy clear. Where the old value has busy, the fetch-or changes nothing, and the entry spills to the next lane. Where every open lane was busy, the worker joins the queue and grows the manifold, which gives it the new lane as its pass. Where it can not grow the manifold, it backs off on its start lane. It leaves the queue when it takes a lane.
 
 - `[in,out]`: set The set \[BORROWS\].
-- `[in]`: id The reader's id, nonzero: an immutable place, MMgr's owner place.
+- `[in]`: address The worker's address: an immutable place, such as the worker's own state.
 
-\*\*Returns:\*\* The lane's place, which the end of the pass takes, or [`EMBED_TURNSTILE_NONE`](#EMBED_TURNSTILE_NONE).
+\*\*Returns:\*\* The lane's place, which the end of the pass takes.
 
-> **Note:** The code has no branch. The miss of the first claim permits the second claim. The lane that it opens is the next bit of the bank, or nothing where the bank is full. The badge goes to the lane, or to the spare word of the set. The miss also turns the backoff step on or off.
-
-> **Note:** The pass reads the data of a published pointer only after the pass starts, and none of it after the pass ends.
-
-### `embed_turnstile_wake_none` { #embed_turnstile_wake_none }
-
-```c
-EMBED_INLINE void embed_turnstile_wake_none(embed_atomic_word *word);
-```
-
-A wake of nothing, the row of the wake table a clear flag takes.
-
-### `embed_turnstile_trim_none` { #embed_turnstile_trim_none }
-
-```c
-EMBED_INLINE void embed_turnstile_trim_none(EmbedTurnstiles *set, embed_atomic_word_value open,
-                                            embed_atomic_word_value trimmed);
-```
-
-A trim of nothing, the row of the trim table a trim with nothing to take takes.
-
-### `embed_turnstile_trim` { #embed_turnstile_trim }
-
-```c
-EMBED_INLINE void embed_turnstile_trim(EmbedTurnstiles *set, embed_atomic_word_value open,
-                                       embed_atomic_word_value trimmed);
-```
-
-The trim: one fetch-and cuts `open` to `trimmed`.
-
-The fetch-and keeps what the end of another pass does to the word at the same time. Two ends at the same time each cut the lanes above their own highest busy lane. The word then stays at the lower of the two.
+> **Note:** The pass reads the data of a published pointer only after the entry returns, and none of it after the leave.
 
 ### `embed_turnstile_leave` { #embed_turnstile_leave }
 
@@ -341,14 +311,12 @@ EMBED_INLINE void embed_turnstile_leave(EmbedTurnstiles *set, unsigned int at);
 
 The end of the pass through the lane at `at` of set.
 
-The end clears the state bits of the badge and the bit of the lane in `busy`. It wakes the sleepers on the lane and on `busy`. Where the queue is empty, it retires the free lanes above the highest busy lane.
+One fetch-add clears busy and counts the pass in the generation. Where the old value had the sleeper bit, the end clears it and wakes the word. Where the lane is the top open lane, the end contracts the manifold. Each step closes the top lane while the queue is empty, more than one lane is open, and no pass holds the top lane.
 
 - `[in,out]`: set The set \[BORROWS\].
 - `[in]`: at The lane's place, as [`embed_turnstile_enter`](#embed_turnstile_enter) answered it.
 
-> **Note:** The code has no branch. Each wake is a row of a table of two entries, and the flag bit of the word picks the row. The trim is a row of another table. Its row shows whether `open` has bits above the highest busy lane while the queue is empty.
-
-> **Note:** The id and the stamp stay in the badge until the next pass takes the lane. So a drain uses them to tell this pass from the next.
+> **Note:** Only the end of a pass on the top lane contracts. So the end of a pass on a lower lane reads and writes no word but its own lane word and `open`.
 
 ### `embed_turnstiles_drain` { #embed_turnstiles_drain }
 
@@ -360,12 +328,8 @@ Every pass through set begun before this call waited out.
 
 - `[in,out]`: set The set \[BORROWS\].
 
-> **Note:** A writer swaps a published pointer and calls this function. Then it releases the data that the old pointer led to. A pass that starts after the swap reads the new pointer, and the drain does not wait for it.
+> **Note:** A writer swaps a published pointer and calls this function. Then it releases the data that the old pointer led to. A pass that starts after the fence of the drain reads the new pointer, and the drain does not wait for it.
 
-> **Note:** The drain waits on the lanes in the snapshot of `busy`. Each round reads the lowest lane in the snapshot. Where the pass of that lane is over, the round takes the lane off the snapshot. Where it is not over, the round does one backoff step.
+> **Note:** The drain reads the open count after its fence, then each open lane. Each pass is below the open count, so these are each lane that a pass can hold. The drain waits on each lane whose first read has busy, and keeps the generation of that read. Its wait on a lane ends where busy reads clear or where the generation moved.
 
-> **Note:** A pass is over where the bit of its lane leaves `busy`. It is also over where the id or stamp of the badge moves from the first live badge that the drain read on the lane. That move is the next pass through the lane.
-
-> **Note:** A lane whose badge is not live holds a pass between its claim and its badge, or a pass at its end. The drain waits on that lane until its bit leaves `busy`.
-
-> **Note:** The backoff sleeps on `busy` with the flag [`EMBED_TURNSTILE_SLEEPERS`](#EMBED_TURNSTILE_LANE_BITS), at the value of `busy` that the round read. A pass is over only after the fetch-and of its end on `busy`. That fetch-and changes the word, clears the flag, and wakes each sleeper where the flag was on.
+> **Note:** A round that finds the lane still held backs off on that lane word, with the sleeper bit. The end of the pass changes the word and wakes it.

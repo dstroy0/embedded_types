@@ -1,5 +1,4 @@
 import Std.Tactic.BVDecide
-import EmbeddedTypes.TurnstileBits
 
 /-!
 # embedded_types, the lane's byte operations
@@ -18,8 +17,8 @@ them. `bv_decide` checks each theorem on every value.
 - `assembled_16` and its narrower forms: the nibbles of the 32-bit lanes, shifted by four bits a lane and ored,
   give the mask with bit `4i + k` set where byte `k` of lane `i` is equal.
 - `fill_byte`: `embed_lane_fill_byte` puts the byte in each byte of each 32-bit lane.
-- `mask_first`: the fallback of `embed_lane_mask_first` is the fallback of `embed_turnstile_lowest`, and
-  `TurnstileBits.lowest_fallback` holds it.
+- `mask_first`: the fallback of `embed_lane_mask_first` meets the contract of `__builtin_ctzll`: a place where
+  the bit is set, each bit below it clear.
 -/
 
 namespace EmbeddedTypes.Lane
@@ -143,10 +142,18 @@ theorem fill_byte (v : BitVec 32) (h : v < 256) :
   simp only [byteOf, Nat.mul_zero, Nat.mul_one]
   bv_decide (config := { timeout := 600 })
 
-/-- The fallback of `embed_lane_mask_first` is the fallback of `embed_turnstile_lowest`, word for word. -/
+/-- The fallback arm of `embed_lane_mask_first`: the lowest bit isolated, then placed by six masked steps. -/
+def lowestFallback (mask : BitVec 64) : BitVec 64 :=
+  let low := mask &&& (0 - mask)
+  let step (m : BitVec 64) (w : BitVec 64) : BitVec 64 := if low &&& m != 0 then w else 0
+  step 0xFFFFFFFF00000000 32 + step 0xFFFF0000FFFF0000 16 + step 0xFF00FF00FF00FF00 8 +
+    step 0xF0F0F0F0F0F0F0F0 4 + step 0xCCCCCCCCCCCCCCCC 2 + step 0xAAAAAAAAAAAAAAAA 1
+
+/-- On a value with a bit set, the fallback gives a place where the bit is set, and each bit below is clear. This
+is the contract of `__builtin_ctzll`. -/
 theorem mask_first (mask : BitVec 64) (h : mask ≠ 0) :
-    (mask >>> TurnstileBits.lowestFallback mask) &&& 1 = 1 ∧
-      mask &&& (((1 : BitVec 64) <<< TurnstileBits.lowestFallback mask) - 1) = 0 :=
-  TurnstileBits.lowest_fallback mask h
+    (mask >>> lowestFallback mask) &&& 1 = 1 ∧ mask &&& (((1 : BitVec 64) <<< lowestFallback mask) - 1) = 0 := by
+  unfold lowestFallback
+  bv_decide
 
 end EmbeddedTypes.Lane

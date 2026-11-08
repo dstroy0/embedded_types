@@ -6,38 +6,39 @@
  */
 /**
  * @file turnstile_drain_genmc.c
- * @brief Two readers pass through a turnstile set while a writer swaps a published word and drains, in each
- *        execution that the memory model allows. A reader that reads the old word reads it before the writer
- *        releases it, and no thread stays asleep with no wake to come.
+ * @brief Two workers pass through a set of one lane on one start lane, while a writer swaps a published word and
+ *        drains, in each execution that the memory model allows. The second worker finds the lane busy and grows the
+ *        set. A worker that reads the old word reads it before the writer releases it, no thread stays asleep with
+ *        no wake to come, and each lane is free or closed at the end.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-11-07
  *
  * @note A client for GenMC, run by harness.py prove. The host's waits are those of genmc_host.h: a sleep that only
  *       a time limit ends leaves its thread blocked, and GenMC reports that execution.
  */
+// Two lanes: the start lane and the lane the second worker grows the set to
+#define EMBED_TURNSTILE_LANES 2u
+
 #include "genmc_host.h"
 
 #include <assert.h>
 #include <pthread.h>
 
-/** @brief The set, zeros at rest. */
+/** @brief The set, zeros at rest: one lane open. */
 static EmbedTurnstiles s_set;
 /** @brief The published word: 0 is the old one, 1 the new one. */
 static embed_atomic_word s_published;
 /** @brief Set to 1 when the writer has released the old word. */
 static embed_atomic_word s_released;
 
-/** @brief One reader's pass: badge in, read the published word, and leave. */
-static void *reader(void *id)
+/** @brief One worker's pass from start lane 0: enter, read the published word, and leave. */
+static void *worker(void *unused)
 {
-    unsigned int at = EMBED_TURNSTILE_NONE;
-
-    while (at == EMBED_TURNSTILE_NONE)
-    {
-        at = embed_turnstile_enter(&s_set, (embed_atomic_word_value)(uintptr_t)id);
-    }
+    (void)unused;
+    const unsigned int at = embed_turnstile_enter(&s_set, 0u);
     const embed_atomic_word_value seen = embed_atomic_word_load(&s_published);
     const embed_atomic_word_value released = embed_atomic_word_load(&s_released);
+
     // a pass that reads the old word reads it before its release
     assert((seen != 0u) || (released == 0u));
     embed_turnstile_leave(&s_set, at);
@@ -58,15 +59,23 @@ int main(void)
 {
     pthread_t threads[3];
 
-    (void)pthread_create(&threads[0], NULL, reader, (void *)(uintptr_t)1u);
-    (void)pthread_create(&threads[1], NULL, reader, (void *)(uintptr_t)2u);
+    (void)pthread_create(&threads[0], NULL, worker, NULL);
+    (void)pthread_create(&threads[1], NULL, worker, NULL);
     (void)pthread_create(&threads[2], NULL, writer, NULL);
     for (unsigned int at = 0u; at < 3u; at += 1u)
     {
         (void)pthread_join(threads[at], NULL);
     }
-    // each pass ended, so no lane is busy. A sleeper flag can stand after a sleep that its compare ended, and the
-    // next pass's end clears it.
-    assert((embed_atomic_word_load(&s_set.busy) & EMBED_TURNSTILE_LANE_BITS) == 0u);
+    // each pass ended: each lane is free, or closed above the open count, and the queue is empty
+    const unsigned int count = embed_turnstile_lanes(&s_set);
+
+    for (unsigned int at = 0u; at < 2u; at += 1u)
+    {
+        const embed_atomic_word_value word = embed_atomic_word_load(&s_set.lane[at].word);
+        const embed_atomic_word_value state = word & (EMBED_TURNSTILE_BUSY | EMBED_TURNSTILE_CLOSED);
+
+        assert((state == 0u) || ((state == (EMBED_TURNSTILE_BUSY | EMBED_TURNSTILE_CLOSED)) && (at >= count)));
+    }
+    assert(embed_atomic_u32_load(&s_set.queue) == 0u);
     return 0;
 }
