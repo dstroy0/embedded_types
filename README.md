@@ -217,7 +217,7 @@ this project are compiled with `EMBEDDED_TYPES_TEST_WARNINGS`
 
 ## Status
 
-Version 1.0.5 (`CMakeLists.txt:8`). Three suites hold 27 cases between them
+Version 1.0.6 (`CMakeLists.txt:8`). Three suites hold 27 cases between them
 (`test/unit/CMakeLists.txt:4-6`), and both build trees pass with every warning an error. That was
 measured on 2026-09-09 with GCC 13.2.0 (MinGW-W64 UCRT) on Windows 11, running
 `python test/harness.py test` and `python test/harness.py test --tree build-werror`.
