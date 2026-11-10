@@ -16,8 +16,8 @@ authors:
 repository-code: "https://github.com/dstroy0/embedded_types"
 url: "https://github.com/dstroy0/embedded_types"
 license: AGPL-3.0-or-later
-version: 1.0.6
-date-released: "2026-11-07"
+version: 1.1.0
+date-released: "2026-11-10"
 keywords:
     - types
     - fixed-width

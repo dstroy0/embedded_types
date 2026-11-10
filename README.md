@@ -229,7 +229,7 @@ unit that includes these headers. The suite executables in this project compile 
 
 ## Status
 
-Version 1.0.6. Seven suites run, one for each header and one for the device arm of the lane. Each
+Version 1.1.0. Seven suites run, one for each header and one for the device arm of the lane. Each
 build tree passes with each warning an error.
 
 `EMBEDDED_TYPES_TEST_WARNINGS` is `EMBEDDED_TYPES_WARNINGS` without `-Wconversion`,
