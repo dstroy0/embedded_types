@@ -1,23 +1,27 @@
 # embedded_types
 
-**Purpose:** Take the fixed-width aliases, the machine word, and the compile-time machinery a C11
-embedded build needs from one place, instead of declaring them again in each library that uses them.
+**Purpose:** One place holds the fixed-width aliases, the machine word, and the compile-time checks
+that a C11 embedded build needs. Each library in the build takes them from here, and none declares
+them again.
 **Scope:** `include/embed_types.h`, `include/embed_compiler_directives.h`,
-`include/embed_dispatch_layout.h`, `include/embed_atomic.h`, `include/embed_turnstile.h`, `include/embed_lane.h`,
-`cmake/EmbeddedTypesSuite.cmake`, `test/harness.py`, `test/support/`, `test/unit/`
+`include/embed_dispatch_layout.h`, `include/embed_atomic.h`, `include/embed_turnstile.h`,
+`include/embed_lane.h`, `cmake/EmbeddedTypesSuite.cmake`, `test/harness.py`, `test/support/`,
+`test/unit/`, `test/prove/`, `theory/`
 
-Five C11 headers hold the fixed-width integer aliases, a machine word derived from the target, the
-compile-time machinery around them, atomic words on the target's own atomics, and the lane, the
-target's widest vector register derived the same way, which a bulk pass over memory moves and
-computes in. They are header only. The first three reach `stddef.h` and `stdint.h`
-(`include/embed_types.h:22`, `include/embed_compiler_directives.h:22`,
-`include/embed_dispatch_layout.h:23`). The atomics add `stdatomic.h` on their C11 arm and `intrin.h`
-under MSVC, and nothing on their CUDA device arm. The lane reaches `embed_types.h` alone
-(`include/embed_lane.h`). Every entry of the atomics and the lane carries `EMBED_HOST_DEVICE`:
-one definition compiles into nvcc's host pass and device pass, and a kernel calls what a host walk
-calls. What the headers guarantee, and what they leave undiagnosed, is in [SECURITY.md](SECURITY.md).
+Six C11 headers hold the fixed-width integer aliases, the machine word, the compile-time checks
+around them, atomic words, turnstiles, and the lane. The word comes from the width of the target's
+pointer. The lane is the widest vector register of the target, and a bulk pass over memory moves and
+computes in it. The turnstile is an atomic thread scheduler. The library is headers only.
 
-The site at <https://dstroy0.github.io/embedded_types/> shows the API from the Doxygen comments in the headers.
+The first three headers include only `stddef.h` and `stdint.h`. The atomics add `stdatomic.h` on
+their C11 arm and `intrin.h` under MSVC, and nothing on their CUDA device arm. The lane includes
+`embed_types.h` alone. Each entry of the atomics and the lane has `EMBED_HOST_DEVICE`. Under nvcc,
+one definition compiles into the host pass and the device pass, and a kernel calls the same function
+that a host walk calls. [SECURITY.md](SECURITY.md) tells what the headers guarantee, and what they do
+not diagnose.
+
+The site at <https://dstroy0.github.io/embedded_types/> shows the API from the Doxygen comments in
+the headers.
 
 A consumer includes the headers and writes against the names directly.
 
@@ -42,87 +46,89 @@ typedef struct
 EMBED_TABLE_LAYOUT(ScanNs, length, is_empty);
 ```
 
-`embed_raw_word` is `embed_word` carrying `EMBED_RAW`, which lowers the alignment to 1 and permits
-the aliasing (`include/embed_types.h:211`, `include/embed_compiler_directives.h:222`). A read
-through the plain `embed_word` at an address that is not a multiple of the word width is undefined.
-`EMBED_TABLE_LAYOUT` emits one static assertion per member for its byte offset and one for
-`sizeof(ScanNs)` (`include/embed_dispatch_layout.h:645-648`). A member left out of the list, or
-padding between two members, fails the build.
+`embed_raw_word` is `embed_word` with `EMBED_RAW` on it. That attribute lowers the alignment to 1
+and permits access through an alias. C leaves a read through the plain `embed_word` undefined where
+the address is not a multiple of the word width. `EMBED_TABLE_LAYOUT` emits one static assertion for
+the byte offset of each member, and one for `sizeof(ScanNs)`. The build fails where the list leaves
+out a member, or where the compiler puts bytes between two members.
 
 ## Files
 
-| path                                                                         | contents                                                                             |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [`include/embed_types.h`](include/embed_types.h)                             | the widths, the boolean, the word, the index, the raw-access word, the assertions    |
-| [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | feature probes, the static assertion, attribute wrappers, diagnostic pragmas, guards |
-| [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the machinery behind them     |
-| [`include/embed_atomic.h`](include/embed_atomic.h)                           | 32-bit and 64-bit atomic words for host, part and GPU threads, their arm switched by the target |
-| [`include/embed_turnstile.h`](include/embed_turnstile.h)                     | turnstiles of atomic words readers pass through and a writer drains, their lanes rising and falling with the queue's depth, and the sleep on a word's address the host defines |
-| [`include/embed_lane.h`](include/embed_lane.h)                               | the lane beside the word, the widest register, its loads, fills, arithmetic and masks |
-| [`test/support/`](test/support)                                              | host threads for the contention cases and the host's address wait, out of the runners' sight |
-| [`test/unit/`](test/unit)                                                    | one Unity suite per header, each its own CTest target                                |
-| [`test/harness.py`](test/harness.py)                                         | suite discovery, Unity runner generation, and the two build trees                    |
-| [`cmake/`](cmake)                                                            | `embedded_types_add_suite()`                                                         |
-| [`LICENSES/`](LICENSES)                                                      | the AGPL text and the two LicenseRef documents                                       |
+| path                                                                         | contents                                                                                        |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [`include/embed_types.h`](include/embed_types.h)                             | the widths, the boolean, the word, the index, the raw word, the assertions                      |
+| [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | feature checks, the static assertion, attribute wrappers, diagnostic pragmas, guards            |
+| [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the macros behind them                   |
+| [`include/embed_atomic.h`](include/embed_atomic.h)                           | 32-bit and 64-bit atomic words for host, part and GPU threads, on an arm that the target selects |
+| [`include/embed_turnstile.h`](include/embed_turnstile.h)                     | an atomic thread scheduler: turnstiles that readers pass through and that a writer drains, with lanes that open and close with the queue, and the sleep on the address of a word that the host defines |
+| [`include/embed_lane.h`](include/embed_lane.h)                               | the lane beside the word, the widest register, its loads, fills, arithmetic and masks           |
+| [`test/support/`](test/support)                                              | host threads for the contention cases and the host's address wait, out of the sight of the runners |
+| [`test/unit/`](test/unit)                                                    | one Unity suite for each header, and one for the device arm of the lane, each its own CTest target |
+| [`test/prove/`](test/prove)                                                  | the GenMC clients of the turnstile, and the host that they run on                               |
+| [`test/harness.py`](test/harness.py)                                         | suite discovery, Unity runner generation, the build trees, the proofs, and the site             |
+| [`theory/`](theory)                                                          | the Lean proofs of the turnstile                                                                |
+| [`cmake/`](cmake)                                                            | `embedded_types_add_suite()` and `embedded_types_add_device_suite()`                            |
+| [`LICENSES/`](LICENSES)                                                      | the AGPL text and the two LicenseRef documents                                                  |
 
-A suite directory names itself to `embedded_types_add_suite()`, which registers it as its own CTest
-target (`cmake/EmbeddedTypesSuite.cmake:36`). The two build trees the harness knows are `build` and
-`build-werror` (`test/harness.py:231-243`).
+A suite directory gives its name to `embedded_types_add_suite()`, and that function registers it as
+its own CTest target. The harness knows four build trees: `build`, `build-werror`, `build-tsan` and
+`build-asan`.
 
 ## Symbols
 
 The table indexes what each name is. The contract for a name is the Doxygen block on its
-declaration, and a guarantee or a warning is stated there once.
+declaration. That block states each guarantee and each warning one time.
 
 | symbol                                                                                                   | definition                                                                                                                     |
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `embed_u8` … `embed_u64`, `embed_i8` … `embed_i64`                                                       | `uint8_t` … `int64_t`, each unsigned width pinned by an assertion                                                              |
-| `embed_bool`, `EMBED_TRUE`, `EMBED_FALSE`                                                                | `_Bool` in C, `bool` in C++; the two constants are cast to that type                                                           |
-| `embed_word`, `embed_iword`                                                                              | the unsigned and signed integer of `EMBED_WORD_BITS` bits                                                                      |
+| `embed_u8` … `embed_u64`, `embed_i8` … `embed_i64`                                                       | `uint8_t` … `int64_t`; an assertion pins each unsigned width                                                                   |
+| `embed_bool`, `EMBED_TRUE`, `EMBED_FALSE`                                                                | `_Bool` in C, `bool` in C++; a cast puts the two constants in that type                                                        |
+| `embed_word`, `embed_iword`                                                                              | the unsigned and the signed integer of `EMBED_WORD_BITS` bits                                                                  |
 | `embed_index`                                                                                            | the unsigned integer of `EMBED_INDEX_BITS` bits, for offsets                                                                   |
-| `embed_raw_word`                                                                                         | `embed_word` with alignment lowered to 1 and aliasing permitted                                                                |
-| `EmbedEnumProbe`                                                                                         | a one-byte enum whose asserted size proves `EMBED_ENUM_BYTE` gave one byte                                                     |
+| `embed_raw_word`                                                                                         | `embed_word` with alignment 1 and access through an alias                                                                      |
+| `EmbedEnumProbe`                                                                                         | a one-byte enum; an assertion on its size proves that `EMBED_ENUM_BYTE` gave one byte                                          |
 | `EMBED_STATIC_ASSERT`                                                                                    | `static_assert` in C++ and C23, `_Static_assert` in C11, `#error` below C11                                                    |
 | `EMBED_BEGIN_DECLS`, `EMBED_END_DECLS`                                                                   | `extern "C" {` and `}` under `__cplusplus`, empty without it                                                                   |
 | `EMBED_GNU_ATTRIBUTES`                                                                                   | 1 where `__GNUC__` or `__clang__` is defined, 0 otherwise                                                                      |
-| `EMBED_HAS_ATTRIBUTE`                                                                                    | `__has_attribute`, or `EMBED_GNU_ATTRIBUTES` where it is undefined                                                             |
-| `EMBED_HAS_BUILTIN`                                                                                      | `__has_builtin`, or 0 where it is undefined                                                                                    |
+| `EMBED_HAS_ATTRIBUTE`                                                                                    | `__has_attribute`, or `EMBED_GNU_ATTRIBUTES` where the compiler has none                                                       |
+| `EMBED_HAS_BUILTIN`                                                                                      | `__has_builtin`, or 0 where the compiler has none                                                                              |
 | `EMBED_ENUM_BYTE`                                                                                        | a one-byte enum: the enum itself where the compiler can pin it to a byte, its constants and an `unsigned char` where it cannot |
-| `EMBED_INLINE`, `EMBED_FLATTEN`, `EMBED_ALIGN`, `EMBED_ALIAS`, `EMBED_RAW`, `EMBED_UNUSED`, `EMBED_WEAK` | the attribute where available, empty where not                                                                                 |
-| `EMBED_HAS_VECTOR_SIZE`, `EMBED_VECTOR`                                                                  | 1 where the compiler has the `vector_size` attribute, 0 otherwise, and the attribute at a width in bytes, empty where not     |
-| `EMBED_VECTOR_REGISTER_BITS`                                                                             | the widest vector register the target compiles for: 512, 256, 128, or 0 where it has none                                      |
-| `EMBED_HOST_DEVICE`                                                                                      | `__host__ __device__` under nvcc, empty elsewhere                                                                              |
-| `embed_atomic_u32`, `embed_atomic_u64`, `embed_atomic_word`, `EMBED_ATOMIC_INIT`, `EMBED_ATOMIC_ARM`     | the two atomic words and the one of the machine word's width, a declared value, and which of the four arms is taken             |
-| `embed_atomic_u32_load`, `_store`, `_exchange`, `_swap_if`, `_fetch_add`, `_fetch_sub`, `_fetch_or`, `_fetch_and`, `_raise`, and the same for `u64` and `word` | one indivisible step each: acquire load, release store, swap, compare-and-swap, the arithmetic and the masks answering the word before, and a raise to a value where it is higher |
-| `EmbedTurnstiles`, `embed_turnstile_enter`, `embed_turnstile_leave`, `embed_turnstiles_drain`, `embed_turnstile_lanes`, `EMBED_TURNSTILE_LANES` | a manifold of lanes, one lane open at rest; an entry at the lane of the worker's address that spills to the next free lane and grows the manifold where each lane is busy; the end of the pass, which contracts the manifold as the pressure goes; every pass begun before the call waited out; the lanes open; and the most lanes |
-| `EmbedTurnstileBackoff`, `embed_turnstile_backoff_begin`, `embed_turnstile_backed_off`, `EMBED_TURNSTILE_UNIT_SHIFT` | a backoff's start and exponent in the caller's locals; one step, a pause inside the first unit and a wait that doubles to 2^20 units after it; and the unit, 2^10 ns on a CPU host and 1 ns on a device |
-| `embed_word_wait`, `embed_word_wake`, `embed_clock_ns`, `EMBED_WAIT_FOREVER`                             | the sleep on a word's address while it reads a value, for a time in nanoseconds; the wake of every sleeper; and the clock in nanoseconds; each the host's to define on its futex, WaitOnAddress or __ulock_wait |
-| `EMBED_HAS_BYTE_MASK_256`, `EMBED_BYTE_MASK_256`, `EMBED_HAS_BYTE_MASK_128`, `EMBED_BYTE_MASK_128`       | 1 where the compiler has the builtin reading 32 or 16 bytes' sign bits into an int, 0 otherwise, and the builtin, 0 where not |
-| `embed_lane`, `embed_lane_raw`, `embed_lane_mask`, `EMBED_LANE_MASK_ALL`, `embed_lane_mask_first`       | the lane's 32-bit lanes in the compiler's vector type or an aligned struct, the same at any address, one bit a byte, every byte, the first set |
-| `EMBED_LANE_BITS`, `EMBED_LANE_BYTES`, `EMBED_LANE_U32S`, `EMBED_LANE_BITS_WAS_OVERRIDDEN`               | the lane's width in bits, derived or defined by the build, in bytes, in 32-bit lanes, and which of the two                     |
-| `EMBED_LANE_VECTOR`, `EMBED_LANE_PLAIN`, `EMBED_LANE_PORTABLE`                                           | the arm taken, one of the two 1, and the build's switch forcing the struct arm                                                 |
-| `embed_lane_load`, `embed_lane_put`, `embed_lane_fill_byte`, `embed_lane_fill_u32`                       | a lane from and to any address, an aligned pair beside each, and a lane of one byte or one 32-bit value                        |
-| `embed_lane_and`, `embed_lane_or`, `embed_lane_xor`, `embed_lane_add_u32`, `embed_lane_sub_u32`, `embed_lane_mul_u32`, `embed_lane_shift_right_u32`, `embed_lane_shift_left_u32` | the logic over every bit and the arithmetic over each 32-bit lane, wrapping as the scalar does |
-| `embed_lane_bytes_equal`, `embed_lane_bytes_zero`                                                        | the byte mask of equal bytes between two lanes, and of a lane's zero bytes                                                     |
+| `EMBED_INLINE`, `EMBED_FLATTEN`, `EMBED_ALIGN`, `EMBED_ALIAS`, `EMBED_RAW`, `EMBED_UNUSED`, `EMBED_WEAK` | the attribute where the compiler has it, empty where not                                                                       |
+| `EMBED_WEAK_NAME`, `EMBED_WEAK_DEFAULT`                                                                  | the name of a weak default, and the alternate name of the linker for it under MSVC                                             |
+| `EMBED_HAS_VECTOR_SIZE`, `EMBED_VECTOR`                                                                  | 1 where the compiler has the `vector_size` attribute, 0 otherwise; and the attribute at a width in bytes, empty where not      |
+| `EMBED_VECTOR_REGISTER_BITS`                                                                             | the widest vector register that the target compiles for: 512, 256, 128, or 0 where it has none                                 |
+| `EMBED_HOST_DEVICE`                                                                                      | `__host__ __device__` under nvcc, empty on other compilers                                                                     |
+| `embed_atomic_u32`, `embed_atomic_u64`, `embed_atomic_word`, `embed_atomic_usize`, `embed_atomic_uptr`, `EMBED_ATOMIC_INIT`, `EMBED_ATOMIC_ARM` | the two atomic words; the one as wide as the machine word, as `size_t` and as a pointer; a declared value; and the arm that the target takes |
+| `embed_atomic_u32_load`, `_store`, `_exchange`, `_swap_if`, `_fetch_add`, `_fetch_sub`, `_fetch_or`, `_fetch_and`, `_raise`, and the same for `u64` and `word` | one indivisible step each: acquire load, release store, swap, compare-and-swap, the arithmetic and the masks that answer the word before, and a raise to a value where it is higher |
+| `embed_atomic_ordered`                                                                                   | the fence that orders the earlier writes of this context ahead of its later reads                                              |
+| `EmbedTurnstiles`, `embed_turnstile_enter`, `embed_turnstile_leave`, `embed_turnstiles_drain`, `embed_turnstile_lanes`, `EMBED_TURNSTILE_LANES` | a manifold of lanes, one lane open at rest; an entry at the lane of the worker's address, which spills to the next free lane and grows the manifold where each lane is busy; the end of the pass, which contracts the manifold as the pressure goes; a wait for every pass that began before the call; the lanes open; and the most lanes |
+| `EmbedTurnstileBackoff`, `embed_turnstile_backoff_begin`, `embed_turnstile_backed_off`, `EMBED_TURNSTILE_UNIT_SHIFT` | the start and the exponent of a backoff, in the caller's locals; one step, a pause inside the first unit and a wait that doubles to 2^20 units after it; and the unit, 2^10 ns on a CPU host and 1 ns on a device |
+| `embed_word_wait`, `embed_word_wake`, `embed_clock_ns`, `EMBED_WAIT_FOREVER`                             | the sleep on the address of a word while it reads a value, for a time in nanoseconds; the wake of every sleeper; and the clock in nanoseconds; the host defines each on its futex, WaitOnAddress or `__ulock_wait` |
+| `EMBED_HAS_BYTE_MASK_256`, `EMBED_BYTE_MASK_256`, `EMBED_HAS_BYTE_MASK_128`, `EMBED_BYTE_MASK_128`       | 1 where the compiler has the builtin that reads the sign bits of 32 or 16 bytes into an int, 0 otherwise; and the builtin, 0 where not |
+| `embed_lane`, `embed_lane_raw`, `embed_lane_mask`, `EMBED_LANE_MASK_ALL`, `embed_lane_mask_first`       | the 32-bit lanes of the lane in the vector type of the compiler or an aligned struct; the same at any address; one bit a byte; every byte; the first set bit |
+| `EMBED_LANE_BITS`, `EMBED_LANE_BYTES`, `EMBED_LANE_U32S`, `EMBED_LANE_BITS_WAS_OVERRIDDEN`               | the width of the lane in bits, derived or defined by the build; in bytes; in 32-bit lanes; and which of the two                |
+| `EMBED_LANE_VECTOR`, `EMBED_LANE_PLAIN`, `EMBED_LANE_PORTABLE`                                           | the arm that the header takes, one of the two 1; and the switch of the build that forces the struct arm                        |
+| `embed_lane_load`, `embed_lane_put`, `embed_lane_fill_byte`, `embed_lane_fill_u32`                       | a lane from and to any address, an aligned pair beside each; and a lane of one byte or one 32-bit value                        |
+| `embed_lane_and`, `embed_lane_or`, `embed_lane_xor`, `embed_lane_add_u32`, `embed_lane_sub_u32`, `embed_lane_mul_u32`, `embed_lane_shift_right_u32`, `embed_lane_shift_left_u32` | the logic over every bit and the arithmetic over each 32-bit lane, with wrap around as the scalar has |
+| `embed_lane_bytes_equal`, `embed_lane_bytes_zero`                                                        | the byte mask of equal bytes between two lanes, and of the zero bytes of a lane                                                |
 | `EMBED_DIAGNOSTIC_PUSH`, `EMBED_DIAGNOSTIC_POP`, `EMBED_DIAGNOSTIC_IGNORE`, `EMBED_DIAGNOSTIC_STRING`    | the clang or the GCC pragma, empty on a compiler with neither                                                                  |
 | `EMBED_CAT`, `EMBED_NARG`, `EMBED_ARG_N`                                                                 | two-step token paste, and argument count from 1 to 24                                                                          |
 | `EMBED_CALL`                                                                                             | `entry_(&(ArgsType_){__VA_ARGS__})`, where `entry_` receives the address of the literal [BORROWS]                              |
-| `EMBED_ENTRY`, `EMBED_ENTRY_V`                                                                           | a value-returning and a void entry point, both built on `EMBED_CALL`, whose initializers dereference `args` [BORROWS]          |
+| `EMBED_ENTRY`, `EMBED_ENTRY_V`                                                                           | an entry point that returns a value and one that returns void, both on `EMBED_CALL`; their initializers dereference `args` [BORROWS] |
 | `EMBED_TABLE_SLOT`                                                                                       | one offset assertion, for one member at its offset                                                                             |
 | `EMBED_TABLE_LAYOUT`, `EMBED_TABLE_STORAGE`                                                              | the offset and size assertions, and `static const`                                                                             |
-| `EMBED_FUNCTION_POINTER_BYTES`                                                                           | `sizeof(void (*)(void))`, the stride one dispatch member takes                                                                 |
+| `EMBED_FUNCTION_POINTER_BYTES`                                                                           | `sizeof(void (*)(void))`, the stride of one dispatch member                                                                    |
 | `EMBED_BIG_ENDIAN`                                                                                       | 1 where `__BYTE_ORDER__` equals `__ORDER_BIG_ENDIAN__`, 0 otherwise                                                            |
 | `EMBED_FAST_UNALIGNED_LOAD`                                                                              | 1 where `__ARM_FEATURE_UNALIGNED` is defined, 0 otherwise                                                                      |
 
-`EMBED_STATIC_ASSERT` takes `static_assert` under `__cplusplus` or C23, `_Static_assert` under C11,
-and raises `#error` below C11 (`include/embed_compiler_directives.h:92-99`). `EMBED_BIG_ENDIAN` is
-derived from `__BYTE_ORDER__` and `EMBED_FAST_UNALIGNED_LOAD` from `__ARM_FEATURE_UNALIGNED`, and
-each falls to 0 where its macro is absent (`include/embed_compiler_directives.h:355-359`, `:376-380`).
+`EMBED_STATIC_ASSERT` is `static_assert` under `__cplusplus` or C23, and `_Static_assert` under C11.
+Below C11 it raises `#error`. `EMBED_BIG_ENDIAN` comes from `__BYTE_ORDER__`, and
+`EMBED_FAST_UNALIGNED_LOAD` comes from `__ARM_FEATURE_UNALIGNED`. Each falls to 0 where its macro is
+absent.
 
 ## EMBED_WORD_BITS
 
-The word width comes from `UINTPTR_MAX`, which the compiler supplies
-(`include/embed_types.h:121-131`).
+The width of the word comes from `UINTPTR_MAX`, which the compiler supplies.
 
 | `UINTPTR_MAX`        | `EMBED_WORD_BITS` |
 | -------------------- | ----------------- |
@@ -131,53 +137,55 @@ The word width comes from `UINTPTR_MAX`, which the compiler supplies
 | `0xFFFF`             | 16                |
 | absent, or any other | `#error`          |
 
-Define `EMBED_WORD_BITS` on the command line to override the derivation. The header then sets
-`EMBED_WORD_BITS_WAS_OVERRIDDEN` to 1, and to 0 where the derivation ran. An override is needed
-where the register width differs from the pointer width, which covers x32, ILP32-on-64, and a
-large-model eight-bit target whose pointer is wider than the register that indexes with it
-(`include/embed_types.h:100-102`, `:119`, `:135`).
+Define `EMBED_WORD_BITS` on the command line to set the width yourself. The header then sets
+`EMBED_WORD_BITS_WAS_OVERRIDDEN` to 1. Where the header derives the width, the flag is 0. Set the
+width where the register width differs from the pointer width. The x32 and ILP32-on-64 ABIs are
+examples. A large-model eight-bit target is another: its pointer is wider than the register that
+indexes with it.
 
 ## EMBED_INDEX_BITS
 
-An offset does not need the register's full width. The index type is settled on its own.
-`EMBED_INDEX_BITS` is 16 where `EMBED_WORD_BITS` is 16 and 32 above it
-(`include/embed_types.h:148-154`). A build wanting 16-bit offsets on a wider register defines
-`EMBED_INDEX_BITS` ahead of the header, and the assertion at `include/embed_types.h:245` refuses an
-override wider than the word.
+An offset does not need the full width of the register, so the index has its own width.
+`EMBED_INDEX_BITS` is 16 where `EMBED_WORD_BITS` is 16, and 32 above it. For 16-bit offsets on a
+wider register, define `EMBED_INDEX_BITS` ahead of the header. An assertion stops an override wider
+than the word.
 
 ## The lane
 
-The word is the register, and every count, mask and carry runs in it. The lane is the target's
-widest vector register, and its width derives from the compiler's instruction set macros as the
-word's derives from `UINTPTR_MAX` (`include/embed_compiler_directives.h`, `EMBED_VECTOR_REGISTER_BITS`;
-`include/embed_lane.h`). A bulk pass over memory, a copy, a fill, a compare, a blend of pixels, steps
-one lane at a time, and a wider register in a later build widens every pass with no edit.
+The word is the register, and each count, mask and carry runs in it. The lane is the widest vector
+register of the target. Its width comes from the instruction set macros of the compiler, as the
+width of the word comes from `UINTPTR_MAX`. A bulk pass over memory steps one lane at a time: a
+copy, a fill, a compare, a blend of pixels. A build for a wider register widens each pass, with no
+edit to the code.
 
-| target                      | `EMBED_LANE_BITS`                     |
-| --------------------------- | ------------------------------------- |
-| a CUDA device               | 256, a thread's eight 32-bit registers |
-| AVX-512                     | 512                                   |
-| AVX2                        | 256                                   |
-| SSE2, NEON                  | 128                                   |
-| no vector unit, 64-bit word | 64                                    |
-| no vector unit, 32-bit or 16-bit word | 32                          |
+| target                                | `EMBED_LANE_BITS`                           |
+| ------------------------------------- | ------------------------------------------- |
+| a CUDA device                         | 256, the eight 32-bit registers of a thread |
+| AVX-512                               | 512                                         |
+| AVX2                                  | 256                                         |
+| SSE2, NEON                            | 128                                         |
+| no vector unit, 64-bit word           | 64                                          |
+| no vector unit, 32-bit or 16-bit word | 32                                          |
 
-Define `EMBED_LANE_BITS` on the command line to override the derivation; the header then sets
-`EMBED_LANE_BITS_WAS_OVERRIDDEN` to 1, and to 0 where the derivation ran. Assertions hold any width
-to whole 32-bit lanes, whole words, and at most 512 bits, the width the byte mask holds.
+Define `EMBED_LANE_BITS` on the command line to set the width yourself. The header then sets
+`EMBED_LANE_BITS_WAS_OVERRIDDEN` to 1, and to 0 where it derives the width. Assertions hold each
+width to whole 32-bit lanes and whole words, and to 512 bits at most. The byte mask has room for
+512 bits.
 
-| arm      | `embed_lane`                                                       | taken where                                                            |
-| -------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| vector   | `embed_u32` carrying `EMBED_VECTOR(EMBED_LANE_BYTES)`              | `EMBED_HAS_VECTOR_SIZE` is 1, `EMBED_LANE_PORTABLE` is 0, not a device |
-| portable | a struct of `EMBED_LANE_U32S` `embed_u32` aligned to the lane      | everywhere else, a CUDA device among them                              |
+| arm      | `embed_lane`                                                   | the arm the header takes                                                    |
+| -------- | -------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| vector   | `embed_u32` with `EMBED_VECTOR(EMBED_LANE_BYTES)`              | `EMBED_HAS_VECTOR_SIZE` is 1, `EMBED_LANE_PORTABLE` is 0, not a CUDA device |
+| portable | a struct of `EMBED_LANE_U32S` `embed_u32`, aligned to the lane | each other case, a CUDA device among them                                   |
 
-The two arms define the same operations, the vector arm as the plain operators over the vector type
-and the portable arm as loops the compiler vectorizes where it can. A load or a store at any address
-goes through `embed_lane_raw`, the lane carrying `EMBED_RAW`, as `embed_raw_word` is the word. The
-byte masks read through the compiler's own mask builtin where the directives header finds one for
-the lane's width, `EMBED_BYTE_MASK_256` under AVX2 and `EMBED_BYTE_MASK_128` under SSE2, one
-instruction each, and gather the bits by a multiply over the whole lane elsewhere. The suite builds
-on the vector arm at the derived width by default, and on the portable arm with
+Both arms define the same operations. The vector arm uses the plain operators over the vector type.
+The portable arm uses loops, which the compiler makes into vector code where it can. A load or a
+store at any address goes through `embed_lane_raw`, the lane with `EMBED_RAW`, as `embed_raw_word`
+is the word.
+
+The byte masks use the mask builtin of the compiler where the directives header finds one for the
+width of the lane. That is `EMBED_BYTE_MASK_256` under AVX2 and `EMBED_BYTE_MASK_128` under SSE2,
+one instruction each. On other targets, one multiply over the full lane collects the bits. The suite
+builds the vector arm at the derived width by default, and the portable arm with
 `-DEMBED_LANE_PORTABLE=1`.
 
 ## Building
@@ -188,19 +196,23 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-`test/harness.py` runs the same builds and carries each tree's flags.
+`test/harness.py` runs the same builds, with the flags of each tree.
 
 ```sh
 python test/harness.py test                     # the library as it ships
-python test/harness.py test --tree build-werror # the same, with every warning an error
-python test/harness.py suites --strict          # every case registered, none behind a conditional
+python test/harness.py test --tree build-werror # the same, with each warning an error
+python test/harness.py test --tree build-tsan   # the same, under the thread sanitizer
+python test/harness.py test --tree build-asan   # the same, under the address and undefined behavior sanitizers
+python test/harness.py suites --strict          # each case registered, none behind a conditional
+python test/harness.py prove                    # each GenMC client under each memory model
+python test/harness.py ste                      # each document held to ASD-STE100
+python test/harness.py site                     # the site, into build/site
 ```
 
-Configuring fetches [Unity](https://github.com/ThrowTheSwitch/Unity) at `v2.6.1`
-(`test/CMakeLists.txt:6-11`), and generating a suite's runner needs `ruby` on `PATH`
-(`test/harness.py:195-197`). Both belong to `test/`, which is configured only where
-`EMBEDDED_TYPES_BUILD_TESTS` is on, and that option defaults to the value of `PROJECT_IS_TOP_LEVEL`
-(`CMakeLists.txt:21`, `:34-37`).
+The configure step fetches [Unity](https://github.com/ThrowTheSwitch/Unity) at `v2.6.1`. The runner
+generator of each suite needs `ruby` on `PATH`. Both belong to `test/`, and CMake configures `test/`
+only where `EMBEDDED_TYPES_BUILD_TESTS` is on. That option is on by default where this project is
+the top-level project.
 
 ## Consuming
 
@@ -209,23 +221,20 @@ add_subdirectory(embedded_types)
 target_link_libraries(your_target PRIVATE embedded_types::embedded_types)
 ```
 
-`embedded_types::embedded_types` is an INTERFACE target carrying the include directory and
-`c_std_11` (`CMakeLists.txt:12-19`). It carries no compile options. The warning settings of the
-consuming build govern the translation unit that includes these headers. The suite executables in
-this project are compiled with `EMBEDDED_TYPES_TEST_WARNINGS`
-(`cmake/EmbeddedTypesSuite.cmake:32`).
+`embedded_types::embedded_types` is an INTERFACE target. It gives the include directory and
+`c_std_11`, and no compile options. The warning settings of the consumer apply to each translation
+unit that includes these headers. The suite executables in this project compile with
+`EMBEDDED_TYPES_TEST_WARNINGS`. PlatformIO reads `library.json`, and the Arduino IDE reads
+`library.properties`.
 
 ## Status
 
-Version 1.0.6 (`CMakeLists.txt:8`). Three suites hold 27 cases between them
-(`test/unit/CMakeLists.txt:4-6`), and both build trees pass with every warning an error. That was
-measured on 2026-09-09 with GCC 13.2.0 (MinGW-W64 UCRT) on Windows 11, running
-`python test/harness.py test` and `python test/harness.py test --tree build-werror`.
+Version 1.0.6. Seven suites run, one for each header and one for the device arm of the lane. Each
+build tree passes with each warning an error.
 
-The suites are compiled under `EMBEDDED_TYPES_TEST_WARNINGS`, which is `EMBEDDED_TYPES_WARNINGS`
-without `-Wconversion`, `-Wsign-conversion` and `-Wmissing-prototypes` (`CMakeLists.txt:24-30`).
-Unity's assertion macros widen and compare inside the macro body, and a Unity case is a file-scope
-definition with nothing declaring it.
+`EMBEDDED_TYPES_TEST_WARNINGS` is `EMBEDDED_TYPES_WARNINGS` without `-Wconversion`,
+`-Wsign-conversion` and `-Wmissing-prototypes`. The assertion macros of Unity widen and compare
+inside the macro body, and a Unity case is a file-scope definition with no declaration.
 
 ## Licensing
 
@@ -262,4 +271,3 @@ none of this.
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 **Author:** dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
-**Date:** 2026-09-09

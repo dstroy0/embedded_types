@@ -23,11 +23,14 @@ GENMC_MODELS = ["--sc", "--tso", "--rc11", "--imm", "--arm8"]
 # --check-liveness reports an execution where no later wake ends it. A blocked execution is a branch where a read
 # took a value that an assume refused, which GenMC drops; it is not a fault.
 GENMC_FLAGS = ["--disable-estimation", "--check-liveness"]
+# No --nthreads: GenMC's parallel exploration corrupts its heap under the dependency-tracking models, and it aborts.
 GENMC_SOURCE = "https://github.com/MPI-SWS/genmc.git"
 # The release that the clients use. Each host builds this tag. Thus, each host runs the same checker.
 GENMC_TAG = "v0.20.0"
 # The packages GenMC builds against, LLVM 20 among those its source supports
 GENMC_PACKAGES = "cmake llvm-20-dev clang-20 libffi-dev zlib1g-dev libedit-dev bc g++-14 libzstd-dev libxml2-dev"
+# The clang that GenMC runs at each check. It is a package, so a host with a GenMC build from a cache can lack it.
+GENMC_CLANG = "/usr/lib/llvm-20/bin/clang"
 INCLUDES = ["include", "test/prove"]
 
 
@@ -47,13 +50,16 @@ def linux_root(root, command):
 
 
 def genmc_ready(root):
-    """None where GenMC runs, after a build where it is missing. The reason where a step failed."""
-    if linux(root, "test -x %s" % GENMC).returncode == 0:
+    """None where GenMC runs, after its packages and its build where either is missing. The reason where a step failed."""
+    built = linux(root, "test -x %s" % GENMC).returncode == 0
+    if not built or linux(root, "test -x %s" % GENMC_CLANG).returncode != 0:
+        print("  genmc     its packages install")
+        r = linux_root(root, "env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq %s" % GENMC_PACKAGES)
+        if r.returncode != 0:
+            return "its packages did not install: " + (r.stdout + r.stderr).strip()[-200:]
+    if built:
         return None
-    print("  genmc     building at ~/src/genmc, installing to ~/.local")
-    r = linux_root(root, "env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq %s" % GENMC_PACKAGES)
-    if r.returncode != 0:
-        return "its packages did not install: " + (r.stdout + r.stderr).strip()[-200:]
+    print("  genmc     its build runs at ~/src/genmc, and installs to ~/.local")
     steps = [
         "mkdir -p ~/src",
         "test -d ~/src/genmc/.git || git clone --depth 1 --branch %s %s ~/src/genmc" % (GENMC_TAG, GENMC_SOURCE),
@@ -91,13 +97,15 @@ def genmc(root, client, model, run_root, name):
     return "FAILED: " + (faults[0] if faults else text.strip()[-200:])
 
 
-def prove(root, run_root, names):
-    """Each client, or the clients named, under each model. 0 where each one proved, 1 where any did not."""
+def prove(root, run_root, names, wanted=None):
+    """Each client, or the clients named, under each model, or the models named. 0 where each one proved, 1 where any
+    did not."""
     os.makedirs(run_root, exist_ok=True)
-    failures = []
+    failures = ["no model named %s" % w for w in (wanted or []) if "--" + w not in GENMC_MODELS]
+    models = [m for m in GENMC_MODELS if not wanted or m.lstrip("-") in wanted]
     clients = sorted(glob.glob(os.path.join(root, "test", "prove", "*_genmc.c")))
     clients = [c for c in clients if not names or os.path.basename(c)[:-len("_genmc.c")] in names]
-    reason = genmc_ready(root) if clients else None
+    reason = genmc_ready(root) if clients and not failures else None
     if reason:
         failures.append("genmc: " + reason)
         clients = []
@@ -105,7 +113,7 @@ def prove(root, run_root, names):
         name = os.path.basename(path)[:-len("_genmc.c")]
         client = os.path.relpath(path, root).replace("\\", "/")
         print("== %s" % name)
-        for model in GENMC_MODELS:
+        for model in models:
             answer = genmc(root, client, model, run_root, name)
             print("  genmc %-6s %s" % (model.lstrip("-"), answer))
             if not answer.startswith("proved"):

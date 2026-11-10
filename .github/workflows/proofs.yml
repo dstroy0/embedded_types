@@ -2,6 +2,11 @@ name: Proofs
 
 # The Lean proofs of theory/embedded_types, and each GenMC client of test/prove under each memory model, through
 # test/harness.py prove.
+#
+# One GenMC job runs each memory model. The resize client explores tens of millions of executions under one model,
+# and that takes hours. Five models in one job pass the six-hour limit of a job, so each model has a job of its own.
+# A cache keeps the GenMC build between runs, with the prove tool's hash as its key: an edit to the tool, the tag of
+# GenMC among its contents, makes a new build.
 
 on:
   push:
@@ -9,6 +14,7 @@ on:
       - main
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -45,20 +51,34 @@ jobs:
           fi
 
   genmc:
-    name: GenMC
+    name: GenMC ${{ matrix.model }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [sc, tso, rc11, imm, arm8]
     steps:
       - uses: actions/checkout@v7
 
-      - name: Run each client under each memory model
+      - name: Keep the GenMC build between runs
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.local/bin/genmc
+            ~/.local/include/genmc
+            ~/.local/lib/genmc
+          key: genmc-${{ runner.os }}-${{ hashFiles('test/prove/prove.py') }}
+
+      - name: Run each client under the model
         # The first run on a host installs the packages of GenMC, then builds and installs the tag that
-        # test/prove/prove.py names.
-        run: python3 test/harness.py prove
+        # test/prove/prove.py names. A run with the build from the cache installs the packages alone.
+        run: python3 test/harness.py prove --model ${{ matrix.model }}
 
       - name: Keep the run
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: genmc-${{ github.run_id }}
+          name: genmc-${{ matrix.model }}-${{ github.run_id }}
           path: build/prove-*
           if-no-files-found: ignore

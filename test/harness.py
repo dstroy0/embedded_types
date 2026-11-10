@@ -12,7 +12,7 @@
   harness.py cases <dir>...                   what Unity will register, and what it will walk past
   harness.py runners gen <dir>... --unity <rb>   write <dir>/unity_runner.c
   harness.py ste [--show [DOC ...]] [--lower]  every technical document checked against ASD-STE100 with the ratchet
-  harness.py prove [--client C]               each GenMC client under test/prove, under each memory model
+  harness.py prove [--client C] [--model M]   each GenMC client under test/prove, under each memory model
   harness.py site [--serve]                   the site built into build/site, as the docs workflow builds it
 
 There are four build trees. Each carries its own flags here, and running one takes no remembered
@@ -490,7 +490,7 @@ def cmd_site(parsed):
 
 
 def cmd_prove(parsed):
-    """Run each GenMC client under test/prove under each memory model, or the clients named.
+    """Run each GenMC client under test/prove under each memory model, or the clients and the models named.
 
     test/prove/prove.py does the work, and its docstring states what each run holds. The run's logs go under the
     build root as prove-<stamp>.
@@ -500,7 +500,7 @@ def cmd_prove(parsed):
     import time  # noqa: PLC0415
 
     run_root = os.path.join(BUILD_ROOT, "build", "prove-" + time.strftime("%Y%m%d-%H%M%S"))
-    return prove.prove(ROOT, run_root, parsed.client)
+    return prove.prove(ROOT, run_root, parsed.client, parsed.model)
 
 
 def main():
@@ -542,6 +542,7 @@ def main():
 
     parser = sub.add_parser("prove", help="each GenMC client under test/prove, under each memory model")
     parser.add_argument("--client", action="append", help="a client by name, without _genmc.c, any number of times")
+    parser.add_argument("--model", action="append", help="a memory model by name, without its dashes, any number of times")
     parser.set_defaults(fn=cmd_prove)
 
     parser = sub.add_parser("site", help="the site built into build/site, as the docs workflow builds it")
