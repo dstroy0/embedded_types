@@ -8,7 +8,7 @@ chapters/order.tex, its list of chapters in the order of the file names. A PDF i
 comes in whole with \\includepdf.
 
 The tool only reads the Markdown. Run it again after each edit to the Markdown. It writes every generated file whole,
-and it leaves a file whose text did not change alone. It removes a generated chapter whose Markdown is gone. --hold
+and it leaves a file whose text did not change alone. It removes a generated chapter that has no Markdown. --hold
 leaves the named files out of the research papers.
 """
 
@@ -109,8 +109,8 @@ def inline(value, chapter):
         # [a, a](0) in a table is an interval instead of a link. A target names a file or a page.
         if not re.search(r"[A-Za-z]", match.group(2)):
             return match.group(0)
-        # [Chang 1959](#src:Chang-1959) cites a registry key: its words stay, and the label is
-        # cited after them. The generated bibliography numbers it.
+        # [Chang 1959](#src:Chang-1959) cites a registry key: its words stay, and the citation of
+        # the label follows them. The generated bibliography numbers it.
         if match.group(2).startswith("#src:"):
             return match.group(1) + protect(r"~\cite{" + match.group(2)[1:] + "}")
         opening, closing = link_target(match.group(2), chapter)
@@ -130,12 +130,12 @@ def inline(value, chapter):
     # run out of it. A star inside a symbol, such as v*_b, is not an emphasis mark.
     value = re.sub(r"(?<![\w*])\*\*(?=\S)(.+?)(?<=\S)\*\*(?![\w*])", r"\\textbf{\1}", value)
     value = re.sub(r"(?<![\w*])\*(?=[^\s*])(.+?)(?<=[^\s*])\*(?![\w*])", r"\\emph{\1}", value)
-    # The word test is the Unicode one, so an underscore after a Greek letter is not an opening mark.
+    # The word test is the Unicode one, so an underscore after a Greek letter does not open a span.
     value = re.sub(r"(?<!\w)\\_(\S(?:(?!\\_).)*?)\\_(?![\w\\])", r"\\emph{\1}", value)
     # A name with underscores in text can break after an underscore, as a name in code can.
     value = value.replace(r"\_", r"\_\allowbreak{}")
-    # The Markdown writes straight double quotes. One that follows a word or closing punctuation
-    # closes, and every other one opens.
+    # The Markdown writes straight double quotes. One that follows a word or a punctuation mark that
+    # ends a span closes, and every other one opens.
     value = re.sub(r'(?<![\w.,;:!?)\]}\x00])"', "“", value)
     value = value.replace('"', "”")
     while "\x00" in value:
@@ -200,8 +200,8 @@ def longtable(rows, chapter):
         if sum(floors) <= 1 or step == len(TABLE_SIZES) - 1:
             break
         step += 1
-    # Every column gets its floor, and what is left of the width is shared by how much each column
-    # holds. Scaling the floors afterwards would take a column back under its longest word.
+    # Every column gets its floor, and the columns share the rest of the width by how much each one
+    # holds. A scale of the floors after that would take a column back under its longest word.
     slack = max(1 - sum(floors), 0)
     total = sum(weights)
     fractions = [floor + slack * weight / total for floor, weight in zip(floors, weights)]

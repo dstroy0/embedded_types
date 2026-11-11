@@ -71,10 +71,11 @@ The other attribute wrappers cost speed where they expand to nothing. These two 
 
 ### A lane read at any address without the attributes
 
-`embed_lane_raw` is the lane with `EMBED_RAW` on it, and `embed_lane_load` and `embed_lane_put` read
-and write through it. Where the compiler supports neither attribute, the type has the alignment of
-the lane, `EMBED_LANE_BYTES`. C does not define a load or a store at an address that is not a
-multiple of it, on either arm. Nothing diagnoses this. The aligned pair, `embed_lane_load_aligned`
+On the vector arm, `embed_lane_raw` is the lane with `EMBED_RAW` on it, and `embed_lane_load` and
+`embed_lane_put` read and write through it. On the portable arm, the two move one `embed_raw_word` at
+a time. Where the compiler supports neither attribute, each type has the alignment of the lane or
+of the word. C does not define a load or a store at an address that is not a multiple of it, on
+either arm. Nothing diagnoses this. The aligned pair, `embed_lane_load_aligned`
 and `embed_lane_put_aligned`, has the same limit on each compiler, and its `@warning` states it.
 
 ### The dispatch table

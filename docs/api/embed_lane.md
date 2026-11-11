@@ -64,12 +64,16 @@ The lane seen as char, the shape the compiler's byte mask builtin reads.
 ### `embed_lane_raw` { #embed_lane_raw }
 
 ```c
+#if EMBED_LANE_VECTOR
 typedef embed_lane embed_lane_raw EMBED_RAW;
+#endif
 ```
 
 The lane again, readable and writable at an address that is not a multiple of its width, as [`embed_raw_word`](embed_types.md#embed_raw_word) is the word.
 
-> **Note:** [`EMBED_RAW`](embed_compiler_directives.md#EMBED_RAW) lowers the alignment to one and permits access through an alias. A load or a store through this type has a defined result at any address. It is one instruction on either arm.
+> **Note:** [`EMBED_RAW`](embed_compiler_directives.md#EMBED_RAW) lowers the alignment to one and permits access through an alias. A load or a store through this type has a defined result at any address. It is one instruction.
+
+> **Note:** The vector arm alone has this type. A type attribute on a typedef of a struct has no effect after the definition of the struct. The alignment of a struct cannot go below the alignment of its members. So the portable arm reads and writes a lane one [`embed_raw_word`](embed_types.md#embed_raw_word) at a time.
 
 ### `embed_lane_mask` { #embed_lane_mask }
 
@@ -82,6 +86,30 @@ typedef embed_u64 embed_lane_mask;
 ```
 
 The byte mask that the byte operations of a lane give, one bit for each byte, the lowest byte at the lowest bit. It is 32 bits wide up to a 32-byte lane, and 64 above it.
+
+### `embed_lane_words` { #embed_lane_words }
+
+```c
+#if EMBED_LANE_PLAIN
+typedef union
+{
+    embed_lane lane;                                       /**< The lane. */
+    embed_word words[EMBED_LANE_BYTES / sizeof(embed_word)]; /**< The same bytes as words. */
+} embed_lane_words;
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at);
+#else
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at);
+#endif
+```
+
+A lane loaded from any address.
+
+- `at`: The address of the [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES) bytes to read, at any alignment.
+
+\*\*Returns:\*\* The bytes as a lane.
+
+- `lane`: The lane.
+- `words`: The same bytes as words.
 
 ## Macros
 
@@ -227,22 +255,6 @@ The index of the first byte set in a mask.
 
 > **Note:** The trailing zero count where the compiler has it, else the lowest bit isolated and placed by six masked steps.
 
-### `embed_lane_load` { #embed_lane_load }
-
-```c
-#if EMBED_LANE_PLAIN && !EMBED_HAS_ATTRIBUTE(aligned)
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at);
-#else
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at);
-#endif
-```
-
-A lane loaded from any address.
-
-- `at`: The address of the [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES) bytes to read, at any alignment.
-
-\*\*Returns:\*\* The bytes as a lane.
-
 ### `embed_lane_load_aligned` { #embed_lane_load_aligned }
 
 ```c
@@ -255,12 +267,12 @@ A lane loaded from an address aligned to the lane.
 
 \*\*Returns:\*\* The bytes as a lane.
 
-> _**Warning:**_ C leaves a load from an address not aligned to the lane undefined here. [`embed_lane_load`](#embed_lane_load) reads from any address.
+> _**Warning:**_ C leaves a load from an address not aligned to the lane undefined here. [`embed_lane_load`](#embed_lane_words) reads from any address.
 
 ### `embed_lane_put` { #embed_lane_put }
 
 ```c
-#if EMBED_LANE_PLAIN && !EMBED_HAS_ATTRIBUTE(aligned)
+#if EMBED_LANE_PLAIN
 EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane);
 #else
 EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane);

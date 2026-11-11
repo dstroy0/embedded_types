@@ -157,15 +157,19 @@ typedef struct
 
 EMBED_STATIC_ASSERT(sizeof(embed_lane) == EMBED_LANE_BYTES, "embed_lane must be exactly EMBED_LANE_BYTES wide");
 
+#if EMBED_LANE_VECTOR
 /**
  * @brief The lane again, readable and writable at an address that is not a multiple of its width,
  *        as embed_raw_word is the word.
  *
  * @note EMBED_RAW lowers the alignment to one and permits access through an alias. A load or a
- *       store through this type has a defined result at any address. It is one instruction on either
- *       arm.
+ *       store through this type has a defined result at any address. It is one instruction.
+ * @note The vector arm alone has this type. A type attribute on a typedef of a struct has no effect
+ *       after the definition of the struct. The alignment of a struct cannot go below the alignment
+ *       of its members. So the portable arm reads and writes a lane one embed_raw_word at a time.
  */
 typedef embed_lane embed_lane_raw EMBED_RAW;
+#endif
 
 /**
  * @brief The byte mask that the byte operations of a lane give, one bit for each byte, the lowest
@@ -217,20 +221,26 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask m
  * @param at  The address of the EMBED_LANE_BYTES bytes to read, at any alignment.
  * @return    The bytes as a lane.
  */
-#if EMBED_LANE_PLAIN && !EMBED_HAS_ATTRIBUTE(aligned)
-// Where EMBED_RAW cannot lower an alignment, embed_lane_raw keeps the alignment of the lane. A load through it is an
-// aligned load, and the compiler can emit one. So this arm reads the lane one raw word at a time, as for the word.
+#if EMBED_LANE_PLAIN
+// The portable lane is a struct, and a struct cannot take the raw attributes. So this arm reads the lane one raw
+// word at a time, as for the word. The raw word has both attributes on every compiler that has them. The union
+// gives the lane a view as words, which C defines, so no pointer casts between the two types.
+typedef union
+{
+    embed_lane lane;                                       /**< The lane. */
+    embed_word words[EMBED_LANE_BYTES / sizeof(embed_word)]; /**< The same bytes as words. */
+} embed_lane_words;
+
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
 {
-    embed_lane lane;
+    embed_lane_words view;
     const embed_raw_word *const from = (const embed_raw_word *)at;
-    embed_word *const to = (embed_word *)(void *)lane.at;
 
     for (size_t place = 0u; place < (EMBED_LANE_BYTES / sizeof(embed_word)); place += 1u)
     {
-        to[place] = from[place];
+        view.words[place] = from[place];
     }
-    return lane;
+    return view.lane;
 }
 #else
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
@@ -258,16 +268,17 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load_aligned(const void *at
  * @param dst   The address of the EMBED_LANE_BYTES bytes to write, at any alignment.
  * @param lane  The bytes.
  */
-#if EMBED_LANE_PLAIN && !EMBED_HAS_ATTRIBUTE(aligned)
+#if EMBED_LANE_PLAIN
 // The store that matches the load arm above, one raw word at a time, for the same reason.
 EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
 {
+    embed_lane_words view;
     embed_raw_word *const to = (embed_raw_word *)dst;
-    const embed_word *const from = (const embed_word *)(const void *)lane.at;
 
+    view.lane = lane;
     for (size_t place = 0u; place < (EMBED_LANE_BYTES / sizeof(embed_word)); place += 1u)
     {
-        to[place] = from[place];
+        to[place] = view.words[place];
     }
 }
 #else

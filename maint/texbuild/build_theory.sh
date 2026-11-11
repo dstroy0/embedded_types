@@ -11,8 +11,8 @@
 # builds clean has its PDF copied beside its main.tex, with the name of its directory. A paper that
 # fails, or that drops a glyph, leaves that PDF as it was, and this script exits 1.
 #
-# The engine reports a glyph that no font has as "Missing character", and the run still succeeds.
-# This script counts those lines and fails the paper where the count is not zero.
+# The engine reports a glyph that no font has as a dropped character in the log, and the run still
+# succeeds. This script counts those log lines and fails the paper where the count is not zero.
 
 set -e
 
