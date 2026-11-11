@@ -55,6 +55,9 @@ for paper in $PAPERS; do
     fi
     clean=1
     cd "$src"
+    # The engine reads an aux file from the source directory before the output directory. A stale one
+    # there hides the citations of this run.
+    rm -f main.aux main.log main.fls main.fdb_latexmk main.toc main.out
     for pass in 1 2; do
         if ! xelatex -interaction=nonstopmode -file-line-error \
                 -output-directory="$out" main.tex > "$out/pass$pass.log" 2>&1; then
