@@ -76,7 +76,7 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/embedded_types/test/unit/test_embed_atomic\\test_embed_atomic.c");
+  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/mmgr/deps/embedded_types/test/unit/test_embed_atomic\\test_embed_atomic.c");
   run_test(test_a_word_declared_holds_its_value_and_is_one_word_wide, "test_a_word_declared_holds_its_value_and_is_one_word_wide", 99);
   run_test(test_store_load_and_exchange_round_trip, "test_store_load_and_exchange_round_trip", 110);
   run_test(test_swap_if_takes_the_expected_word_alone, "test_swap_if_takes_the_expected_word_alone", 124);

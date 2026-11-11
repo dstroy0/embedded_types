@@ -5,11 +5,11 @@ that a C11 embedded build needs. Each library in the build takes them from here,
 them again.
 **Scope:** `include/embed_types.h`, `include/embed_compiler_directives.h`,
 `include/embed_dispatch_layout.h`, `include/embed_atomic.h`, `include/embed_turnstile.h`,
-`include/embed_lane.h`, `cmake/EmbeddedTypesSuite.cmake`, `test/harness.py`, `test/support/`,
-`test/unit/`, `test/prove/`, `theory/`
+`include/embed_ticket_ring.h`, `include/embed_lane.h`, `cmake/EmbeddedTypesSuite.cmake`,
+`test/harness.py`, `test/support/`, `test/unit/`, `test/prove/`, `theory/`
 
-Six C11 headers hold the fixed-width integer aliases, the machine word, the compile-time checks
-around them, atomic words, turnstiles, and the lane. The word comes from the width of the target's
+Seven C11 headers hold the fixed-width integer aliases, the machine word, the compile-time checks
+around them, atomic words, turnstiles, the ticket ring, and the lane. The word comes from the width of the target's
 pointer. The lane is the widest vector register of the target, and a bulk pass over memory moves and
 computes in it. The turnstile is an atomic thread scheduler. The library is headers only.
 
@@ -61,12 +61,13 @@ out a member, or where the compiler puts bytes between two members.
 | [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the macros behind them                   |
 | [`include/embed_atomic.h`](include/embed_atomic.h)                           | 32-bit and 64-bit atomic words for host, part and GPU threads, on an arm that the target selects |
 | [`include/embed_turnstile.h`](include/embed_turnstile.h)                     | an atomic thread scheduler: turnstiles that readers pass through and that a writer drains, with lanes that open and close with the queue, and the sleep on the address of a word that the host defines |
+| [`include/embed_ticket_ring.h`](include/embed_ticket_ring.h)                 | a ring of job slots that a ticket indexes, 2^shift of them, each push and pop one shift, one mask and two moves inside a pass through a turnstile |
 | [`include/embed_lane.h`](include/embed_lane.h)                               | the lane beside the word, the widest register, its loads, fills, arithmetic and masks           |
 | [`test/support/`](test/support)                                              | host threads for the contention cases and the host's address wait, out of the sight of the runners |
 | [`test/unit/`](test/unit)                                                    | one Unity suite for each header, and one for the device arm of the lane, each its own CTest target |
 | [`test/prove/`](test/prove)                                                  | the GenMC clients of the turnstile, and the host that they run on                               |
 | [`test/harness.py`](test/harness.py)                                         | suite discovery, Unity runner generation, the build trees, the proofs, and the site             |
-| [`theory/`](theory)                                                          | the Lean proofs of the turnstile                                                                |
+| [`theory/`](theory)                                                          | the Lean proofs of the turnstile and the ticket ring                                            |
 | [`cmake/`](cmake)                                                            | `embedded_types_add_suite()` and `embedded_types_add_device_suite()`                            |
 | [`LICENSES/`](LICENSES)                                                      | the AGPL text and the two LicenseRef documents                                                  |
 
@@ -103,6 +104,8 @@ declaration. That block states each guarantee and each warning one time.
 | `embed_atomic_ordered`                                                                                   | the fence that orders the earlier writes of this context ahead of its later reads                                              |
 | `EmbedTurnstiles`, `embed_turnstile_enter`, `embed_turnstile_leave`, `embed_turnstiles_drain`, `embed_turnstile_lanes`, `EMBED_TURNSTILE_LANES` | a manifold of lanes, one lane open at rest; an entry at the lane of the worker's address, which spills to the next free lane and grows the manifold where each lane is busy; the end of the pass, which contracts the manifold as the pressure goes; a wait for every pass that began before the call; the lanes open; and the most lanes |
 | `EmbedTurnstileBackoff`, `embed_turnstile_backoff_begin`, `embed_turnstile_backed_off`, `EMBED_TURNSTILE_UNIT_SHIFT` | the start and the exponent of a backoff, in the caller's locals; one step, a pause inside the first unit and a wait that doubles to 2^20 units after it; and the unit, 2^10 ns on a CPU host and 1 ns on a device |
+| `EmbedTicketRing`, `EmbedTicketRingSlot`, `embed_ticket_ring_begin`, `embed_ticket_ring_place`, `embed_ticket_ring_push`, `embed_ticket_ring_pop`, `embed_ticket_ring_pushed`, `embed_ticket_ring_popped` | a ring of 2^shift slots over the storage of the caller; the place of a ticket, its low shift bits; a push and a pop at that place with no branch; and the same inside a pass through a turnstile, an entry, the move and a leave |
+| `embed_ticket_stamp`, `embed_ticket_of_stamp`, `embed_epoch_of_stamp`, `EMBED_TICKET_MASK`               | the 64-bit stamp of an epoch in the high 32 bits and a ticket in the low 32, and each field read back out of it |
 | `embed_word_wait`, `embed_word_wake`, `embed_clock_ns`, `EMBED_WAIT_FOREVER`                             | the sleep on the address of a word while it reads a value, for a time in nanoseconds; the wake of every sleeper; and the clock in nanoseconds; the host defines each on its futex, WaitOnAddress or `__ulock_wait` |
 | `EMBED_HAS_BYTE_MASK_256`, `EMBED_BYTE_MASK_256`, `EMBED_HAS_BYTE_MASK_128`, `EMBED_BYTE_MASK_128`       | 1 where the compiler has the builtin that reads the sign bits of 32 or 16 bytes into an int, 0 otherwise; and the builtin, 0 where not |
 | `embed_lane`, `embed_lane_raw`, `embed_lane_mask`, `EMBED_LANE_MASK_ALL`, `embed_lane_mask_first`       | the 32-bit lanes of the lane in the vector type of the compiler or an aligned struct; the same at any address; one bit a byte; every byte; the first set bit |

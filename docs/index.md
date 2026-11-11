@@ -40,6 +40,7 @@ The word is [`embed_word`](api/embed_types.md#embed_word), the register that eac
 | [`embed_dispatch_layout.h`](api/embed_dispatch_layout.md)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the macros behind them    |
 | [`embed_atomic.h`](api/embed_atomic.md)                           | 32-bit and 64-bit atomic words for host, part and GPU threads, on four arms      |
 | [`embed_turnstile.h`](api/embed_turnstile.md)                     | an atomic thread scheduler: turnstiles that readers pass through and that a writer drains |
+| [`embed_ticket_ring.h`](api/embed_ticket_ring.md)                 | a ring of job slots that a ticket indexes, pushed and popped inside a pass       |
 | [`embed_lane.h`](api/embed_lane.md)                               | the lane, its loads, fills, arithmetic and byte masks                            |
 
 No header allocates memory or runs code at startup. The first three include only `stddef.h` and `stdint.h`. Each entry of the atomics and the lane has `EMBED_HOST_DEVICE`, so a kernel calls the same functions that a host walk calls.

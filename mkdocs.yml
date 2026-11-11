@@ -98,6 +98,7 @@ nav:
       - embed_dispatch_layout.h: api/embed_dispatch_layout.md
       - embed_atomic.h: api/embed_atomic.md
       - embed_turnstile.h: api/embed_turnstile.md
+      - embed_ticket_ring.h: api/embed_ticket_ring.md
       - embed_lane.h: api/embed_lane.md
   - Licensing: licensing.md
   - Security: https://github.com/dstroy0/embedded_types/blob/main/SECURITY.md

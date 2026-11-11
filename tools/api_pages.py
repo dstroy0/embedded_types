@@ -34,6 +34,7 @@ HEADERS = (
     "embed_dispatch_layout.h",
     "embed_atomic.h",
     "embed_turnstile.h",
+    "embed_ticket_ring.h",
     "embed_lane.h",
 )
 
