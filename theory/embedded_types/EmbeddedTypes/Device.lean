@@ -34,8 +34,8 @@ The device primitives are functions from the word to the pair of the new value a
   `shift_defined` needs, and the ceiling of a wait is 2^20 ns.
 
 The memory model of the device stays an axiom. The axiom is that `__threadfence` orders the writes before it ahead
-of the reads after it at device scope, as the sequentially consistent fence does on the host. That is Axiom A1 of
-the research paper, the same axiom that covers the host arms.
+of the reads after it, at device scope. The sequentially consistent fence does the same on the host. That is Axiom
+A1 of the research paper, the same axiom that covers the host arms.
 -/
 
 namespace EmbeddedTypes.Device
