@@ -236,6 +236,18 @@ theorem roll_32 (x : BitVec 32) : x + unit 32 * 0x20000000 = x := by
   simp only [unit]
   bv_decide
 
+/-- Fewer passes than the roll move the generation. So a drain that reads a held lane twice reads it over, unless
+exactly 2^61 passes at 64 bits, or 2^29 at 32 bits, ended between the two reads. -/
+theorem fewer_ends_move_64 (x n : BitVec 64) (hn : n ≠ 0) (hlt : n < 0x2000000000000000) :
+    generation (x + unit 64 * n) ≠ generation x := by
+  simp only [generation, unit]
+  bv_decide
+
+theorem fewer_ends_move_32 (x n : BitVec 32) (hn : n ≠ 0) (hlt : n < 0x20000000) :
+    generation (x + unit 32 * n) ≠ generation x := by
+  simp only [generation, unit]
+  bv_decide
+
 /-! ## The bits and the lane's states
 
 `Open.lean` holds a lane as free, held by a pass or a contraction, or closed. The bits give the same three classes.

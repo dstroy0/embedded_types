@@ -8,3 +8,4 @@ import EmbeddedTypes.Manifold.Queue
 import EmbeddedTypes.Manifold.Drain
 import EmbeddedTypes.Manifold.Wake
 import EmbeddedTypes.TicketRing
+import EmbeddedTypes.Claim

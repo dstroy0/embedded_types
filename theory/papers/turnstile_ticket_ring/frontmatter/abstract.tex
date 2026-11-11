@@ -22,7 +22,8 @@ the stamp, the place, the window and the pushes of the ring. GenMC checks the dr
 of the manifold under five memory models. From these the paper derives the rest with no new
 mechanism: a worker's identity is the constant address it enters by, its time is the nanosecond
 clock the backoff reads, a rewind of $k$ tickets is one pop at ticket $t - k$ inside the window, and
-an upset in a stamp is detected by the stamp that the pop echoes back. A verified memory manager,
+an upset in a stamp is detected by the stamp that the pop echoes back or by the one claim per slot
+that a flipped worker and the owner of a ticket collide on. A verified memory manager,
 the cellblock of MMgr, is built over the turnstile and lifts the drain theorem into its own Lean
 proof as one whole step. We state each theorem as it is checked and name the three trusted axioms:
 the atomics of the target, the futex contract of the host, and the depth bound that the grantor of

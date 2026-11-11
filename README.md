@@ -191,7 +191,7 @@ git config core.hooksPath .githooks
 | [`test/support/`](test/support)                      | host threads for the contention cases, and the host's sleep on the address of a word |
 | [`test/prove/`](test/prove)                          | the GenMC clients of the turnstile, and the host that they run on                    |
 | [`test/harness.py`](test/harness.py)                 | suite discovery, Unity runner generation, the build trees, the proofs, and the site  |
-| [`theory/`](theory)                                  | the Lean proofs: the widths, the atomics, the lane, the manifold of the turnstile, and the ticket ring |
+| [`theory/`](theory)                                  | the Lean proofs: the widths, the atomics, the lane, the manifold of the turnstile, the ticket ring and the claim of a slot; and the research paper on the two |
 | [`docs/`](docs)                                      | the site: the hand-written pages, and the API pages from the headers                 |
 | [`tools/api_pages.py`](tools/api_pages.py)           | the tool that writes the API pages                                                   |
 | [`LICENSES/`](LICENSES)                              | the AGPL text and the two LicenseRef documents                                       |

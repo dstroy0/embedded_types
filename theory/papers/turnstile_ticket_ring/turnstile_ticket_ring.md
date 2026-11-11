@@ -273,7 +273,7 @@ where $\mathrm{Pairwise}_{\neq}(l)$ states that any two members of $l$ have tick
 
 **Theorem 3 (bounded rewind).** A rewind of $k$ tickets from a current ticket $c$ is one pop at $\mathrm{stamp}(e, c - k)$, and the artifact needs no second operation for it. For $k < 2^{s}$, `window_distinct` puts $c - k$ at a place of its own among the live tickets, `place_wrap` and `place_roll` make the place the same across the wrap of the ring and the roll of the 32-bit ticket, and `pop_pushes` gives the pop the job that the push of $c - k$ wrote. The pop is $O(1)$: one shift, one mask, two loads. The echoed stamp confirms the rewind landed, by `stamp_injective`: a slot that a ticket outside the window overwrote carries that ticket's stamp and not $c - k$. The retention window $W$ is $2^{s}$ by `place_lt`, and an undo over the window is the same pop applied $k$ times, each one an instance of `pop_pushes`.
 
-**Theorem 4 (single-event upset containment).** `place_lt` holds for every natural number $t$, with no hypothesis on $t$. A stamp whose ticket field a single-event upset flipped in any bit still indexes a slot below $2^{s}$, because the mask of the C is the modulus (`place_mask`). The slot access is therefore in bounds for every 64-bit value of the stamp, flipped or not. Detection is the read-back: a pop returns the stamp of the push that wrote the slot, and `stamp_injective` makes a stamp equal to the expected one only where both fields are equal. A flip in the ticket of a consumer moves it to the slot of another ticket, whose stamp differs in that bit; a flip in the stamp field of a slot differs from the stamp the consumer holds. In both cases one 64-bit compare after the pop detects the flip, and the flip never left the array. Section 6 states the flips that this compare does not see.
+**Theorem 4 (single-event upset containment).** `place_lt` holds for every natural number $t$, with no hypothesis on $t$. A stamp whose ticket field a single-event upset flipped in any bit still indexes a slot below $2^{s}$, because the mask of the C is the modulus (`place_mask`). The slot access is therefore in bounds for every 64-bit value of the stamp, flipped or not. Detection is the read-back and the claim, Section 3.9: `flip_changes` proves that any nonzero mask changes a stamp, so a flip in the stamp field of a slot always fails the compare against the stamp the consumer holds, and `collision_detected` proves that a flip in the consumer's own ticket, which lands on the live slot of another ticket, collides with that ticket's owner at the claim and one of the two fails. `pop_stamp_free_of_job` proves that the stamp of a pop does not depend on the job, so a flip in the job pointer is outside every stamp check and the job must carry its own.
 
 ### 3.7 Model checks (`test/prove`)
 
@@ -282,6 +282,41 @@ Two GenMC clients run under the sequentially consistent, TSO, RC11, IMM and ARMv
 ### 3.8 Coarse-grained refinement
 
 Every theorem of Sections 3.1 to 3.6 is stated over steps that are atomic operations of the C: a fetch-or, a fetch-add, a compare-and-swap, a load after a fence. The consumer of the turnstile does not reason at that grain. It reasons at the grain of a *pass*: an entry, some work, a leave. Theorems 3.3 and `drain_lane_complete` together say that a drain ends with every pass of its fence ended, and that is the one fact a consumer needs: the step "enter, work, leave" is indivisible with respect to the drain. A consumer therefore takes the pass as its smallest transition and proves its own invariants by induction over sequences of passes and drains, and it inherits the turnstile's proof by importing it. Section 4 shows a consumer that does exactly this.
+
+### 3.9 The claim of a slot (`Claim.lean`)
+
+A worker acts on a slot only after one read-modify-write on it succeeds. The push is a compare-and-swap from empty to the stamp; the claim is a compare-and-swap from the stamp to the stamp with a consumed mark and the id of the pass. Each succeeds for one caller and fails for every other, which is the contract `cas_contract_64` proves for the arms. The model is a slot with three states and two operations:
+
+```
+inductive Slot where
+  | empty
+  | pushed (stamp : Nat)
+  | consumed (stamp : Nat) (pass : Nat)
+
+def push (slot : Slot) (stamp : Nat) : Slot × Bool :=
+  match slot with
+  | .empty => (.pushed stamp, true)
+  | _ => (slot, false)
+
+def claim (slot : Slot) (stamp pass : Nat) : Slot × Bool :=
+  match slot with
+  | .pushed t => if t = stamp then (.consumed stamp pass, true) else (slot, false)
+  | _ => (slot, false)
+```
+
+The theorems:
+
+- `flip_changes` and `bit_flip_changes`: $\forall x\, m,\; m \neq 0 \Rightarrow x \oplus m \neq x$, and $\forall x\, i,\; i < 64 \Rightarrow x \oplus 2^{i} \neq x$, by `bv_decide`. Any flip in a stamp field fails the stamp compare.
+- `pop_stamp_free_of_job`: the stamp that a pop returns is the same after any change to any job in the ring.
+- `push_once`, `claim_pushed`, `claim_other_fails`, `claim_once`: a push lands on an empty slot alone; a claim with the stamp of a pushed slot lands; a claim with another stamp fails; after one claim lands, no claim lands.
+- `claims_at_most_one`: $\forall \mathit{slot}\, l,\; \mathrm{count}(\mathrm{claims}(\mathit{slot}, l)) \le 1$. Any sequence of claims on one slot lands at most once, so no job runs twice.
+- `collision_detected`: with $c_1 = \mathrm{claim}(\mathrm{pushed}(s), s, p)$ and $c_2 = \mathrm{claim}(c_1.\mathrm{slot}, s, q)$, $\forall s\, p\, q,\; c_1.\mathrm{landed} \land \neg\, c_2.\mathrm{landed}$. The owner of a ticket and a worker whose flipped ticket landed on the same slot collide; the second claim fails and raises the fault.
+- `claim_in_pass` and `claim_drained`: a claim step is a step of a combined state, one lane of `Drain.lean` and one slot, and the step exists only where the lane's holder is the claiming pass. So a consumed slot names a pass that held the lane at the claim, and `over_means_ended` applies to that pass: a drain that read the lane held then waits until the claimant's pass ends.
+- `drain_waits_while_held`: $\forall s\, u\, p,\; \mathrm{Inv}(s) \land s.\mathrm{holder} = p \land \mathrm{Follows}(s, u) \land \neg u.\mathrm{ended}(p) \Rightarrow \neg\,\mathrm{over}(s, u)$. The drain never reads a lane over while the pass it read there has not ended. This is the liveness condition of the drain stated as a theorem: the drain terminates exactly when every pass of its fence terminates.
+
+The claim binds the identity to the gate. The lane that a worker holds is the one its constant address selected, `entry_takes` gives that lane one holder, and the claim step requires that holder. A flipped worker therefore claims from inside its own pass, on its own lane, and the collision with the owner is a collision of two claims on one slot, which `claim_once` resolves to one success. What the C of this version does: the push and the pop of `embed_ticket_ring.h` are plain stores and loads inside a pass, and the slot carries no consumed mark. The compare-and-swap form of the pop, which the model proves, is the obligation this theorem places on the C, and the layout of the consumed mark in the slot is the design decision that discharges it.
+
+`LaneWord.lean` also gains `fewer_ends_move_64` and `fewer_ends_move_32`: $\forall x\, n,\; n \neq 0 \land n < 2^{w-3} \Rightarrow \mathrm{generation}(x + n \cdot \mathrm{unit}) \neq \mathrm{generation}(x)$. Fewer passes than the roll always move the generation, so the drain's misread of Section 6 needs exactly the roll count of passes between its two reads of one lane, and not one fewer.
 
 ## 4. Case study: the cellblock memory manager over the turnstile
 
@@ -303,7 +338,8 @@ typedef struct
 A pass (`carcer_attempted`) enters the turnstiles at the address of the caller's own word, reads the closed bit, and works on the cellblock where the bit is clear or on a sink word where it is set, then leaves:
 
 ```
-const unsigned int at = embed_turnstile_enter(&series->turnstiles, (embed_atomic_uptr_value)(uintptr_t)missed);
+const unsigned int at = embed_turnstile_enter(&series->turnstiles,
+                                              (embed_atomic_uptr_value)(uintptr_t)missed);
 const size_t closed = carcer_all((embed_atomic_word_load(&series->closed) & CARCER_CLOSED) != 0u);
 ...
 const uintptr_t answer = work(series, context, permit);
@@ -349,11 +385,13 @@ The trust boundary of the architecture is three axioms, one per source, and the 
 
 Beyond the axioms, the artifact has the following limits.
 
-- **Upsets the stamp compare does not see.** Theorem 4 contains every flip of a stamp and detects every flip that changes a stamp field. A flip in the job pointer of a slot does not change the stamp, and the ring does not see it; the consumer of the job must check the job. A flip that turns one valid stamp into another valid stamp of the same window, which needs the flipped field to land on a live ticket, reads as that ticket's slot. Multi-bit flips are outside every guarantee here.
-- **A pass that never leaves.** The drain waits for every pass that holds a lane at its fence, without a timeout, and a lane has no owner that the drain could inspect. A reader that enters and never leaves blocks every later drain. The architecture trusts its readers.
+- **The job pointer.** `pop_stamp_free_of_job` proves that no stamp check sees a flip in the job pointer of a slot. The job must carry its own check. Every other single-event upset is Theorem 4.
+- **A flipped worker that claims first.** `collision_detected` makes a flip that lands on a live stamp a detected fault, at the claim that fails. Where the flipped worker's claim lands first, it runs the foreign job once before the owner's claim fails. The consumed mark names the pass, not the worker, so the claim does not refuse the wrong worker; it refuses the second worker.
+- **The claim in the C.** The pop of this version is a plain load. The claim theorems hold of the compare-and-swap form of the pop, and that form is an obligation on the C and not a property of it yet.
+- **A pass that never leaves.** `drain_waits_while_held` proves that the drain never returns while a pass of its fence holds a lane. A reader that enters and never leaves therefore blocks every later drain, and the lane has no owner that the drain could inspect. The architecture trusts its readers to leave.
 - **Fixed retention.** The ring holds $2^{s}$ slots over storage that the caller owns, with $s \le 31$. There is no growth of the ring, and the manifold grows and contracts only its lanes, to at most `EMBED_TURNSTILE_LANES`.
-- **The generation roll.** The generation rolls after $2^{w-3}$ counts (`roll_64`). A drain that reads one lane twice with exactly that many pass ends between the two reads waits for one more pass to end. The header states this as a warning.
-- **The device arm.** Under nvcc one definition compiles into the host pass and the device pass. The device arm of the atomics is checked by the device suite where a CUDA part is present, and the Lean and GenMC results do not cover the CUDA memory model.
+- **The generation roll.** The generation rolls after $2^{w-3}$ counts (`roll_64`), and fewer counts always move it (`fewer_ends_move_64`). A drain that reads one lane twice with exactly the roll count of pass ends between the two reads waits for one more pass to end, and with any other count it does not. The header states this as a warning.
+- **The device arm.** Under nvcc one definition compiles into the host pass and the device pass. The device suite checks the lane's device arm where a CUDA part is present. The CUDA arm of the atomics and the turnstile has no suite, and the Lean and GenMC results do not cover the CUDA memory model.
 - **Inter-process use.** The Lean model of the wait does not distinguish a shared mapping from one process. The Linux futex gives the contract across processes for a shared mapping, and the lane words and the slots must be in that mapping; that is the host's property, Axiom A2, and not a theorem here.
 
-In sum: the turnstile and the ticket ring separate the guard from the storage so that each can be proved on its own. The lane word, the open count, the queue word, the backoff, the drain and the sleeps are theorems of Lean 4 over a transition system whose steps are the atomic operations of the C. The stamp, the place, the window and the pushes of the ring are theorems over a function from places to slots, and the window theorem is what makes the ring a causal log, a rewind one pop, and an upset one compare. The two proofs meet at one obligation, that a pass is exclusive with respect to the drain, GenMC checks that meeting point under five memory models, and a verified memory manager takes it as one whole step. Everything beyond that is an axiom, named.
+In sum: the turnstile and the ticket ring separate the guard from the storage so that each can be proved on its own. The lane word, the open count, the queue word, the backoff, the drain and the sleeps are theorems of Lean 4 over a transition system whose steps are the atomic operations of the C. The stamp, the place, the window, the pushes and the claim of the ring are theorems over a function from places to slots, and the window theorem is what makes the ring a causal log, a rewind one pop, and an upset one compare or one failed claim. The two proofs meet at one obligation, that a pass is exclusive with respect to the drain, GenMC checks that meeting point under five memory models, and a verified memory manager takes it as one whole step. Everything beyond that is an axiom, named, or an obligation on the C, named.
