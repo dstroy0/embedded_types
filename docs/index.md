@@ -2,7 +2,7 @@
 
 # embedded_types
 
-Six C11 headers hold the fixed-width integers, the machine word, the lane, atomic words, turnstiles and the compile-time checks around them. Each library in a build takes them from one place.
+Seven C11 headers hold a fully atomic thread scheduler, atomic types, compiler directives and platform directives. Under those are the fixed-width integers, the machine word, the index and the lane. Each library in a build takes them from one place.
 
 </div>
 
@@ -36,11 +36,11 @@ The word is [`embed_word`](api/embed_types.md#embed_word), the register that eac
 | header                                                            | what it holds                                                                    |
 | ----------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | [`embed_types.h`](api/embed_types.md)                             | the widths, the boolean, the word, the index, the raw word, and their assertions |
-| [`embed_compiler_directives.h`](api/embed_compiler_directives.md) | feature checks, the static assertion, attribute wrappers, diagnostic pragmas     |
+| [`embed_compiler_directives.h`](api/embed_compiler_directives.md) | the compiler directives, feature checks, the static assertion, attribute wrappers and diagnostic pragmas; and the platform directives, the byte order, the unaligned load, the widest vector register and the host and device marker |
 | [`embed_dispatch_layout.h`](api/embed_dispatch_layout.md)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the macros behind them    |
-| [`embed_atomic.h`](api/embed_atomic.md)                           | 32-bit and 64-bit atomic words for host, part and GPU threads, on four arms      |
-| [`embed_turnstile.h`](api/embed_turnstile.md)                     | an atomic thread scheduler: turnstiles that readers pass through and that a writer drains |
-| [`embed_ticket_ring.h`](api/embed_ticket_ring.md)                 | a ring of job slots that a ticket indexes, pushed and popped inside a pass       |
+| [`embed_atomic.h`](api/embed_atomic.md)                           | the atomic types: a 32-bit word and a 64-bit word for host, part and GPU threads, on the arm of the target |
+| [`embed_turnstile.h`](api/embed_turnstile.md)                     | the thread scheduler: turnstiles that readers pass through and that a writer drains, with a backoff and the sleep on the address of a word |
+| [`embed_ticket_ring.h`](api/embed_ticket_ring.md)                 | the ticket ring: a ring of job slots that a ticket indexes, with a push and a pop inside a pass through a turnstile |
 | [`embed_lane.h`](api/embed_lane.md)                               | the lane, its loads, fills, arithmetic and byte masks                            |
 
 No header allocates memory or runs code at startup. The first three include only `stddef.h` and `stdint.h`. Each entry of the atomics and the lane has `EMBED_HOST_DEVICE`, so a kernel calls the same functions that a host walk calls.

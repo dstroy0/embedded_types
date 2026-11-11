@@ -292,8 +292,8 @@
  * @brief Set to 1 where `EMBED_HAS_ATTRIBUTE(vector_size)` is not zero, else 0.
  *
  * @note The vector_size attribute on a scalar type makes a type that the compiler keeps in a vector
- *       register. The plain operators then run over each element at once. embed_lane.h takes its
- *       vector arm where this macro is 1, and its portable arm where it is 0.
+ *       register. The plain operators then run over each element at once. The lane header takes
+ *       its vector arm where this macro is 1, and its portable arm where it is 0.
  * @note Both arms define this macro. Test it with #if.
  */
 #if EMBED_HAS_ATTRIBUTE(vector_size)
@@ -323,8 +323,8 @@
  *
  * @note The compiler defines a macro for each instruction set that it emits, and this value comes
  *       from those macros. The build supplies no width of its own here. A flag that turns on an
- *       instruction set changes this value with it. embed_lane.h derives the width of the lane from
- *       this value where the build does not define one.
+ *       instruction set changes this value with it. The lane header derives the width of the lane
+ *       from this value where the build does not define one.
  * @note Both arms define this macro. Test it with #if.
  */
 #if defined(__AVX512F__)

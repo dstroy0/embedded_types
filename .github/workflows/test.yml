@@ -3,8 +3,9 @@ name: Test
 # The suite on each compiler, through test/harness.py. Each tree is one that the harness defines, with its flags.
 # A flag that this file also writes is a second copy of that flag.
 #
-# GCC and Clang run all four trees: as the library ships, with each warning an error, under the thread sanitizer,
-# and under the address and undefined behavior sanitizers. MSVC has no thread sanitizer, and it runs the first two.
+# GCC and Clang run all four trees. Those are the library as it ships, and the same with each warning an error. The
+# other two are the same under the thread sanitizer, and under the address and undefined behavior sanitizers. MSVC
+# has no thread sanitizer, and it runs the first two.
 
 on:
   push:

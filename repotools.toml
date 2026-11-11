@@ -1,11 +1,11 @@
 # embedded_types - Copyright (C) 2026 Douglas Quigg (dstroy0) <dquigg123@gmail.com>
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational
 #
-# Joins this repository to repo_tools. Every tool walks up from the working directory to find this
+# Joins this repository to repo_tools. Every tool walks up from the current directory to find this
 # file, so its location at the root is the contract.
 #
-# Only what differs from lib/repotools/defaults.toml is stated here. Run `repotools config` to see
-# what it resolves to once the defaults are merged under it.
+# This file states only what differs from lib/repotools/defaults.toml. Run `repotools config` to see
+# the result after the merge of the defaults under it.
 
 [project]
 name = "embedded_types"
@@ -32,7 +32,7 @@ tests = ["test"]
 roots = ["README.md", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "docs", "include", "test", "tools"]
 
 [hooks]
-# fetch_check is not named, because [fetch] sets is empty and this repository vendors no tool from
+# fetch_check is absent, because [fetch] sets is empty and this repository vendors no tool from
 # the toolkit. A gate over nothing reports success over nothing.
 gates = ["docs_check"]
 
@@ -42,6 +42,6 @@ gates = ["docs_check"]
 roots = ["README.md", "CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "docs", "include", "test", "tools"]
 
 [fetch]
-# Nothing is vendored in. The toolkit is invoked from its own checkout, so there is no second copy
-# here to drift from it. Adding a set is a decision to maintain a copy.
+# This repository vendors nothing. The toolkit runs from its own checkout, so there is no second copy
+# here to drift from it. A set here is a decision to maintain a copy.
 sets = []

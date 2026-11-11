@@ -187,8 +187,8 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 #endif
 
 /**
- * @brief Defines the operations over one atomic width: name_ is the suffix, type_ the word,
- *        exchange_, swap_if_, add_, or_ and and_ the arm's primitives for that width.
+ * @brief Defines the operations over one atomic width. name_ is the suffix and type_ the word. The
+ *        other five parameters are the primitives of the arm for that width.
  *
  * @note One text for both widths and each arm. A width or an arm cannot drift from the others.
  * @note The compare-and-swap uses the primitive of the arm where the arm has one, and the exchange
@@ -368,8 +368,8 @@ typedef embed_u32 embed_atomic_word_value;
  * @brief The atomic word as wide as size_t, for a count of bytes or an offset as size_t holds it. It
  *        is the 64-bit word where SIZE_MAX is 64 bits wide, and the 32-bit word below that.
  *
- * @note Keyed on size_t, not on EMBED_WORD_BITS, since a build may define the word narrower than the
- *       sizes it counts and a count must still fit whole.
+ * @note The key is size_t, and not EMBED_WORD_BITS. A build can define the word narrower than the
+ *       sizes that it counts, and a count must still fit whole.
  */
 #if SIZE_MAX == 0xFFFFFFFFFFFFFFFFu
 typedef embed_atomic_u64 embed_atomic_usize;

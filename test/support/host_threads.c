@@ -25,7 +25,7 @@ void host_threads_yield(void)
     (void)SwitchToThread();
 }
 
-/** @brief A Windows thread's entry, doing the run's work once. */
+/** @brief The entry of a Windows thread, which does the work of the run once. */
 static DWORD WINAPI host_threads_entry(LPVOID unused)
 {
     (void)unused;
@@ -69,7 +69,7 @@ void host_threads_yield(void)
 /** @brief The work the threads of the current run do, read by each as it starts. */
 static void (*s_each)(void);
 
-/** @brief A POSIX thread's entry, doing the run's work once. */
+/** @brief The entry of a POSIX thread, which does the work of the run once. */
 static void *host_threads_entry(void *unused)
 {
     (void)unused;

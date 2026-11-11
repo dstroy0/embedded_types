@@ -6,23 +6,24 @@
  */
 /**
  * @file test_embed_dispatch_layout.c
- * @brief Exercises the argument count, the token paste, the compound-literal call, both entry point
- *        generators, and that each table member reaches the function it was wired to.
+ * @brief Exercises the argument count, the token paste, the compound-literal call, and both entry
+ *        point generators. Also checks that each table member reaches the function that its
+ *        initializer names.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-08-31
  *
- * @note EMBED_NARG, EMBED_CAT and EMBED_CALL are declared in embed_dispatch_layout.h and are
- *       covered here. test_embed_compiler_directives.c includes embed_compiler_directives.h alone
- *       and reaches none of the three.
- * @note EMBED_TABLE_LAYOUT expands to static assertions. A table whose members sat at the wrong
- *       offsets would fail the build, and no case below would run.
- * @note A table can satisfy every offset assertion and still be wired to the wrong functions. An
- *       initializer names members, and the assertions measure positions. The cases below call
- *       through the table to catch that.
- * @note The arity family runs from one member to twenty-four. Three tables are declared below, at
+ * @note The dispatch header declares EMBED_NARG, EMBED_CAT and EMBED_CALL, and this suite covers
+ *       them. test_embed_compiler_directives.c includes embed_compiler_directives.h alone and
+ *       reaches none of the three.
+ * @note EMBED_TABLE_LAYOUT expands to static assertions. A table with members at the wrong offsets
+ *       fails the build, and no case below runs.
+ * @note A table can pass every offset assertion and still name the wrong functions. An initializer
+ *       names members, and the assertions measure positions. The cases below call through the
+ *       table to catch that.
+ * @note The arity family runs from one member to twenty-four. This file declares three tables, at
  *       one, three and twenty-four members. That covers the shortest line, the longest line, and
  *       one in between.
- * @note Unity's generator reads case names out of the source text and does not evaluate a
+ * @note The generator of Unity reads case names out of the source text and does not evaluate a
  *       preprocessor conditional. Every case below sits at file scope with no #if around it.
  */
 #include <stddef.h>
@@ -32,7 +33,7 @@
 
 #include "unity.h"
 
-/** @brief A value reached only by building its name from two tokens. */
+/** @brief A value that only a paste of two tokens into its name reaches. */
 #define TEST_PASTED_NAME_7 7
 
 /** @brief The operand block the compound-literal call builds at its call site. */
@@ -53,7 +54,7 @@ typedef struct
  */
 static embed_index call_probe(const CallProbeArgs *args)
 {
-    // The 2u and 4u operands promote the sum to unsigned int. Narrowing back to embed_index is safe
+    // The 2u and 4u operands promote the sum to unsigned int. The cast back to embed_index is safe
     // because every call site passes members of 0 or 1, and the sum is at most 7.
     return (embed_index)(args->first + (2u * args->second) + (4u * args->third));
 }
@@ -107,7 +108,7 @@ typedef struct
 EMBED_TABLE_LAYOUT(ProbeTable, first, second, third);
 
 /**
- * @brief The table under test, wired in the order its members are declared.
+ * @brief The table under test, with its members in declaration order.
  *
  * @note EMBED_TABLE_STORAGE expands to static const. EMBED_UNUSED suppresses the unused-object
  *       warning on a table nothing calls through. The cases below call through this one.
@@ -122,10 +123,9 @@ EMBED_TABLE_STORAGE ProbeTable dispatch_probe_table EMBED_UNUSED = {
  * @brief A table of one member, the shortest arity EMBED_TABLE_LAYOUT covers.
  *
  * @note The assertion below selects EMBED_TABLE_SLOTS_1, the one line in the family that calls
- *       EMBED_TABLE_SLOT directly instead of expanding a shorter line first. No other table here
- *       reaches it.
- * @note No object of this type is declared. EMBED_TABLE_LAYOUT asserts against the struct type, and
- *       test_the_shortest_and_longest_tables_hold_only_their_slots measures that type.
+ *       EMBED_TABLE_SLOT itself and expands no shorter line first. No other table here reaches it.
+ * @note This file declares no object of this type. EMBED_TABLE_LAYOUT asserts against the struct
+ *       type, and test_the_shortest_and_longest_tables_hold_only_their_slots measures that type.
  */
 typedef struct
 {
@@ -183,9 +183,9 @@ typedef struct
 /**
  * @brief The context a generated entry point builds for the backend it names.
  *
- * @note The two carried members are renamed from their EntryProbeConfig counterparts. A generated
- *       entry that forwarded the wrong member would compile if the names matched across the two
- *       types, and the rename removes that.
+ * @note The two carried members have other names than their EntryProbeConfig counterparts. A
+ *       generated entry that forwards the wrong member compiles where the names match across the
+ *       two types, and the different names remove that.
  * @note Neither EMBED_ENTRY expansion below names omitted_member in its initializer. C zero
  *       initializes it, and both backends weight it by four. A value other than zero then changes
  *       the sum a case reads back.
@@ -201,16 +201,16 @@ typedef struct
  * @brief The value setUp writes into recorded_weighted_sum ahead of every case.
  *
  * @note No configuration a case builds produces this sum. The largest sum either backend computes
- *       is seven, from three members of one. Reading 255 back means the void entry never reached
- *       its backend.
+ *       is seven, from three members of one. A read of 255 means the void entry never reached its
+ *       backend.
  */
 #define ENTRY_PROBE_UNSET 255u
 
 /**
  * @brief What the void backend last computed, or ENTRY_PROBE_UNSET where it has not run.
  *
- * @note A void entry returns nothing, and this object is what a case reads instead. setUp resets it
- *       so that one case cannot pass on a value another case left behind.
+ * @note A void entry returns nothing, and a case reads this object instead. The reset in setUp
+ *       stops one case from a pass on a value that another case left behind.
  */
 static embed_index recorded_weighted_sum;
 
@@ -224,7 +224,7 @@ static embed_index recorded_weighted_sum;
  */
 static embed_index entry_probe_backend_weighted_sum(const EntryProbeContext *args)
 {
-    // The 2u and 4u operands promote the sum to unsigned int. Narrowing back to embed_index is safe
+    // The 2u and 4u operands promote the sum to unsigned int. The cast back to embed_index is safe
     // because every case passes members of 0 or 1, and the sum is at most 7.
     return (embed_index)(args->carried_first + (2u * args->carried_second) + (4u * args->omitted_member));
 }
@@ -242,7 +242,7 @@ static void entry_probe_backend_record_sum(const EntryProbeContext *args)
 }
 
 /**
- * @brief Declares the value-returning entry point ahead of the macro that defines it.
+ * @brief Declares the entry point that returns a value, ahead of the macro that defines it.
  *
  * @param[in] args Configuration the entry forwards to its backend [BORROWS].
  * @return         What entry_probe_backend_weighted_sum computed.
@@ -283,12 +283,12 @@ void tearDown(void)
 }
 
 /**
- * @brief Checks that EMBED_NARG evaluates to the number of arguments it was handed.
+ * @brief Checks that EMBED_NARG evaluates to the number of arguments that it receives.
  *
- * @note Each expectation is the literal number of items written on the same line. Deriving it from
- *       EMBED_NARG would compare the macro with itself.
- * @note The arguments are number words, and the last word on each line names the count the
- *       assertion expects. A reader checks the length without counting commas.
+ * @note Each expectation is the literal number of items on the same line. An expectation from
+ *       EMBED_NARG compares the macro with itself.
+ * @note The arguments are number words, and the last word on each line names the count that the
+ *       assertion expects. A reader checks the length with no count of commas.
  * @note The five lengths are one, two, eight, twenty-three and twenty-four. One is the shortest
  *       list EMBED_NARG covers and twenty-four is the longest. Twenty-three sits one below the
  *       longest, and two and eight fall in between.
@@ -344,10 +344,10 @@ void test_the_call_passes_named_members_and_zeroes_the_rest(void)
 }
 
 /**
- * @brief Checks that each member reaches the function it was wired to.
+ * @brief Checks that each member reaches the function that its initializer names.
  *
  * @note EMBED_TABLE_LAYOUT asserts offsets on the struct type. The initializer is on the object, and
- *       naming the wrong function there changes no offset. Calling through each member catches it.
+ *       the wrong function there changes no offset. A call through each member catches it.
  */
 void test_each_member_reaches_the_function_it_names(void)
 {
@@ -390,10 +390,10 @@ void test_the_table_is_exactly_its_three_pointers(void)
 /**
  * @brief Checks the two ends of the arity family against the sizes their member counts imply.
  *
- * @note The two counts are literals, one and twenty-four. Deriving either from EMBED_NARG would
- *       compare the macro with itself.
- * @note The offset of slot24 is measured as well. EMBED_TABLE_SLOTS_24 asserts that offset at
- *       compile time, and this case reads it back at run time, the same way
+ * @note The two counts are literals, one and twenty-four. Either count from EMBED_NARG compares the
+ *       macro with itself.
+ * @note The case also measures the offset of slot24. EMBED_TABLE_SLOTS_24 asserts that offset at
+ *       compile time, and this case reads it back at run time, as
  *       test_the_table_is_exactly_its_three_pointers reads back a size.
  */
 void test_the_shortest_and_longest_tables_hold_only_their_slots(void)
@@ -407,8 +407,8 @@ void test_the_shortest_and_longest_tables_hold_only_their_slots(void)
 }
 
 /**
- * @brief Checks that the generated value-returning entry forwards its configuration and returns
- *        what its backend computed.
+ * @brief Checks that the generated entry with a value forwards its configuration and returns what
+ *        its backend computed.
  *
  * @note The entry names carried_first and carried_second in its initializer and leaves
  *       omitted_member out. The third assertion passes a configuration of zeroes. The weight of

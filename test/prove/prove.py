@@ -3,8 +3,8 @@
 """harness.py prove: each client under test/prove named *_genmc.c, run by GenMC under each memory model.
 
 GenMC explores each execution that the model allows. It reports a failed assertion, a data race, or a liveness
-violation: a thread asleep in a wait of genmc_host.h that no later wake ends. A client that passes under one model
-and fails under another names the order that the code needs.
+violation. A liveness violation is a thread asleep in a wait of genmc_host.h that no later wake ends. A client
+that passes under one model and fails under another names the order that the code needs.
 
 GenMC runs in WSL on a Windows host and directly on Linux. Its source is at ~/src/genmc, at the tag GENMC_TAG. The
 first run that needs it builds it and installs it to ~/.local. Each run writes its logs to one folder under build/.
@@ -18,12 +18,12 @@ import subprocess
 # The models: sequential consistency, x86, C11, the hardware model under C11, and Armv8.
 GENMC = "~/.local/bin/genmc"
 GENMC_MODELS = ["--sc", "--tso", "--rc11", "--imm", "--arm8"]
-# No unroll bound is set: each loop of a client ends by its finite passes and by the wakes of genmc_host.h. The wait
+# There is no unroll bound: each loop of a client ends by its finite passes and by the wakes of genmc_host.h. The wait
 # of genmc_host.h is a loop that reads only the count of wakes. GenMC's spin-assume takes it as a wait, and
 # --check-liveness reports an execution where no later wake ends it. A blocked execution is a branch where a read
 # took a value that an assume refused, which GenMC drops; it is not a fault.
 GENMC_FLAGS = ["--disable-estimation", "--check-liveness"]
-# No --nthreads: GenMC's parallel exploration corrupts its heap under the dependency-tracking models, and it aborts.
+# No --nthreads: the parallel exploration of GenMC corrupts its heap under the models that track dependencies, and it aborts.
 GENMC_SOURCE = "https://github.com/MPI-SWS/genmc.git"
 # The release that the clients use. Each host builds this tag. Thus, each host runs the same checker.
 GENMC_TAG = "v0.20.0"
@@ -50,7 +50,7 @@ def linux_root(root, command):
 
 
 def genmc_ready(root):
-    """None where GenMC runs, after its packages and its build where either is missing. The reason where a step failed."""
+    """None where GenMC runs, after its packages and its build where either is absent. The reason where a step failed."""
     built = linux(root, "test -x %s" % GENMC).returncode == 0
     if not built or linux(root, "test -x %s" % GENMC_CLANG).returncode != 0:
         print("  genmc     its packages install")

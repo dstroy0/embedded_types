@@ -14,8 +14,8 @@
  *       where it does not or where EMBED_LANE_PORTABLE is 1. The width is the build's too, derived
  *       from the target or defined ahead of the header. The same cases hold on each, one source
  *       native on every target.
- * @note The cases reach no header of the C library: bytes are read and written through the lane's
- *       own raw views, as the library's code does.
+ * @note The cases reach no header of the C library. They read and write bytes through the own raw
+ *       views of the lane, as the code of the library does.
  */
 #include "embed_lane.h"
 
@@ -216,8 +216,8 @@ void test_the_first_byte_of_a_mask_is_the_lowest_bit_set(void)
 
 void test_the_exact_divide_by_255_holds_in_every_lane_over_every_product(void)
 {
-    // the blend's identity: (x + (x >> 8)) >> 8 is (a * b + 127) / 255 for every a and b of a byte, x being
-    // a * b + 128; EMBED_LANE_U32S products a lane, every pair covered
+    // The identity of the blend, with x as a * b + 128: (x + (x >> 8)) >> 8 is (a * b + 127) / 255 for every
+    // a and b of a byte. Each lane holds EMBED_LANE_U32S products, and the loops cover every pair.
     for (unsigned int a = 0u; a < 256u; a += 1u)
     {
         for (unsigned int b = 0u; b < 256u; b += EMBED_LANE_U32S)

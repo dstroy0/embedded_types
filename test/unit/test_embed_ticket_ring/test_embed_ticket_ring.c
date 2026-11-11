@@ -6,9 +6,9 @@
  */
 /**
  * @file test_embed_ticket_ring.c
- * @brief Holds the ticket ring to its contract: the stamp's two fields, the place of a ticket and its roll at the
- *        count of slots and at 32 bits, a pop that reads what the push of its ticket wrote, and pushes from the
- *        host's threads inside passes through a turnstile, each read whole after the drain.
+ * @brief Holds the ticket ring to its contract. The stamp has two fields. The place of a ticket rolls at the count
+ *        of slots and at 32 bits. A pop reads what the push of its ticket wrote. Pushes from the threads of the host
+ *        run inside passes through a turnstile, and the drain reads each one whole.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-11-11
  */

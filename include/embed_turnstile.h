@@ -440,7 +440,7 @@ EMBED_INLINE void embed_turnstiles_drain(EmbedTurnstiles *set)
         EmbedTurnstileBackoff backoff;
         embed_atomic_word_value now = snapshot[at];
 
-        // A lane whose first read is closed holds no pass, and the drain does not wait on it
+        // A lane whose first read has the closed bit holds no pass, and the drain does not wait on it
         const embed_atomic_word_value closed = snapshot[at] & EMBED_TURNSTILE_CLOSED;
 
         embed_turnstile_backoff_begin(&backoff);

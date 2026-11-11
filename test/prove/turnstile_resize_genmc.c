@@ -6,10 +6,10 @@
  */
 /**
  * @file turnstile_resize_genmc.c
- * @brief Two workers make two passes each through a set of one lane on one start lane, while a writer drains, in each
- *        execution that the memory model allows. The passes grow the set and their ends contract it, and each growth
- *        races each contraction. Each pass holds a lane below the open count, the drain ends, and at the end no lane
- *        below the open count is closed or busy.
+ * @brief Two workers make two passes each through a set of one lane on one start lane, while a writer drains. GenMC
+ *        runs each execution that the memory model allows. The passes grow the set and their ends contract it, and
+ *        each growth races each contraction. Each pass holds a lane below the open count, and the drain ends. At the
+ *        end, no lane below the open count has the closed bit or the busy bit.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-11-07
  *
@@ -35,7 +35,7 @@ static void *worker(void *unused)
     {
         const unsigned int at = embed_turnstile_enter(&s_set, 0u);
 
-        // the lane a pass holds is open: busy is set and closed is clear
+        // The lane that a pass holds is open: it has the busy bit and not the closed bit
         assert((embed_atomic_word_load(&s_set.lane[at].word) & (EMBED_TURNSTILE_BUSY | EMBED_TURNSTILE_CLOSED)) ==
                EMBED_TURNSTILE_BUSY);
         embed_turnstile_leave(&s_set, at);

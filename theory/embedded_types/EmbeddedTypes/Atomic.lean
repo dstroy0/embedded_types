@@ -6,11 +6,13 @@ import Std.Tactic.BVDecide
 `include/embed_atomic.h` builds three operations from the primitives of each arm. Each theorem holds one of them at
 32 and at 64 bits.
 
-- `cas_contract_32` and `cas_contract_64`: `embed_atomic_cas_u32` and `embed_atomic_cas_u64` of arms 1 and 4 swap
-  where the word holds `*expected`, answer whether they swapped, and leave in `*expected` the word that they found.
-  This is the contract of the C11 compare-exchange that arms 2 and 3 call.
-- `sub_by_add_32` and `sub_by_add_64`: `fetch_sub` adds the two's complement, and that add is the subtract.
-- `raise_round` and `raise_exit`: each round of `embed_atomic_*_raise` either stops on a word at or above the
+- `cas_contract_32` and `cas_contract_64`. `embed_atomic_cas_u32` and `embed_atomic_cas_u64` of arms 1 and 4 swap
+  where the word holds `*expected`. They answer whether they swapped, and leave in `*expected` the word that they
+  found. This is the contract of the C11 compare-exchange that arms 2 and 3 call.
+
+- `sub_by_add_32` and `sub_by_add_64`. `fetch_sub` adds the two's complement, and that add is the subtract.
+
+- `raise_round` and `raise_exit`. Each round of `embed_atomic_*_raise` either stops on a word at or above the
   value, or swaps the value in over a word below it. A swap by `raise` never lowers the word.
 -/
 
@@ -37,7 +39,7 @@ theorem cas_contract_64 (word expected value : BitVec 64) :
     (r.2.2 = true ↔ word = expected) ∧ r.2.1 = word ∧ r.1 = (if word = expected then value else word) :=
   cas_contract word expected value
 
-/-- `fetch_sub` adds `0u - value`, and the sum is the difference, each wrapping at the width. -/
+/-- `fetch_sub` adds `0u - value`, and the sum is the difference. Each one wraps at the width. -/
 theorem sub_by_add_32 (x v : BitVec 32) : x + (0 - v) = x - v := by bv_decide
 
 theorem sub_by_add_64 (x v : BitVec 64) : x + (0 - v) = x - v := by bv_decide
@@ -50,8 +52,9 @@ def raiseRound {w : Nat} (word found value : BitVec w) : BitVec w × BitVec w ×
     (r.1, r.2.1, r.2.2)
   else (word, found, true)
 
-/-- A round that ends either found a word at or above the value, or swapped the value in over the word it expected,
-which was below the value. A round that does not end leaves the word as it was and finds the word now there. -/
+/-- A round that ends either found a word at or above the value, or swapped the value in over the word that it
+expected. That word was below the value. A round that does not end leaves the word as it was and finds the word now
+there. -/
 theorem raise_round {w : Nat} (word found value : BitVec w) :
     let r := raiseRound word found value
     (r.2.2 = true → (¬ found < value ∧ r.1 = word) ∨ (found < value ∧ word = found ∧ r.1 = value)) ∧

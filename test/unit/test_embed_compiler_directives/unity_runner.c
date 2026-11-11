@@ -4,7 +4,6 @@
 #include "unity.h"
 #include "embed_compiler_directives.h"
 #include <stdint.h>
-#include <string.h>
 
 /*=======External Functions This Runner Calls=====*/
 extern void setUp(void);
@@ -81,19 +80,19 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/mmgr/deps/embedded_types/test/unit/test_embed_compiler_directives\\test_embed_compiler_directives.c");
-  run_test(test_every_feature_gate_carries_a_value_of_zero_or_one, "test_every_feature_gate_carries_a_value_of_zero_or_one", 223);
-  run_test(test_the_static_assertion_compiles_at_file_and_block_scope, "test_the_static_assertion_compiles_at_file_and_block_scope", 240);
-  run_test(test_the_feature_tests_evaluate_to_zero_for_an_unknown_name, "test_the_feature_tests_evaluate_to_zero_for_an_unknown_name", 256);
+  UnityBegin("D:/git_project/repos/owned/public/embedded_types/test/unit/test_embed_compiler_directives\\test_embed_compiler_directives.c");
+  run_test(test_every_feature_gate_carries_a_value_of_zero_or_one, "test_every_feature_gate_carries_a_value_of_zero_or_one", 222);
+  run_test(test_the_static_assertion_compiles_at_file_and_block_scope, "test_the_static_assertion_compiles_at_file_and_block_scope", 239);
+  run_test(test_the_feature_tests_evaluate_to_zero_for_an_unknown_name, "test_the_feature_tests_evaluate_to_zero_for_an_unknown_name", 255);
   run_test(test_the_endian_flag_agrees_with_the_bytes_of_a_word, "test_the_endian_flag_agrees_with_the_bytes_of_a_word", 274);
-  run_test(test_the_inline_and_flattened_helpers_run_their_bodies, "test_the_inline_and_flattened_helpers_run_their_bodies", 300);
-  run_test(test_a_byte_enum_takes_one_byte, "test_a_byte_enum_takes_one_byte", 312);
-  run_test(test_the_alignment_attribute_raises_and_lowers, "test_the_alignment_attribute_raises_and_lowers", 329);
-  run_test(test_a_raw_word_reads_from_an_odd_address, "test_a_raw_word_reads_from_an_odd_address", 352);
-  run_test(test_the_diagnostic_bracket_bounds_a_suppression, "test_the_diagnostic_bracket_bounds_a_suppression", 379);
-  run_test(test_the_weak_default_links_as_itself, "test_the_weak_default_links_as_itself", 403);
-  run_test(test_the_declaration_guards_leave_a_c_declaration_intact, "test_the_declaration_guards_leave_a_c_declaration_intact", 414);
-  run_test(test_an_unreferenced_marked_definition_compiles_quietly, "test_an_unreferenced_marked_definition_compiles_quietly", 426);
+  run_test(test_the_inline_and_flattened_helpers_run_their_bodies, "test_the_inline_and_flattened_helpers_run_their_bodies", 298);
+  run_test(test_a_byte_enum_takes_one_byte, "test_a_byte_enum_takes_one_byte", 310);
+  run_test(test_the_alignment_attribute_raises_and_lowers, "test_the_alignment_attribute_raises_and_lowers", 327);
+  run_test(test_a_raw_word_reads_from_an_odd_address, "test_a_raw_word_reads_from_an_odd_address", 350);
+  run_test(test_the_diagnostic_bracket_bounds_a_suppression, "test_the_diagnostic_bracket_bounds_a_suppression", 380);
+  run_test(test_the_weak_default_links_as_itself, "test_the_weak_default_links_as_itself", 404);
+  run_test(test_the_declaration_guards_leave_a_c_declaration_intact, "test_the_declaration_guards_leave_a_c_declaration_intact", 415);
+  run_test(test_an_unreferenced_marked_definition_compiles_quietly, "test_an_unreferenced_marked_definition_compiles_quietly", 427);
 
   return UNITY_END();
 }

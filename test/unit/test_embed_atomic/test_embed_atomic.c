@@ -11,9 +11,9 @@
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-10-29
  *
- * @note The contention cases are the ones that tell an atomic word from a plain one: a plain word
+ * @note The contention cases are the ones that tell an atomic word from a plain one. A plain word
  *       loses increments under contention and hands one claim to two takers. The counts here are
- *       exact or the arm is wrong.
+ *       exact, or the arm is wrong.
  */
 #include "embed_atomic.h"
 #include "host_threads.h"
@@ -26,7 +26,7 @@
 /** @brief The adds each thread makes to the counters. */
 #define ATOMIC_ROUNDS 20000u
 
-/** @brief The places the claiming case contends for, each taken by exactly one thread. */
+/** @brief The places that the claim case contends for, and exactly one thread takes each. */
 #define ATOMIC_SLOTS 256u
 
 static embed_atomic_u32 s_count32 = EMBED_ATOMIC_INIT(0u);
@@ -68,7 +68,7 @@ void tearDown(void)
 {
 }
 
-/** @brief One thread of the counting case: ATOMIC_ROUNDS adds to each counter and a raise to its id. */
+/** @brief One thread of the count case: ATOMIC_ROUNDS adds to each counter and a raise to its id. */
 static void atomic_count_rounds(void)
 {
     const embed_u32 id = embed_atomic_u32_fetch_add(&s_next_id, 1u) + 1u;
@@ -80,7 +80,7 @@ static void atomic_count_rounds(void)
     (void)embed_atomic_u32_raise(&s_high, id);
 }
 
-/** @brief One thread of the claiming case: every place tried once, each taken by a swap from 0 to the thread's id. */
+/** @brief One thread of the claim case: it tries every place once, and a swap from 0 to its id takes a place. */
 static void atomic_claim_slots(void)
 {
     const embed_u32 id = embed_atomic_u32_fetch_add(&s_next_id, 1u) + 1u;

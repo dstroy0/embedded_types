@@ -6,19 +6,25 @@ import Std.Tactic.BVDecide
 The byte operations of `include/embed_lane.h`, one 32-bit lane at a time, written on `BitVec` as the C writes
 them. `bv_decide` checks each theorem on every value.
 
-- `zero_bytes`: the carry test of the portable arm sets bit 8k of its result where byte k of the word is zero, and
+- `zero_bytes`. The carry test of the portable arm sets bit 8k of its result where byte k of the word is zero. It
   leaves every other bit clear.
-- `gather`: the multiply by `EMBED_LANE_NIBBLE_GATHER` takes a word whose bytes are each 0 or 1 to the nibble
-  of those bits, the lowest byte the lowest bit.
-- `equal_word`: the two together give the nibble of the equal bytes of two words, as
-  `EMBED_LANE_EQUAL_WORD` computes it.
-- `vector_word`: the vector arm without a byte mask builtin gives the same nibble from the compiler's byte
-  compare, whose equal bytes are all ones and others zero.
-- `assembled_16` and its narrower forms: the nibbles of the 32-bit lanes, shifted by four bits a lane and ored,
-  give the mask with bit `4i + k` set where byte `k` of lane `i` is equal.
-- `fill_byte`: `embed_lane_fill_byte` puts the byte in each byte of each 32-bit lane.
-- `mask_first`: the fallback of `embed_lane_mask_first` meets the contract of `__builtin_ctzll`: a place where
-  the bit is set, each bit below it clear.
+
+- `gather`. The multiply by `EMBED_LANE_NIBBLE_GATHER` takes a word whose bytes are each 0 or 1 to the nibble of
+  those bits, the lowest byte the lowest bit.
+
+- `equal_word`. The two together give the nibble of the equal bytes of two words, as `EMBED_LANE_EQUAL_WORD`
+  computes it.
+
+- `vector_word`. The vector arm without a byte mask builtin gives the same nibble from the byte compare of the
+  compiler. That compare gives all ones for an equal byte and zero for another.
+
+- `assembled_16` and its narrower forms. The nibbles of the 32-bit lanes, shifted by four bits a lane and ored,
+  give the mask. Bit `4i + k` of the mask is one where byte `k` of lane `i` is equal.
+
+- `fill_byte`. `embed_lane_fill_byte` puts the byte in each byte of each 32-bit lane.
+
+- `mask_first`. The fallback of `embed_lane_mask_first` meets the contract of `__builtin_ctzll`: a place where the
+  bit is one, and each bit below it zero.
 -/
 
 namespace EmbeddedTypes.Lane
@@ -67,8 +73,8 @@ def compareBytes (one other : BitVec 32) : BitVec 32 :=
     (if byteOf one 2 = byteOf other 2 then 0x00FF0000 else 0) |||
     (if byteOf one 3 = byteOf other 3 then 0xFF000000 else 0)
 
-/-- The vector arm with no byte mask builtin: the compare masked to one bit a byte, then gathered, is the same
-nibble as the portable arm's. -/
+/-- The vector arm with no byte mask builtin. The compare, masked to one bit a byte and then gathered, is the same
+nibble as that of the portable arm. -/
 theorem vector_word (one other : BitVec 32) :
     gather (compareBytes one other &&& 0x01010101) = equalNibble one other := by
   simp only [gather, compareBytes, equalNibble, zeroBytes, byteOf]
@@ -114,8 +120,8 @@ theorem assemble_cut (nibble : Nat → BitVec 64) (n : Nat) :
       rw [h1, h2]
       simp
 
-/-- The lanes the header allows, 1 to 16 words: the mask holds each word's nibble at four bits a word, and zero
-in each place past the last word. -/
+/-- The lanes that the header allows, 1 to 16 words. The mask holds the nibble of each word at four bits a word,
+and zero in each place past the last word. -/
 theorem assembled (nibble : Nat → BitVec 64) (h : ∀ i, nibble i < 16) (n : Nat) (hn : n ≤ 16) :
     (∀ i, i < n → (assemble nibble n >>> (4 * i)) &&& 0xF = nibble i) ∧
       (∀ i, n ≤ i → i < 16 → (assemble nibble n >>> (4 * i)) &&& 0xF = 0) := by
@@ -149,8 +155,8 @@ def lowestFallback (mask : BitVec 64) : BitVec 64 :=
   step 0xFFFFFFFF00000000 32 + step 0xFFFF0000FFFF0000 16 + step 0xFF00FF00FF00FF00 8 +
     step 0xF0F0F0F0F0F0F0F0 4 + step 0xCCCCCCCCCCCCCCCC 2 + step 0xAAAAAAAAAAAAAAAA 1
 
-/-- On a value with a bit set, the fallback gives a place where the bit is set, and each bit below is clear. This
-is the contract of `__builtin_ctzll`. -/
+/-- On a nonzero value, the fallback gives a place where the bit is one, and each bit below is zero. This is the
+contract of `__builtin_ctzll`. -/
 theorem mask_first (mask : BitVec 64) (h : mask ≠ 0) :
     (mask >>> lowestFallback mask) &&& 1 = 1 ∧ mask &&& (((1 : BitVec 64) <<< lowestFallback mask) - 1) = 0 := by
   unfold lowestFallback

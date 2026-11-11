@@ -11,9 +11,9 @@
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-10-23
  *
- * @note Unity's generator copies every #include of a suite into its runner and reads no #if, so a
- *       suite that included windows.h on one arm and pthread.h on the other would hand the runner
- *       both. The platform's headers live in host_threads.c alone.
+ * @note The generator of Unity copies every #include of a suite into its runner and reads no #if. A
+ *       suite with windows.h on one arm and pthread.h on the other hands the runner both. The
+ *       headers of the platform are in host_threads.c alone.
  */
 #ifndef HOST_THREADS_H
 #define HOST_THREADS_H
@@ -22,7 +22,7 @@
 #define HOST_THREADS_MOST 16u
 
 /**
- * @brief Runs count host threads, each calling each once, and waits for every one to end.
+ * @brief Runs count host threads, and each one calls each once. Waits for every one to end.
  *
  * @param[in] each  The work every thread does.
  * @param[in] count Threads to start, at most HOST_THREADS_MOST.

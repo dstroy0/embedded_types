@@ -6,15 +6,20 @@ drain skips a lane whose read has busy clear or closed set: no pass holds such a
 the generation it read, and waits until busy reads clear or the generation moves.
 
 `Open.passes_below_open` puts each pass below `open`. This file holds one lane. Its steps are each operation on the
-lane word: an entry, a leave, a contraction's claim, its close and its release, a grower's claim of a free lane, its
-takeover of a closed lane, its adoption of the lane as its pass at its swap and its give-back, and the sleeper bit
-set and cleared. A pass has an id, and the lane records it while the pass holds the lane.
+lane word. Those are an entry, a leave, the claim of a contraction, its close, and its release. Also the claim of a
+grower on a free lane, and its takeover of a closed lane. Also its adoption of the lane as its pass at its swap, its
+give-back, and the sleeper bit set and cleared.
 
-- `held_until_end`: from a state where pass p holds the lane, each later state has p in the lane, busy set, closed
-  clear and the generation unchanged, or has p ended.
-- `over_means_ended`: so a drain that read p in the lane and later reads the lane over has seen p end.
-- `drain_lane_complete`: the drain as the C runs it, its fence, then its read of the lane, then no wait where that
-  read is free or closed and otherwise reads until the lane is over, ends with each pass of the fence ended.
+A pass has an id, and the lane records it while the pass holds the lane.
+
+- `held_until_end`. From a state where pass p holds the lane, each later state has p in the lane, or has p ended.
+  While p is in the lane, the lane has the busy bit, no closed bit and the same generation.
+
+- `over_means_ended`. So a drain that read p in the lane, and later reads the lane over, saw p end.
+
+- `drain_lane_complete`. The drain as the C runs it: its fence, then its read of the lane. Where that read is free
+  or closed, there is no wait. Otherwise it reads until the lane is over. The drain ends with each pass of the fence
+  ended.
 -/
 
 namespace EmbeddedTypes.Manifold.Drain
@@ -120,7 +125,7 @@ theorem held_until_end {s u : State} (p : Nat) (i : Inv s) (hp : s.holder = some
 /-- The drain's test: busy clear, or the generation moved from the one it read. -/
 def over (snapshot now : State) : Bool := !now.busy || now.generation != snapshot.generation
 
-/-- A drain that read pass p in the lane, and reads the lane over later, has seen p end. -/
+/-- A drain that read pass p in the lane, and reads the lane over later, saw p end. -/
 theorem over_means_ended {s u : State} (p : Nat) (i : Inv s) (hp : s.holder = some p) (f : Follows s u)
     (ho : over s u = true) : u.ended p = true := by
   obtain ⟨_, held | done⟩ := held_until_end p i hp f
@@ -141,11 +146,12 @@ theorem ended_stays {s u : State} (p : Nat) (f : Follows s u) (h : s.ended p = t
       · exact ih
     | _ => exact ih
 
-/-- The drain on one lane, as the C runs it. Pass p holds the lane at the drain's fence, state s. The drain reads
-the lane later, at state t. Where that read has busy clear or closed set, the drain does not wait. Otherwise it reads
-the lane until it is over, at state u. In each case p has ended at u. With `Open.passes_below_open`, each pass at
-the fence is below the open count that the drain reads, so the drain's loop over the open lanes ends with each pass
-of the fence ended. -/
+/-- The drain on one lane, as the C runs it. Pass p holds the lane at the fence of the drain, state s. The drain
+reads the lane later, at state t. Where that read has no busy bit or has the closed bit, the drain does not wait.
+Otherwise it reads the lane until it is over, at state u. In each case p ended at u.
+
+With `Open.passes_below_open`, each pass at the fence is below the open count that the drain reads. So the loop of
+the drain over the open lanes ends with each pass of the fence ended. -/
 theorem drain_lane_complete {s t u : State} (p : Nat) (i : Inv s) (hp : s.holder = some p) (ft : Follows s t)
     (fu : Follows t u) (hdone : t.busy = false ∨ t.closed = true ∨ over t u = true) : u.ended p = true := by
   obtain ⟨it, held | done⟩ := held_until_end p i hp ft

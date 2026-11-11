@@ -7,8 +7,8 @@
     python tools/api_pages.py --check    write nothing, and fail where a page does not match its header
 
 The pages are in the tree, and each commit holds them. After an edit to a header, run the tool and commit the
-pages with the header. mkdocs.yml names this file as a hook, and the hook runs the check before each site
-build. The harness ste command runs the same check before each commit. The check also stops at each
+pages with the header. The site configuration names this file as a hook, and the hook runs the check before
+each site build. The harness ste command runs the same check before each commit. The check also stops at each
 ASD-STE100 finding in a page.
 
 The reader takes each Doxygen block and the declaration under it. A block before a #ifndef of a name
@@ -94,7 +94,7 @@ class Entry:
 
 
 def parse_block(lines, line, depth):
-    """A Block from the text of a /** */ comment, its leading stars off."""
+    """A Block from the text of a /** */ comment, with the star at the start of each line off."""
     block = Block(line, depth)
     current = None
     for raw in lines:
@@ -372,7 +372,7 @@ class Header:
         return [arm for arm in stack if arm[0] != guard]
 
     def attach(self, decl, pending, owner, owner_depth, depth, orphans):
-        """Give the declaration to its entry; answer the pending block, the owner and the owner's depth."""
+        """Give the declaration to its entry; answer the block that waits, the owner and the depth of the owner."""
         if decl.kind == "invocation":
             self.expand(decl)
             return pending, owner, owner_depth
@@ -497,7 +497,7 @@ class Header:
             at += 1
 
 
-# The rendering
+# The Markdown of the pages
 
 
 def known_names(headers):

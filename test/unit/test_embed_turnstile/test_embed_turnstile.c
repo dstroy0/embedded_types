@@ -6,10 +6,11 @@
  */
 /**
  * @file test_embed_turnstile.c
- * @brief Checks the sleep on a word's address and the manifold of turnstiles against their contracts: a sleep ends as
- *        the word moves, an entry takes its address's lane and a busy lane spills, a leave clears busy and counts the
- *        pass, the manifold grows under pressure and contracts as it empties, a drain waits out the passes under way
- *        and no others, and workers never read what a writer released after its drain.
+ * @brief Checks the sleep on the address of a word and the manifold of turnstiles against their contracts. A sleep
+ *        ends as the word moves. An entry takes the lane of its address, and a busy lane spills. A leave clears busy
+ *        and counts the pass. The manifold grows under pressure and contracts as it empties.
+ *
+ * A drain waits out the passes under way and no others. Workers never read what a writer released after its drain.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-11-07
  */
@@ -289,7 +290,7 @@ static embed_atomic_u32 s_entered = EMBED_ATOMIC_INIT(0u);
 static embed_atomic_u32 s_finished = EMBED_ATOMIC_INIT(0u);
 static embed_atomic_u32 s_drained_early = EMBED_ATOMIC_INIT(0u);
 
-/** @brief Thread 0 passes through s_reading for 60 milliseconds; thread 1 drains once the pass began. */
+/** @brief Thread 0 passes through the long set for 60 milliseconds. Thread 1 drains after the pass began. */
 static void long_pass_and_drain(void)
 {
     if (thread_id() == 0u)
@@ -327,7 +328,7 @@ static EmbedTurnstiles s_crowd;
 static embed_atomic_u32 s_crowd_passed = EMBED_ATOMIC_INIT(0u);
 static embed_atomic_u32 s_crowd_lanes_most = EMBED_ATOMIC_INIT(0u);
 
-/** @brief Each thread passes through s_crowd for a rest on one start lane, recording the lanes it saw open. */
+/** @brief Each thread passes through s_crowd for a rest on one start lane, and it records the lanes it saw open. */
 static void crowd(void)
 {
     (void)thread_id();
@@ -376,9 +377,9 @@ static TestRecord *published_record(void)
 }
 
 /**
- * @brief Thread 0 writes, once every worker is reading: each swap publishes the other record, drains, and releases
- *        the one swapped out. The workers pass through s_swapped while it writes, each from its own address, each
- *        reading the published record and counting a read of one released.
+ * @brief Thread 0 writes after every worker reads. Each swap publishes the other record, drains, and releases the
+ *        one that it swapped out. The workers pass through s_swapped while it writes, each from its own address.
+ *        Each worker reads the published record and counts a read of a released one.
  */
 static void writer_and_readers(void)
 {

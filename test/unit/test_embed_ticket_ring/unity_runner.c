@@ -80,7 +80,7 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/mmgr/deps/embedded_types/test/unit/test_embed_ticket_ring\\test_embed_ticket_ring.c");
+  UnityBegin("D:/git_project/repos/owned/public/embedded_types/test/unit/test_embed_ticket_ring\\test_embed_ticket_ring.c");
   run_test(test_the_stamp_gives_its_epoch_and_ticket_back, "test_the_stamp_gives_its_epoch_and_ticket_back", 51);
   run_test(test_the_mask_is_the_count_of_slots_less_one, "test_the_mask_is_the_count_of_slots_less_one", 60);
   run_test(test_the_place_is_the_low_bits_of_the_ticket, "test_the_place_is_the_low_bits_of_the_ticket", 66);

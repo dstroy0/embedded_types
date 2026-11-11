@@ -6,16 +6,15 @@
  */
 /**
  * @file genmc_host.h
- * @brief The host a GenMC client runs on: no processor pause, a clock that moves forward one unit at each read, and the
- *        address wait and wake of the futex contract.
+ * @brief The host that a GenMC client runs on. It has no processor pause, a clock that moves forward one unit at each
+ *        read, and the address wait and wake of the futex contract.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-11-07
  *
  * @note Include it first in a client, before each other header of this library, and one time.
  * @note The clock moves one unit at each read, so each backoff step after the first read waits. A step inside the first
  *       unit only pauses and reads the word again, which changes no shared word. A wait that returns at once does the
- *       same, so the client covers that band. theory/embedded_types/EmbeddedTypes/Manifold/Backoff.lean proves that
- *       the band makes no call.
+ *       same, so the client covers that band. The Backoff proof under theory/ proves that the band makes no call.
  * @note The wait reads the count of wakes, then the word, and returns where the low 32 bits of the word moved. A
  *       wait of 0 ns returns at once, as the host's does. Each other wait ends only where the count of wakes moves
  *       past the one it read. Thus a sleep that only its time limit ends stays asleep here, and GenMC reports the
@@ -52,7 +51,7 @@ int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value seen, embed
     {
         return 0;
     }
-    // A loop that reads only the count of wakes: GenMC's spin-assume takes it as a wait, and its liveness check
+    // A loop that reads only the count of wakes. The spin-assume of GenMC takes it as a wait, and its liveness check
     // reports an execution in which no wake ever ends the wait
     while (embed_atomic_word_load(&s_genmc_wakes) == epoch)
     {

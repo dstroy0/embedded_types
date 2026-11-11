@@ -304,7 +304,7 @@ Expands to `__host__ __device__` under nvcc, and to nothing on other compilers.
 
 Set to 1 where `EMBED_HAS_ATTRIBUTE(vector_size)` is not zero, else 0.
 
-> **Note:** The `vector_size` attribute on a scalar type makes a type that the compiler keeps in a vector register. The plain operators then run over each element at once. [`embed_lane`](embed_lane.md#embed_lane).h takes its vector arm where this macro is 1, and its portable arm where it is 0.
+> **Note:** The `vector_size` attribute on a scalar type makes a type that the compiler keeps in a vector register. The plain operators then run over each element at once. The lane header takes its vector arm where this macro is 1, and its portable arm where it is 0.
 
 > **Note:** Both arms define this macro. Test it with `#if`.
 
@@ -340,7 +340,7 @@ Expands to `__attribute__((vector_size(bytes_)))` where [`EMBED_HAS_VECTOR_SIZE`
 
 The width in bits of the widest vector register that the target compiles for. It is 512 under AVX-512, 256 under AVX2, 128 under SSE2 or NEON, and 0 where the target has none.
 
-> **Note:** The compiler defines a macro for each instruction set that it emits, and this value comes from those macros. The build supplies no width of its own here. A flag that turns on an instruction set changes this value with it. [`embed_lane`](embed_lane.md#embed_lane).h derives the width of the lane from this value where the build does not define one.
+> **Note:** The compiler defines a macro for each instruction set that it emits, and this value comes from those macros. The build supplies no width of its own here. A flag that turns on an instruction set changes this value with it. The lane header derives the width of the lane from this value where the build does not define one.
 
 > **Note:** Both arms define this macro. Test it with `#if`.
 

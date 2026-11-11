@@ -1,19 +1,20 @@
 /-!
 # embedded_types, the sleeps on a lane word
 
-Two threads sleep on a lane word: a drain that waits for the lane's pass to end, and a worker that found every lane
-busy with the manifold at its most. Each one reads the word, and sleeps only where the value read has busy set.
-Then it sets the sleeper bit with a fetch-or, and the host's wait sleeps while the word holds the value read with the
-bit set. The wait is the futex contract: the compare and the sleep are one step, and a wake ends each sleep on the
-word.
+Two threads sleep on a lane word. One is a drain that waits for the pass of the lane to end. The other is a worker
+that found every lane busy with the manifold at its most. Each one reads the word, and sleeps only where the value
+read has the busy bit. Then it sets the sleeper bit with a fetch-or.
+
+The wait of the host sleeps while the word holds the value read with the bit set. The wait is the futex contract: the
+compare and the sleep are one step, and a wake ends each sleep on the word.
 
 Every leave, close, release and reopen is one fetch-add that changes the word. Where the old value has the sleeper
 bit, the thread then clears the bit with a fetch-and and wakes the word. An entry on a busy word changes nothing. An
 entry on a free word sets busy, and a sleeper never sleeps on a free value.
 
-The theorem `no_lost_wake`: in each state the steps reach, a thread asleep on a value has the word still at that
-value, or a clear and wake that a fetch-add owes it, or the wake issued. So a sleeper sleeps only while the pass it
-waits for holds the lane, and the end of that pass wakes it.
+The theorem `no_lost_wake`. In each state that the steps reach, a thread asleep on a value has one of three things.
+The word is still at that value, or a fetch-add owes it a clear and a wake, or the wake is out. So a sleeper sleeps
+only while the pass that it waits for holds the lane, and the end of that pass wakes it.
 -/
 
 namespace EmbeddedTypes.Manifold.Wake
@@ -67,8 +68,8 @@ inductive Reach : State → Prop where
   | rest (w : Word) : Reach ⟨w, .idle, false, false⟩
   | step {s t : State} : Reach s → Step s t → Reach t
 
-/-- The invariant: a value read for a sleep has busy set, and a sleeper asleep on a value has the word at that value,
-or a wake to come. -/
+/-- The invariant. A value read for a sleep has the busy bit. A sleeper asleep on a value has the word at that
+value, or a wake to come. -/
 def Inv (s : State) : Prop :=
   (∀ v, s.sleeper = .flagged v → v.busy = true) ∧
     ∀ t, s.sleeper = .asleep t → t.busy = true ∧ t.flag = true ∧ (s.word = t ∨ s.pending = true ∨ s.owed = true)
@@ -132,8 +133,8 @@ theorem reach_inv {s : State} (r : Reach s) : Inv s := by
   | rest w => exact ⟨fun v hv => by simp at hv, fun t ht => by simp at ht⟩
   | step _ st ih => exact step_inv ih st
 
-/-- A thread asleep on a value has the word at that value, with busy set so that a pass still holds the lane, or a
-wake to come. -/
+/-- A thread asleep on a value has the word at that value, with the busy bit, so a pass still holds the lane. Or it
+has a wake to come. -/
 theorem no_lost_wake {s : State} {t : Word} (r : Reach s) (h : s.sleeper = .asleep t) :
     (s.word = t ∧ t.busy = true) ∨ s.pending = true ∨ s.owed = true := by
   obtain ⟨hb, _, hw | hp | ho⟩ := (reach_inv r).2 t h

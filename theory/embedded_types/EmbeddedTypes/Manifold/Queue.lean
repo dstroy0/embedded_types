@@ -3,15 +3,16 @@
 
 `queue` counts the workers that found every open lane busy. A worker adds one before it grows the manifold or
 waits, and subtracts one in the step that takes its lane. Each subtraction follows the addition of the same worker
-in the modification order of the word, because both are atomic operations of one thread on one word.
+in the modification order of the word. Both are atomic operations of one thread on one word.
 
-The model counts the workers in the queue, and the word's value. A subtraction is a step of a worker in the queue.
+The model counts the workers in the queue, and the value of the word. A subtraction is a step of a worker in the
+queue.
 
-- `queue_counts`: the word holds the count of workers in the queue, so it never reads below zero.
-- `empty_at_zero`: a word read at zero or below has no worker in the queue. So a contraction on that read leaves no
+- `queue_counts`. The word holds the count of workers in the queue, so it never reads below zero.
+- `empty_at_zero`. A word read at zero or below has no worker in the queue. So a contraction on that read leaves no
   worker that wants a lane.
-- `round_sum`, `rounds_sum` and `entry_balanced`: the C's entry, with its flag `queued`, adds at most once and
-  subtracts only its own addition, so an entry that takes its lane leaves the word as it found it.
+- `round_sum`, `rounds_sum` and `entry_balanced`. The entry of the C, with its flag `queued`, adds at most once and
+  subtracts only its own addition. So an entry that takes its lane leaves the word as it found it.
 -/
 
 namespace EmbeddedTypes.Manifold.Queue
@@ -45,9 +46,9 @@ theorem empty_at_zero {s : State} (r : Reach s) (h : s.word ≤ 0) : s.waiting =
 
 /-! ## One worker's entry
 
-The C's entry keeps a flag `queued`. A round that finds every open lane busy adds the worker to the queue where the
-flag is clear, and sets it. The round that takes a lane subtracts the worker where the flag is set. So each entry
-adds at most once, and subtracts only after its own addition. -/
+The entry of the C keeps a flag `queued`. A round that finds every open lane busy adds the worker to the queue
+where the flag is clear, and sets it. The round that takes a lane subtracts the worker where the flag has the set
+value. So each entry adds at most once, and subtracts only after its own addition. -/
 
 /-- A worker's entry: spilling with the flag clear, spilling with it set, or done with a lane. -/
 inductive Entry where
@@ -67,7 +68,7 @@ def rounds : Entry → List Bool → Entry × Int
   | e, [] => (e, 0)
   | e, t :: rest => ((rounds (round e t).1 rest).1, (round e t).2 + (rounds (round e t).1 rest).2)
 
-/-- A worker's addition so far: 1 where the flag is set, 0 where it is clear or the entry is done. -/
+/-- The addition of a worker so far: 1 where the flag has the set value, 0 where it is clear or the entry ended. -/
 def owes : Entry → Int
   | .spilling q => if q then 1 else 0
   | .done => 0

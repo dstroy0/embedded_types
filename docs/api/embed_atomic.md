@@ -114,7 +114,7 @@ typedef embed_atomic_u32 embed_atomic_usize;
 
 The atomic word as wide as `size_t`, for a count of bytes or an offset as `size_t` holds it. It is the 64-bit word where `SIZE_MAX` is 64 bits wide, and the 32-bit word below that.
 
-> **Note:** Keyed on `size_t`, not on [`EMBED_WORD_BITS`](embed_types.md#EMBED_WORD_BITS), since a build may define the word narrower than the sizes it counts and a count must still fit whole.
+> **Note:** The key is `size_t`, and not [`EMBED_WORD_BITS`](embed_types.md#EMBED_WORD_BITS). A build can define the word narrower than the sizes that it counts, and a count must still fit whole.
 
 ### `embed_atomic_usize_value` { #embed_atomic_usize_value }
 
@@ -372,7 +372,7 @@ MSVC's intrinsics take a long for 32 bits and an `__int64` for 64; the casts rea
     }
 ```
 
-Defines the operations over one atomic width: `name_` is the suffix, `type_` the word, `exchange_`, `swap_if_`, `add_`, `or_` and `and_` the arm's primitives for that width.
+Defines the operations over one atomic width. `name_` is the suffix and `type_` the word. The other five parameters are the primitives of the arm for that width.
 
 > **Note:** One text for both widths and each arm. A width or an arm cannot drift from the others.
 

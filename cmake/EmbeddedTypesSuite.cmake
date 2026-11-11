@@ -38,8 +38,9 @@ function(embedded_types_add_suite suite_name)
 endfunction()
 
 # embedded_types_add_device_suite(<name>) - a suite whose cases, in <name>.c, call kernels in
-# <name>.cu, the two linked into one program: the device arm of a header checked against the host.
-# Where EMBEDDED_TYPES_DEVICE is 0 the suite is left out and said so, and the build goes on.
+# <name>.cu. The two link into one program, and the cases check the device arm of a header against
+# the host. Where EMBEDDED_TYPES_DEVICE is 0, the function leaves the suite out, says so, and the
+# build goes on.
 function(embedded_types_add_device_suite suite_name)
     if(NOT EMBEDDED_TYPES_DEVICE)
         message(STATUS "embedded_types: ${suite_name} left out, no device arm in this build")

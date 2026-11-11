@@ -7,9 +7,9 @@
 /**
  * @file turnstile_drain_genmc.c
  * @brief Two workers pass through a set of one lane on one start lane, while a writer swaps a published word and
- *        drains, in each execution that the memory model allows. The second worker finds the lane busy and grows the
- *        set. A worker that reads the old word reads it before the writer releases it, no thread stays asleep with
- *        no wake to come, and each lane is free or closed at the end.
+ *        drains. GenMC runs each execution that the memory model allows. The second worker finds the lane busy and
+ *        grows the set. A worker that reads the old word reads it before the writer releases it. No thread stays
+ *        asleep with no wake to come, and each lane is free or closed at the end.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-11-07
  *
@@ -28,7 +28,7 @@
 static EmbedTurnstiles s_set;
 /** @brief The published word: 0 is the old one, 1 the new one. */
 static embed_atomic_word s_published;
-/** @brief Set to 1 when the writer has released the old word. */
+/** @brief 1 after the writer releases the old word. */
 static embed_atomic_word s_released;
 
 /** @brief One worker's pass from start lane 0: enter, read the published word, and leave. */

@@ -6,8 +6,9 @@
  */
 /**
  * @file test_embed_lane_device.cu
- * @brief The lane's device arm run: one thread a lane over a span, each thread calling the lane's
- *        own functions as a host walk calls them, the span carried to the device and back.
+ * @brief The run of the device arm of the lane: one thread a lane over a span. Each thread calls the
+ *        own functions of the lane as a host walk calls them, and the span goes to the device and
+ *        back.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-10-29
  *
@@ -115,7 +116,7 @@ struct DeviceSpan
     size_t bytes;
 };
 
-/** @brief `bytes` taken on the device, `from` copied in where it is given. */
+/** @brief Takes `bytes` on the device, and copies `from` in where the caller gives one. */
 static cudaError_t span_take(DeviceSpan *span, const void *from, size_t bytes)
 {
     span->at = nullptr;
@@ -128,7 +129,7 @@ static cudaError_t span_take(DeviceSpan *span, const void *from, size_t bytes)
     return status;
 }
 
-/** @brief The span read back into `to` where it is given, and its device memory given back. */
+/** @brief Reads the span back into `to` where the caller gives one, and gives its device memory back. */
 static cudaError_t span_give(DeviceSpan *span, void *to)
 {
     cudaError_t status = cudaSuccess;

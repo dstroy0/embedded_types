@@ -27,10 +27,16 @@ The library is headers only, so a build compiles nothing until a consumer includ
 ```sh
 python test/harness.py test                     # the library as it ships
 python test/harness.py test --tree build-werror # the same, with each warning an error
+python test/harness.py test --tree build-tsan   # the same, under the thread sanitizer
+python test/harness.py test --tree build-asan   # the same, under the address and undefined behavior sanitizers
 python test/harness.py suites --strict          # each case registered, none behind a conditional
+python test/harness.py prove                    # each GenMC client under each memory model
+python test/harness.py ste                      # each document held to ASD-STE100
 ```
 
 The configure step fetches [Unity](https://github.com/ThrowTheSwitch/Unity) at `v2.6.1`. The runner generator of each suite needs `ruby` on `PATH`. Both belong to `test/`, and CMake configures `test/` only where `EMBEDDED_TYPES_BUILD_TESTS` is on. That option is on by default where this project is the top-level project.
+
+Eight suites run, one for each header and one for the device arm of the lane. Where the configure step finds a CUDA compiler, the device suite compiles its kernels and runs them on the part that the host has. Where it finds none, the build leaves that suite out and says so.
 
 ## Use in a CMake build
 

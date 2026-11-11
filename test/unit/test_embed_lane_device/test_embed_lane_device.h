@@ -6,14 +6,14 @@
  */
 /**
  * @file test_embed_lane_device.h
- * @brief The kernels of the lane's device suite as the host cases call them: each takes a span of
- *        bytes, runs the lane's operations over it on the device, and hands the answer back.
+ * @brief The kernels of the device suite of the lane, as the host cases call them. Each takes a span
+ *        of bytes, runs the operations of the lane over it on the device, and hands the answer back.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-10-29
  *
- * @note Each entry answers 0 where the kernel ran and its results came back, and the CUDA runtime's
- *       error number otherwise. A span's byte count is a multiple of 64, which every lane width up
- *       to the widest divides, and the device steps its own lane width over it.
+ * @note Each entry answers 0 where the kernel ran and its results came back, and the error number of
+ *       the CUDA runtime otherwise. The byte count of a span is a multiple of 64, which every lane
+ *       width up to the widest divides. The device steps its own lane width over it.
  */
 #ifndef TEST_EMBED_LANE_DEVICE_H
 #define TEST_EMBED_LANE_DEVICE_H
@@ -48,8 +48,9 @@ int embed_lane_device_arithmetic(const embed_u32 *one, const embed_u32 *other, e
                                  embed_u32 *out_mul, embed_u32 *out_left, embed_u32 *out_right, embed_u32 bytes);
 
 /**
- * @brief The byte masks over `bytes` of two spans on the device, one entry a device lane: the bytes
- *        equal, the bytes of `one` that are zero, and the first zero byte or 0xffffffff where none.
+ * @brief The byte masks over `bytes` of two spans on the device, one entry a device lane. The masks
+ *        are the bytes equal, the bytes of `one` that are zero, and the first zero byte, or
+ *        0xffffffff where there is none.
  */
 int embed_lane_device_masks(const embed_u8 *one, const embed_u8 *other, embed_u64 *equal, embed_u64 *zero,
                             embed_u32 *first_zero, embed_u32 bytes);

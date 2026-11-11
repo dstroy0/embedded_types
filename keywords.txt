@@ -1,6 +1,6 @@
 # embedded_types Library Keywords
-# Loaded by the Arduino IDE for syntax highlighting.
-# Generated from include/ - regenerate after any public rename.
+# The Arduino IDE reads this file to color the names of the library.
+# The names come from include/. Write the file again after each public rename.
 
 ##############################
 # Types (KEYWORD1)

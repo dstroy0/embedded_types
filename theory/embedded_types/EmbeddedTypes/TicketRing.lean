@@ -4,19 +4,25 @@ import Std.Tactic.BVDecide
 # embedded_types, the ticket ring
 
 `include/embed_ticket_ring.h` is a ring of 2^shift slots that a ticket indexes. A stamp is one 64-bit word: the epoch
-in the high 32 bits and the ticket in the low 32 bits. The ring has no guard of its own: the turnstile grants each
+in the high 32 bits and the ticket in the low 32 bits. The ring has no guard of its own. The turnstile grants each
 ticket once and holds a push or a pop inside a pass, which `Manifold/LaneWord.lean` proves exclusive.
 
-- `stamp_ticket`, `stamp_epoch` and `stamp_injective`: the two fields come back out of the stamp, and two stamps that
+- `stamp_ticket`, `stamp_epoch` and `stamp_injective`. The two fields come back out of the stamp. Two stamps that
   agree are the same epoch and ticket.
-- `place_lt`: the place of a ticket is below the count of slots.
-- `place_wrap`: a ticket 2^shift on lands at the same place, so the ring wraps with no division.
-- `place_roll`: the ticket's roll at 32 bits leaves the place as it is, because 2^shift divides 2^32.
-- `place_mask`: the mask of the C, `ticket &&& (2^shift - 1)`, is that place.
-- `window_distinct`: two tickets fewer than 2^shift apart land at places of their own. So the grantor that holds the
+
+- `place_lt`. The place of a ticket is below the count of slots.
+
+- `place_wrap`. A ticket 2^shift on lands at the same place, so the ring wraps with no division.
+
+- `place_roll`. The roll of the ticket at 32 bits leaves the place as it is, because 2^shift divides 2^32.
+
+- `place_mask`. The mask of the C, `ticket &&& (2^shift - 1)`, is that place.
+
+- `window_distinct`. Two tickets fewer than 2^shift apart land at places of their own. So a grantor that holds the
   depth of the ring below 2^shift gives no two live tickets one slot.
-- `pop_push`, `pop_push_other` and `pop_pushes`: a pop reads what the push of its ticket wrote, a push leaves each
-  other place as it was, and after the pushes of one window each pop reads its own job.
+
+- `pop_push`, `pop_push_other` and `pop_pushes`. A pop reads what the push of its ticket wrote. A push leaves each
+  other place as it was. After the pushes of one window, each pop reads its own job.
 -/
 
 namespace EmbeddedTypes.TicketRing

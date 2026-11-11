@@ -15,7 +15,7 @@
   harness.py prove [--client C] [--model M]   each GenMC client under test/prove, under each memory model
   harness.py site [--serve]                   the site built into build/site, as the docs workflow builds it
 
-There are four build trees. Each carries its own flags here, and running one takes no remembered
+There are four build trees. Each carries its own flags here, and a run of one takes no remembered
 shell invocation:
 
   build          the library, as it ships
@@ -23,9 +23,9 @@ shell invocation:
   build-tsan     the same, under the thread sanitizer, with GCC or Clang
   build-asan     the same, under the address and undefined behavior sanitizers, with GCC or Clang
 
-The second one matters because this library is headers a consumer compiles inside its own
-translation unit. A warning it introduces is raised in the consumer's build and attributed to the
-consumer's file. A diagnostic that only scrolls past here is one somebody else has to read.
+The second one matters because this library is headers that a consumer compiles inside its own
+translation unit. A warning from the headers appears in the build of the consumer, against the file
+of the consumer. A diagnostic that only scrolls past here is one that somebody else has to read.
 
 Two environment variables, because a first build has nothing to infer them from:
 
@@ -37,14 +37,14 @@ Two environment variables, because a first build has nothing to infer them from:
                               the compiler are otherwise read off a tree that already built, and a
                               fresh clone whose first build is this one has no such tree.
 
-A case Unity's generator does not collect is not an error to the generator. It is never registered,
-and the suite passes while the case never ran. `cases` and `runners gen` both break that silence by
-naming the near misses.
+A case that the generator of Unity does not collect is not an error to the generator. The generator
+never registers it, and the suite passes while the case never ran. `cases` and `runners gen` both
+break that silence, because they name the near misses.
 
 The same silence has a second shape. The generator reads case names out of the source text and does
-not see a preprocessor conditional. A case defined inside an `#if` is declared and called by the
-runner however that conditional went. Where it went the other way the suite fails to LINK. `suites`
-reports every case sitting inside one.
+not see a preprocessor conditional. The runner declares and calls a case inside an `#if` on each arm
+of the conditional. On the arm with no definition the suite fails to LINK. `suites` reports every
+case inside one.
 
 The mechanisms here are generic. The paths and the two build trees are this project's.
 """
@@ -67,10 +67,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # and the only fix is a shorter prefix.
 BUILD_ROOT = os.path.abspath(os.environ.get("EMBEDDED_TYPES_BUILD_ROOT", ROOT))
 
-# Extra configure arguments, split like a shell would. borrowed_toolchain() reads the generator and
-# the compiler off a tree that already built. A fresh clone whose first build is this one has no
-# such tree. cmake's default generator is not always one that works on a given machine, and a first
-# build with nothing to borrow from needs somewhere to read them from.
+# Extra configure arguments, split as a shell splits them. borrowed_toolchain() reads the generator
+# and the compiler off a tree that already built. A fresh clone whose first build is this one has no
+# such tree. The default generator of cmake does not work on every machine. A first build with
+# nothing to borrow from reads them from here.
 CMAKE_ARGS = os.environ.get("EMBEDDED_TYPES_CMAKE_ARGS", "")
 
 
@@ -79,20 +79,20 @@ def tree_path(tree):
     return os.path.join(BUILD_ROOT, tree)
 
 
-# A two-way split. A suite is a directory holding exactly one .c with cases, and its generated runner
-# sits beside it.
+# A two-way split. A suite is a directory with exactly one .c of cases, and its generated runner sits
+# beside it.
 #
-#   unit/test_<header>/        one per header in include/, asserting what that header alone states
+#   unit/test_<header>/        one per header in include/, which asserts what that header alone states
 #   integration/test_<name>/   more than one header together
 #
-# integration/ does not exist yet, and discover() skips a group that is not there. It is named
-# because the first suite that crosses two headers has somewhere to go that is not unit/, where it
-# would report a failure against a header it only borrowed.
+# discover() skips a group that is not there. The name integration/ exists so that the first suite
+# that crosses two headers has somewhere to go that is not unit/. In unit/ it reports a failure
+# against a header that it only borrows.
 UNIT = os.path.join(ROOT, "test", "unit")
 INTEGRATION = os.path.join(ROOT, "test", "integration")
 GENERATED_RUNNER = "unity_runner.c"
 
-# What Unity's generate_test_runner.rb collects, and the shape a case has to have to be collected.
+# What the generate_test_runner.rb of Unity collects, and the shape that a case must have for that.
 UNITY_CASE = re.compile(r"^[ \t]*void[ \t]+(test_\w+)[ \t]*\([ \t]*(?:void)?[ \t]*\)", re.M)
 NEAR_MISS = re.compile(r"^[ \t]*void[ \t]+(\w+)[ \t]*\([ \t]*(?:void)?[ \t]*\)[ \t]*\r?\n[ \t]*\{", re.M)
 NOT_A_CASE = ("setUp", "tearDown", "main", "suiteSetUp", "suiteTearDown")
@@ -155,7 +155,7 @@ def suite_source(suite_dir):
 
 
 def discover():
-    """Every suite directory, which is any dir holding a .c with a collectable case."""
+    """Every suite directory, which is any dir with a .c that has a case the generator collects."""
     out = []
     for base in (UNIT, INTEGRATION):
         if not os.path.isdir(base):
@@ -168,7 +168,7 @@ def discover():
 
 
 def find_ruby():
-    """Ruby runs Unity's generator. A missing one is an error, never a silent skip."""
+    """Ruby runs the generator of Unity. An absent ruby is an error, never a silent skip."""
     return shutil.which("ruby")
 
 
@@ -189,8 +189,8 @@ def generate_runner(suite_dir, unity_rb):
                     % (os.path.relpath(os.path.join(suite_dir, name), ROOT), ", ".join(missed))
                 )
         raise SystemExit("runners: no test case found in %s" % os.path.relpath(suite_dir, ROOT))
-    # The generator takes one input file and emits one main(). Cases spread across several
-    # sources cannot be registered from any single one of them.
+    # The generator takes one input file and emits one main(). It cannot register cases across
+    # several sources from any single one of them.
     if len(sources) > 1:
         raise SystemExit(
             "runners: %s holds test cases in %d sources (%s).\n"
@@ -206,19 +206,18 @@ def generate_runner(suite_dir, unity_rb):
     src = os.path.join(suite_dir, sources[0])
     out = os.path.join(suite_dir, GENERATED_RUNNER)
     subprocess.run([ruby, unity_rb, src, out], check=True)
-    # Unity's generator opens its output in text mode. On Windows every line lands CRLF while
-    # .gitattributes holds this tree at "LF in the repository and LF in the working copy". The runner
-    # is tracked, so that difference shows as a modified file after every build that regenerates one.
-    # git normalizes the content it stores either way. Nothing was ever committed wrong; rewriting
-    # the bytes here is what leaves the working copy as the build found it, on every platform. A
-    # no-op where the generator already wrote LF.
+    # The generator of Unity opens its output in text mode. On Windows every line lands CRLF, while
+    # .gitattributes holds this tree at LF in the repository and LF in the checkout. Git tracks the
+    # runner, so that difference shows as a modified file after every build that writes one. Git
+    # normalizes the content that it stores either way. The bytes written here leave the checkout
+    # as the build found it, on every platform. This is a no-op where the generator wrote LF.
     with open(out, "rb") as fh:
         written = fh.read()
     lf = written.replace(b"\r\n", b"\n")
     if lf != written:
         with open(out, "wb") as fh:
             fh.write(lf)
-    # Report the near misses even on success: the runner is written, and these still never ran.
+    # Report the near misses also on success: the runner exists, and these still never ran.
     found, missed = runner_cases(src)
     if missed:
         print(
@@ -232,7 +231,7 @@ def generate_runner(suite_dir, unity_rb):
 # ------------------------------------------------------------------------------------------------
 # Build trees
 # ------------------------------------------------------------------------------------------------
-# Each tree carries the flags that define it. Keeping them here means running one takes no
+# Each tree carries the flags that define it. With the flags here, a run of one tree takes no
 # remembered shell invocation.
 TREES = {
     "build": {
@@ -241,9 +240,9 @@ TREES = {
     },
     "build-werror": {
         "what": "the same, with every warning an error",
-        # This library is headers a consumer compiles inside its own translation unit. A warning it
-        # introduces is raised in that build and attributed to that file. A diagnostic nobody has
-        # to fix here is one somebody else has to read.
+        # This library is headers that a consumer compiles inside its own translation unit. A warning
+        # from the headers appears in that build, against that file. A diagnostic that nobody has to
+        # fix here is one that somebody else has to read.
         "args": ["-DEMBEDDED_TYPES_WERROR=ON"],
     },
     "build-tsan": {
@@ -351,7 +350,7 @@ def configure(tree):
 
 
 def build(tree, jobs):
-    """Build @p tree, reporting only what went wrong."""
+    """Build @p tree, and report only what went wrong."""
     if configure(tree) != 0:
         return 1
     # A generator with many configurations builds the one named here, which ctest below runs

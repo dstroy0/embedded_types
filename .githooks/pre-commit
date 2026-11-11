@@ -2,8 +2,8 @@
 # embedded_types - Copyright (C) 2026 Douglas Quigg (dstroy0) <dquigg123@gmail.com>
 # SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational
 #
-# Holds every technical document to ASD-STE100 before a commit is written: a document may carry no more findings
-# than test/ste_ratchet.tsv allows it, and a new document none. Turn it on once per clone:
+# Holds every technical document to ASD-STE100 before git writes a commit. A document can carry no more findings
+# than test/ste_ratchet.tsv allows it, and a new document none. Turn it on one time in each clone:
 #
 #     git config core.hooksPath .githooks
 #

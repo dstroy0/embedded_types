@@ -4,30 +4,37 @@
 `open` holds n, the count of open lanes. Arrivals only read it. A growth and a contraction write it, each with one
 compare-and-swap.
 
-- An arrival starts at lane `(address >> 6) mod n`, and on a lane with busy set it spills to the next lane mod n.
+- An arrival starts at lane `(address >> 6) mod n`. On a lane with the busy bit, it spills to the next lane mod n.
+
 - A contraction claims the top lane, n - 1, as an entry does. Where it holds the lane, it swaps `open` from n to
   n - 1. Where the swap lands, the lane is sealing until a fetch-add closes it. Where the swap fails, a fetch-add
   releases the lane.
+
 - A growth takes lane n with a compare-and-swap on the lane word, from free or from closed. Then it swaps `open`
-  from n to n + 1. Where the swap lands, the lane is the grower's pass. Where it fails, the grower gives the lane
-  back as it was. A sealing lane refuses the compare-and-swap, so no growth lands between a contraction's swap and
-  its close.
+  from n to n + 1. Where the swap lands, the lane is the pass of the grower. Where it fails, the grower gives the
+  lane back as it was. A sealing lane refuses the compare-and-swap. So no growth lands between the swap of a
+  contraction and its close.
+
 - Each of these is one atomic operation, and other steps can come between any two of them.
+
 - The end of a pass on the top lane contracts again while each step closes a lane: the cascade.
 
-An arrival can read a value of `open` that a later growth or contraction has replaced. Each value it reads is at
+An arrival can read a value of `open` that a later growth or contraction replaces. Each value that it reads is at
 most `high`, the most lanes that were ever open. The model lets an arrival read any value from 1 to `high`, which
-covers every value it can read.
+covers every value that it can read.
 
 The theorems:
 
-- `start_in_range` and `start_shift`: the start lane is below n, and the C's `(address >> 6) % n` is it.
-- `spill_covers`, `next_mod`, `spill_lane` and `spill_reaches`: the C's next lane, 0 after the top and else the lane
-  above, visits `(first + j) % n` at step j, so a spill reaches each lane below n within n steps.
-- `cascade_bounded`: the cascade ends within c - 1 steps from c lanes and leaves one lane open at least.
-- `passes_below_open`: in each state that the steps reach, each pass and each held lane is below `open`, and no
-  closed lane is. So a drain that reads `open` after its fence reads each lane that a pass can hold, and no lane
-  below `open` stays closed.
+- `start_in_range` and `start_shift`. The start lane is below n, and the `(address >> 6) % n` of the C is it.
+
+- `spill_covers`, `next_mod`, `spill_lane` and `spill_reaches`. The next lane of the C is 0 after the top and else
+  the lane above. It visits `(first + j) % n` at step j, so a spill reaches each lane below n within n steps.
+
+- `cascade_bounded`. The cascade ends within c - 1 steps from c lanes and leaves one lane open at least.
+
+- `passes_below_open`. In each state that the steps reach, each pass and each held lane is below `open`, and no
+  closed lane is. So a drain that reads `open` after its fence reads each lane that a pass can hold. No lane below
+  `open` stays closed.
 -/
 
 namespace EmbeddedTypes.Manifold.Open
@@ -108,12 +115,15 @@ theorem cascade_bounded (closes : Nat → Bool) (c : Nat) (h : 1 ≤ c) :
 
 Each step is one atomic operation of the C:
 
-- an entry's fetch-or takes a free lane below the count it read;
-- a leave's fetch-add frees a pass's lane;
-- a contraction's fetch-or claims a free top lane; its swap of `open` down lands and leaves the lane sealing, or
-  fails and its fetch-add releases the lane; a sealing lane's fetch-add closes it;
-- a growth's compare-and-swap on the lane word takes a free or closed lane; its swap of `open` up lands and the lane
-  is the grower's pass, or fails and its fetch-add gives the lane back as it was.
+- The fetch-or of an entry takes a free lane below the count that it read.
+
+- The fetch-add of a leave frees the lane of a pass.
+
+- The fetch-or of a contraction claims a free top lane. Its swap of `open` down lands and leaves the lane sealing,
+  or it fails and a fetch-add releases the lane. The fetch-add of a sealing lane closes it.
+
+- The compare-and-swap of a growth on the lane word takes a free or closed lane. Its swap of `open` up lands, and
+  the lane is the pass of the grower. Or it fails, and a fetch-add gives the lane back as it was.
 
 A sealing lane is neither free nor closed, so a grower's compare-and-swap refuses it. -/
 
@@ -187,7 +197,7 @@ structure Inv (most : Nat) (s : State) : Prop where
   high_most : s.high ≤ most
   /-- Each lane at or above `high` is free, or a grower holds it from free. -/
   above : ∀ l, s.high ≤ l → s.lane l = .free ∨ s.lane l = .growing false
-  /-- Each lane from `open` up to `high` is closed, sealing, or a grower holds it from closed. -/
+  /-- Each lane from `open` up to `high` has the closed state or the sealing state, or a grower holds it from closed. -/
   between : ∀ l, s.count ≤ l → l < s.high →
     s.lane l = .closed ∨ s.lane l = .sealing ∨ s.lane l = .growing true
   held_pos : ∀ l, s.lane l = .held → 1 ≤ l
@@ -452,9 +462,9 @@ theorem reach_inv (most : Nat) (h : 1 ≤ most) {s : State} (r : Reach most s) :
   | rest => exact rest_inv most h
   | step _ st ih => exact step_inv ih st
 
-/-- In each state the steps reach, each pass and each held lane is below `open`, no closed lane is below `open`, and
-`open` is from 1 to the lane count. So a drain that reads `open` after its fence reads each lane that a pass can
-hold, and no lane below `open` stays closed. -/
+/-- In each state that the steps reach, each pass and each held lane is below `open`, and no closed lane is. `open`
+is from 1 to the lane count. So a drain that reads `open` after its fence reads each lane that a pass can hold, and
+no lane below `open` stays closed. -/
 theorem passes_below_open (most : Nat) (h : 1 ≤ most) {s : State} (r : Reach most s) :
     (∀ l, s.lane l = .pass → l < s.count) ∧ (∀ l, s.lane l = .held → l < s.count) ∧
       (∀ l, s.lane l = .closed → s.count ≤ l) ∧ 1 ≤ s.count ∧ s.count ≤ most := by

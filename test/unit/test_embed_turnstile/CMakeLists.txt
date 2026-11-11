@@ -3,8 +3,8 @@
 
 embedded_types_add_suite(test_embed_turnstile)
 
-# the host's threads, its address wait behind embed_word_wait and embed_word_wake, and its clock, in test/support
-# where the platform's headers are out of the runner's sight
+# The threads of the host, its address wait behind embed_word_wait and embed_word_wake, and its clock. They are
+# in test/support, where the headers of the platform are out of the sight of the runner.
 find_package(Threads REQUIRED)
 target_sources(test_embed_turnstile PRIVATE
     "${EMBEDDED_TYPES_TEST_ROOT}/support/host_threads.c"

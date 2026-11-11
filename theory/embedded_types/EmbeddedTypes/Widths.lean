@@ -5,12 +5,16 @@
 derive their widths in `#if` chains and hold them with `EMBED_STATIC_ASSERT`. Each definition here is one chain,
 and `decide` checks each theorem on every arm of the chain.
 
-- `word_bits`: `EMBED_WORD_BITS` is 64, 32 or 16 from `UINTPTR_MAX`, and every other value stops the build.
-- `index_fits`: `EMBED_INDEX_BITS` fits the word on every arm, the assertion `sizeof(embed_index) <= sizeof(embed_word)`.
-- `lane_holds`: on every arm, `EMBED_LANE_BITS` is whole 32-bit lanes, at least one, at most 512, and whole words;
-  `EMBED_LANE_U32S` is 1, 2, 4, 8 or 16, the arms of `EMBED_LANE_WORDS`; and the byte mask holds a bit for each byte.
-- `lane_fields`, `generation_widths` and `lanes_fit`: at each word width, the lane word's busy, closed and sleeper bits
-  and its generation fill the word, the generation 61 bits wide at 64, 29 at 32 and 13 at 16, and the open count fits.
+- `word_bits`. `EMBED_WORD_BITS` is 64, 32 or 16 from `UINTPTR_MAX`, and every other value stops the build.
+
+- `index_fits`. `EMBED_INDEX_BITS` fits the word on every arm, the assertion `sizeof(embed_index) <= sizeof(embed_word)`.
+
+- `lane_holds`. On every arm, `EMBED_LANE_BITS` is whole 32-bit lanes, at least one, at most 512, and whole words.
+  `EMBED_LANE_U32S` is 1, 2, 4, 8 or 16, the arms of `EMBED_LANE_WORDS`. The byte mask holds a bit for each byte.
+
+- `lane_fields`, `generation_widths` and `lanes_fit`. At each word width, the busy, closed and sleeper bits of the
+  lane word and its generation fill the word. The generation is 61 bits wide at 64, 29 at 32 and 13 at 16. The open
+  count fits.
 - `narg_counts`: `EMBED_NARG` gives n for each n from 1 to 24.
 -/
 

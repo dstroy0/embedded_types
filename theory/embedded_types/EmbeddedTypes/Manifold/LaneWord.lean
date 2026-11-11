@@ -14,11 +14,16 @@ Each lane of the manifold is one word on a cache line of its own. Its fields, fr
 
 Each change to the word is one atomic operation:
 
-- An entry is `fetch_or(BUSY)`. It takes the lane where busy was clear, and it changes nothing where busy was set.
+- An entry is `fetch_or(BUSY)`. It takes the lane where the old value has no busy bit. It changes nothing where the
+  old value has the busy bit.
+
 - A leave is `fetch_add(UNIT - BUSY)`, on a word that the pass holds busy.
-- A close is `fetch_add(UNIT + CLOSED)`, on a word that the contraction holds busy and that is not closed.
-- A grower's takeover is a compare-and-swap that adds `UNIT - CLOSED` to a closed word, which is busy too. The lane
-  stays busy, and it is the grower's.
+
+- A close is `fetch_add(UNIT + CLOSED)`, on a word that the contraction holds busy and that has no closed bit.
+
+- The takeover of a grower is a compare-and-swap that adds `UNIT - CLOSED` to a closed word, which is busy too. The
+  lane stays busy, and it belongs to the grower.
+
 - A sleeper sets its bit with `fetch_or(SLEEPER)`. The thread that wakes it clears the bit with `fetch_and(~SLEEPER)`.
 
 The futex compares the low 32 bits of a word. Each leave, close and takeover changes those bits, so each one ends a
@@ -123,8 +128,8 @@ theorem leave_32 (x : BitVec 32) (h : x &&& 1 = 1) :
 
 /-! ## The close and the takeover -/
 
-/-- A close on a word that the contraction holds busy, and that is not closed, sets closed, keeps busy and the
-sleeper bit, and adds one to the generation. -/
+/-- A close on a word that the contraction holds busy, and that has no closed bit, sets the closed bit. It keeps
+the busy bit and the sleeper bit, and adds one to the generation. -/
 theorem close_64 (x : BitVec 64) (h : x &&& 3 = 1) :
     shut x &&& busy 64 = busy 64 ∧ shut x &&& closed 64 = closed 64 ∧ shut x &&& sleeper 64 = x &&& sleeper 64 ∧
       generation (shut x) = counted (generation x) := by
@@ -184,8 +189,8 @@ theorem changes_seen_32 (x : BitVec 32) :
 
 /-! ## The drain's test -/
 
-/-- The sleeper bit alone does not end a pass for the drain: a word that differs from the snapshot only in that bit,
-with busy set, is not over. -/
+/-- The sleeper bit alone does not end a pass for the drain. A word that differs from the snapshot only in that bit,
+with the busy bit, is not over. -/
 theorem sleeper_not_over_64 (s : BitVec 64) (h : s &&& 1 = 1) :
     over s (flagged s) = false ∧ over s (unflagged s) = false := by
   simp only [over, flagged, unflagged, generation, busy, sleeper, Bool.or_eq_false_iff, beq_eq_false_iff_ne,
@@ -233,10 +238,11 @@ theorem roll_32 (x : BitVec 32) : x + unit 32 * 0x20000000 = x := by
 
 /-! ## The bits and the lane's states
 
-`Open.lean` holds a lane as free, held by a pass or a contraction, or closed. The bits give the same three classes:
-free where busy and closed are clear, taken where busy is set and closed clear, and closed where both are set. A
-word with closed set and busy clear does not occur. Each operation moves the class as the step of `Open.lean` that
-it is. -/
+`Open.lean` holds a lane as free, held by a pass or a contraction, or closed. The bits give the same three classes.
+A word with neither bit is free. A word with the busy bit alone has a holder. A word with both bits has the closed
+state. A word with the closed bit alone does not occur.
+
+Each operation moves the class as the step of `Open.lean` that it is. -/
 
 /-- The class of a word: 0 free, 1 taken, 3 closed, and 2 for closed with busy clear. -/
 def lane {w : Nat} (x : BitVec w) : BitVec w := x &&& 3

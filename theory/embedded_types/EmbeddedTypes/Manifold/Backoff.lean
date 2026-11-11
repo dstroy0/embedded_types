@@ -6,11 +6,15 @@ import Std.Tactic.BVDecide
 A backoff keeps two locals: the nanosecond that `embed_clock_ns` read at its start, and the exponent `k`. No shared
 word holds a time.
 
-- The unit is 2^s ns, with `EMBED_TURNSTILE_UNIT_SHIFT` as s: 10 for a CPU host, about 1.024 µs, and 0 for a device.
-- While less than one unit has passed since the start, a step is a pause alone, with no call to `embed_word_wait`.
+- The unit is 2^s ns, with `EMBED_TURNSTILE_UNIT_SHIFT` as s. That is 10 for a CPU host, about 1.024 µs, and 0 for
+  a device.
+
+- While the time since the start is below one unit, a step is a pause alone, with no call to `embed_word_wait`.
+
 - From one unit on, a step waits on the word for at most 2^(s + k) ns. Then k goes up by one, to 20 at most. The
   ceiling is 2^30 ns on a CPU host, about 1.07 s, and 2^20 ns on a device, about 1.05 ms. A wake or a moved word ends
-  the wait first, so the limit is a ceiling and not a delay.
+  the wait first. So the limit is a ceiling and not a delay.
+
 - k from 0 to 20 fits in 5 bits. The C raises it with `exponent += (exponent < EMBED_TURNSTILE_K_MOST)`, which
   `update_is_next` holds to `nextK`, and its shift is below 64 bits (`shift_defined`).
 
@@ -32,7 +36,7 @@ def limitNs (s k : Nat) : Nat := 2 ^ (s + k)
 /-- The exponent after a wait: one more, and kMost at most. -/
 def nextK (k : Nat) : Nat := if k < kMost then k + 1 else kMost
 
-/-- One step: no call while less than one unit has passed, else a wait with the limit of k. -/
+/-- One step: no call while the time since the start is below one unit, else a wait with the limit of k. -/
 def step (s start now k : Nat) : Option Nat :=
   if now - start < 2 ^ s then none else some (limitNs s k)
 
@@ -68,8 +72,8 @@ theorem update_is_next (k : Nat) (h : k ≤ kMost) : k + (if k < kMost then 1 el
   unfold nextK
   split <;> omega
 
-/-- The C's shift `(embed_u64)1u << (EMBED_TURNSTILE_UNIT_SHIFT + exponent)` is below the width, so it is defined,
-and it is the limit. -/
+/-- The shift of the C, `(embed_u64)1u << (EMBED_TURNSTILE_UNIT_SHIFT + exponent)`, is below the width. So C defines
+it, and it is the limit. -/
 theorem shift_defined (s k : Nat) (hs : s ≤ shiftMost) (hk : k ≤ kMost) :
     s + k < 64 ∧ ((1 : BitVec 64) <<< (s + k)).toNat = limitNs s k := by
   simp only [shiftMost, kMost] at hs hk

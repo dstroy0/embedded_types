@@ -133,8 +133,9 @@ EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must 
 #endif
 
 /**
- * @brief The lane, EMBED_LANE_BYTES wide: EMBED_LANE_U32S 32-bit lanes in the compiler's vector
- *        type on the vector arm, in a struct aligned to the lane on the portable arm.
+ * @brief The lane, EMBED_LANE_BYTES wide. On the vector arm it is EMBED_LANE_U32S 32-bit lanes in
+ *        the vector type of the compiler. On the portable arm it is a struct with the alignment of
+ *        the lane.
  *
  * @note On both arms lanes in a row lay out as the registers do, each lane at a multiple of its
  *       width.

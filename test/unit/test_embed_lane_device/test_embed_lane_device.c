@@ -6,16 +6,16 @@
  */
 /**
  * @file test_embed_lane_device.c
- * @brief Holds the lane's device arm to the scalar answer: every operation run on the device over a
- *        span, read back, and compared byte for byte with a loop on the host.
+ * @brief Holds the device arm of the lane to the scalar answer. Every operation runs on the device
+ *        over a span. The host reads the span back and compares it byte for byte with a loop.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-10-29
  *
  * @note The kernels are in test_embed_lane_device.cu. This unit is C and never names the lane
- *       itself: the span is bytes and 32-bit values, the device decides how many lanes they are,
- *       and the host computes what each byte must come back as.
- * @note Where the build has the device arm and the host has no part to run it on, every case that
- *       needs the part is ignored and says so.
+ *       itself. The span is bytes and 32-bit values, and the device decides how many lanes they
+ *       are. The host computes what each byte must come back as.
+ * @note The build can have the device arm while the host has no part to run it on. Then every case
+ *       that needs the part marks itself ignored and says so.
  */
 #include "test_embed_lane_device.h"
 
@@ -47,7 +47,7 @@ void tearDown(void)
 {
 }
 
-/** @brief The case is ignored where no part is present to run it. */
+/** @brief Marks the case ignored where no part is present to run it. */
 #define PART_OR_IGNORED()                                                                                              \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -103,7 +103,7 @@ void test_the_device_fills_every_byte_of_a_span(void)
 void test_the_device_divides_by_255_exactly_in_every_lane(void)
 {
     PART_OR_IGNORED();
-    // the blend's identity over sampled products: (x + (x >> 8)) >> 8 is (a * b + 127) / 255, x being a * b + 128
+    // The identity of the blend over sampled products, with x as a * b + 128: (x + (x >> 8)) >> 8 is (a * b + 127) / 255.
     embed_u8 products[SPAN_BYTES];
     embed_u8 divided[SPAN_BYTES];
     for (unsigned int a = 0u; a < 256u; a += 5u)

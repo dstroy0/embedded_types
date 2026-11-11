@@ -5,8 +5,8 @@ name: Proofs
 #
 # One GenMC job runs each memory model. The resize client explores tens of millions of executions under one model,
 # and that takes hours. Five models in one job pass the six-hour limit of a job, so each model has a job of its own.
-# A cache keeps the GenMC build between runs, with the prove tool's hash as its key: an edit to the tool, the tag of
-# GenMC among its contents, makes a new build.
+# A cache keeps the GenMC build between runs, with the hash of the prove tool as its key. An edit to the tool makes
+# a new build, and the tag of GenMC is among its contents.
 
 on:
   push:
