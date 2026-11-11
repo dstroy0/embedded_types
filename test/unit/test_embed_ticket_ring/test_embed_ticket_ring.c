@@ -140,14 +140,14 @@ void test_the_life_of_a_slot_lands_each_step_once_in_order(void)
     TEST_ASSERT_NULL(job);
     TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[9], &seen), "the push lands");
     TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[9], &seen), "a second push fails");
-    TEST_ASSERT_EQUAL_HEX64(stamp | LIFE_PUSHED | embed_ticket_job_parity_bit(&s_jobs[9]), seen);
+    TEST_ASSERT_EQUAL_HEX64(stamp | LIFE_PUSHED | embed_ticket_job_check_bits(&s_jobs[9]), seen);
 
     TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_release(&s_ring, stamp, &seen), "a release before the pop fails");
     TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 5u, &job, &seen), "the pop lands");
     TEST_ASSERT_EQUAL_PTR(&s_jobs[9], job);
     TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 6u, &job, &seen), "a second pop fails");
     TEST_ASSERT_NULL(job);
-    TEST_ASSERT_EQUAL_HEX64(stamp | LIFE_POPPED | embed_ticket_job_parity_bit(&s_jobs[9]) |
+    TEST_ASSERT_EQUAL_HEX64(stamp | LIFE_POPPED | embed_ticket_job_check_bits(&s_jobs[9]) |
                                 ((embed_u64)5u << EMBED_TICKET_LANE_SHIFT),
                             seen);
     TEST_ASSERT_EQUAL_UINT(5u, embed_ticket_lane_of_stamp(seen));
@@ -188,10 +188,10 @@ void test_the_next_grant_takes_a_released_word_over(void)
     TEST_ASSERT_TRUE(embed_ticket_ring_pop(&s_ring, first, 0u, &job, &seen));
     TEST_ASSERT_TRUE(embed_ticket_ring_release(&s_ring, first, &seen));
     TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_grant(&s_ring, later, &seen), "a grant on a released word lands");
-    TEST_ASSERT_EQUAL_HEX64(first | LIFE_RELEASED | embed_ticket_job_parity_bit(&s_jobs[4]), seen);
+    TEST_ASSERT_EQUAL_HEX64(first | LIFE_RELEASED | embed_ticket_job_check_bits(&s_jobs[4]), seen);
     TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, later, &s_jobs[5], &seen));
     TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, first, 0u, &job, &seen), "the old stamp finds the new word");
-    TEST_ASSERT_EQUAL_HEX64(later | LIFE_PUSHED | embed_ticket_job_parity_bit(&s_jobs[5]), seen);
+    TEST_ASSERT_EQUAL_HEX64(later | LIFE_PUSHED | embed_ticket_job_check_bits(&s_jobs[5]), seen);
     TEST_ASSERT_TRUE(embed_ticket_ring_pop(&s_ring, later, 0u, &job, &seen));
     TEST_ASSERT_EQUAL_PTR(&s_jobs[5], job);
 }
@@ -216,24 +216,42 @@ void test_a_flipped_stamp_refuses_every_step(void)
     TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &seen), "the true stamp still pops");
 }
 
-void test_the_push_records_the_parity_of_the_job_pointer(void)
+void test_the_push_records_the_check_of_the_job_pointer(void)
 {
     const embed_u64 stamp = fields(4u, 13u);
     embed_u64 seen = 0u;
 
     TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &seen));
     TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[13], &seen));
-    TEST_ASSERT_EQUAL_HEX64(embed_ticket_job_parity_bit(&s_jobs[13]),
-                            embed_atomic_u64_load(&s_slots[13].stamp) & EMBED_TICKET_PARITY);
-    TEST_ASSERT_EQUAL_HEX64(0u, embed_ticket_job_parity_bit(NULL));
-    TEST_ASSERT_EQUAL_UINT64(1u, embed_ticket_job_parity((const void *)(uintptr_t)1u));
-    TEST_ASSERT_EQUAL_UINT64(0u, embed_ticket_job_parity((const void *)(uintptr_t)3u));
+    TEST_ASSERT_EQUAL_HEX64(embed_ticket_job_check_bits(&s_jobs[13]),
+                            embed_atomic_u64_load(&s_slots[13].stamp) & EMBED_TICKET_CHECK_MASK);
+    TEST_ASSERT_EQUAL_HEX64(0u, embed_ticket_job_check_bits(NULL));
+    // The remainders of x^0 to x^7 modulo x^3 + x + 1: 1, x, x^2, x + 1, x^2 + x, x^2 + x + 1, x^2 + 1, 1
+    TEST_ASSERT_EQUAL_UINT64(1u, embed_ticket_job_check((const void *)(uintptr_t)1u));
+    TEST_ASSERT_EQUAL_UINT64(2u, embed_ticket_job_check((const void *)(uintptr_t)2u));
+    TEST_ASSERT_EQUAL_UINT64(4u, embed_ticket_job_check((const void *)(uintptr_t)4u));
+    TEST_ASSERT_EQUAL_UINT64(3u, embed_ticket_job_check((const void *)(uintptr_t)8u));
+    TEST_ASSERT_EQUAL_UINT64(6u, embed_ticket_job_check((const void *)(uintptr_t)16u));
+    TEST_ASSERT_EQUAL_UINT64(7u, embed_ticket_job_check((const void *)(uintptr_t)32u));
+    TEST_ASSERT_EQUAL_UINT64(5u, embed_ticket_job_check((const void *)(uintptr_t)64u));
+    TEST_ASSERT_EQUAL_UINT64(1u, embed_ticket_job_check((const void *)(uintptr_t)128u));
+    TEST_ASSERT_EQUAL_UINT64(0u, embed_ticket_job_check((const void *)(uintptr_t)129u));
 }
 
-void test_a_corrupted_job_pointer_fails_the_pop_and_the_replay(void)
+/** @brief The slot of ticket 14 set to the pushed state with the check of the intact job, and the job set to value. */
+static void slot_14_pushed_with(embed_u64 stamp, embed_u64 value)
 {
-#if EMBED_TICKET_JOB_PARITY
+    // Explicit cast carries the integer back as a pointer value that nothing dereferences
+    s_slots[14].job = (void *)(uintptr_t)value;
+    embed_atomic_u64_store(&s_slots[14].stamp, stamp | LIFE_PUSHED | embed_ticket_job_check_bits(&s_jobs[14]));
+}
+
+void test_a_single_bit_error_in_the_job_pointer_fails_the_pop_and_the_replay(void)
+{
+#if EMBED_TICKET_JOB_CHECK
     const embed_u64 stamp = fields(4u, 14u);
+    // Explicit cast carries the pointer as an integer for the flips
+    const embed_u64 intact = (embed_u64)(uintptr_t)&s_jobs[14];
     embed_u64 seen = 0u;
     void *job = NULL;
 
@@ -241,10 +259,7 @@ void test_a_corrupted_job_pointer_fails_the_pop_and_the_replay(void)
     TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[14], &seen));
     for (unsigned int bit = 0u; bit < 64u; bit += 1u)
     {
-        // Explicit casts carry the pointer as an integer for the flip of one bit, and back as a pointer value that
-        // nothing dereferences
-        s_slots[14].job = (void *)(uintptr_t)((embed_u64)(uintptr_t)&s_jobs[14] ^ ((embed_u64)1u << bit));
-        embed_atomic_u64_store(&s_slots[14].stamp, stamp | LIFE_PUSHED | embed_ticket_job_parity_bit(&s_jobs[14]));
+        slot_14_pushed_with(stamp, intact ^ ((embed_u64)1u << bit));
         TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &seen), "the pop refuses the job");
         TEST_ASSERT_NULL(job);
         TEST_ASSERT_EQUAL_HEX64_MESSAGE(EMBED_TICKET_RESERVED, seen & EMBED_TICKET_RESERVED, "seen marks corruption");
@@ -253,12 +268,38 @@ void test_a_corrupted_job_pointer_fails_the_pop_and_the_replay(void)
         TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_replay(&s_ring, stamp, &job, &seen), "the replay refuses the job");
         TEST_ASSERT_NULL(job);
     }
-    s_slots[14].job = &s_jobs[14];
-    embed_atomic_u64_store(&s_slots[14].stamp, stamp | LIFE_PUSHED | embed_ticket_job_parity_bit(&s_jobs[14]));
+    slot_14_pushed_with(stamp, intact);
     TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &seen), "the intact job pops");
     TEST_ASSERT_EQUAL_PTR(&s_jobs[14], job);
 #else
-    TEST_IGNORE_MESSAGE("EMBED_TICKET_JOB_PARITY is 0 here, so the pop does not check the job pointer");
+    TEST_IGNORE_MESSAGE("EMBED_TICKET_JOB_CHECK is 0 here, so the pop does not verify the job pointer");
+#endif
+}
+
+void test_a_double_bit_error_fails_the_pop_unless_seven_apart(void)
+{
+#if EMBED_TICKET_JOB_CHECK
+    const embed_u64 stamp = fields(4u, 14u);
+    // Explicit cast carries the pointer as an integer for the flips
+    const embed_u64 intact = (embed_u64)(uintptr_t)&s_jobs[14];
+    embed_u64 seen = 0u;
+    void *job = NULL;
+
+    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &seen));
+    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[14], &seen));
+    for (unsigned int first = 0u; first < 64u; first += 1u)
+    {
+        for (unsigned int second = first + 1u; second < 64u; second += 1u)
+        {
+            const embed_bool detected = (embed_bool)(((second - first) % 7u) != 0u);
+
+            slot_14_pushed_with(stamp, intact ^ ((embed_u64)1u << first) ^ ((embed_u64)1u << second));
+            TEST_ASSERT_EQUAL_MESSAGE(!detected, embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &seen),
+                                      "the pop refuses a double error exactly where the places are not seven apart");
+        }
+    }
+#else
+    TEST_IGNORE_MESSAGE("EMBED_TICKET_JOB_CHECK is 0 here, so the pop does not verify the job pointer");
 #endif
 }
 

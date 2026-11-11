@@ -11,3 +11,4 @@ import EmbeddedTypes.TicketRing
 import EmbeddedTypes.Claim
 import EmbeddedTypes.Flags
 import EmbeddedTypes.Device
+import EmbeddedTypes.Integrated

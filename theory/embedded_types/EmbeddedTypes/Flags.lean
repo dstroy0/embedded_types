@@ -5,8 +5,8 @@ import Std.Tactic.BVDecide
 
 A stamp is one 64-bit word: the ticket in bits 0 to 31, the flag field in bits 32 to 47, and the epoch in bits 48
 to 63. Five flag bits mark the transitions of the slot state machine: granted, pushed, popped, replayed and
-released. Bit 37 is the parity bit of the job pointer. Seven bits above them hold the lane index of the pop. Bit 47
-is the reserved bit, and no transition sets it.
+released. Bits 37 to 39 are the check of the job pointer. Seven bits above them hold the lane index of the pop. Bit
+47 is the reserved bit, and no transition sets it.
 
 Each transition is one compare-and-swap on the word. The expected value is the word with the flag bits of the
 transitions before it, and the new value adds its own flag bit. `Atomic.lean` proves that the compare-and-swap of
@@ -26,8 +26,9 @@ This file is the flag matrix. `bv_decide` checks each theorem on every 64-bit va
 
 - `lane_recorded`. The lane index of a pop is recoverable from the popped word.
 
-- `job_flip_inverts_parity` and `parity_recorded`. A single-bit error at any place in the job pointer inverts the
-  parity that `embed_ticket_job_parity` folds. The pushed word records that parity where the pop reads it.
+- `job_flip_changes_check`, `job_double_flip` and `check_recorded`. A single-bit error at any place in the job
+  pointer changes the three-bit check that `embed_ticket_job_check` computes. A double-bit error changes it exactly
+  where the two places are not a multiple of seven apart. The pushed word records the check where the pop reads it.
 
 - `corruption_refuses`. Any nonzero bit flip in a word fails a compare that expects the word.
 
@@ -82,13 +83,13 @@ theorem set_once (x flag : BitVec 64) (hf : flag ≠ 0) (h : x &&& flag = 0) : t
   simp only [transition]
   bv_decide
 
-/-- The parity bit of the job pointer, which the push stores. -/
-def parityBit : BitVec 64 := 1 <<< 37
+/-- The three check bits of the job pointer, which the push stores. -/
+def checkMask : BitVec 64 := 7 <<< 37
 
-/-- The five state words of a slot, from the fields of a stamp, the parity of the job and the lane of the pop. -/
+/-- The five state words of a slot, from the fields of a stamp, the check of the job and the lane of the pop. -/
 def stateGranted (s : BitVec 64) : BitVec 64 := transition (fields s) granted
 def statePushed (s parity : BitVec 64) : BitVec 64 :=
-  transition (stateGranted s) (pushed ||| ((parity &&& 1) <<< 37))
+  transition (stateGranted s) (pushed ||| ((parity &&& 7) <<< 37))
 def statePopped (s parity lane : BitVec 64) : BitVec 64 :=
   transition (statePushed s parity) (popped ||| ((lane &&& 0x7f) <<< 40))
 def stateReplayed (s parity lane : BitVec 64) : BitVec 64 := transition (statePopped s parity lane) replayed
@@ -113,30 +114,43 @@ theorem states_keep_fields (s parity lane : BitVec 64) :
     granted, pushed, popped, replayed, released]
   bv_decide
 
-/-! ## The parity of the job pointer -/
+/-! ## The check of the job pointer -/
 
-/-- The parity of a 64-bit job pointer, as `embed_ticket_job_parity` folds it: 1 where the count of ones is odd. -/
-def parity (job : BitVec 64) : BitVec 64 :=
-  let a := job ^^^ (job >>> 32)
-  let b := a ^^^ (a >>> 16)
-  let c := b ^^^ (b >>> 8)
-  let d := c ^^^ (c >>> 4)
-  let e := d ^^^ (d >>> 2)
-  let f := e ^^^ (e >>> 1)
-  f &&& 1
+/-- The three-bit check of a 64-bit job pointer, as `embed_ticket_job_check` computes it: the pointer as a polynomial
+modulo x^3 + x + 1. The fold by 56, 28, 14 and 7 sums each residue class modulo 7 into the low seven bits, because
+x^7 is 1 modulo the polynomial. The remainder of those seven bits reads off the table of x^3 to x^6. -/
+def check (job : BitVec 64) : BitVec 64 :=
+  let a := job ^^^ (job >>> 56)
+  let b := a ^^^ (a >>> 28)
+  let c := b ^^^ (b >>> 14)
+  let d := c ^^^ (c >>> 7)
+  let r0 := d &&& 1
+  let r1 := (d >>> 1) &&& 1
+  let r2 := (d >>> 2) &&& 1
+  let r3 := (d >>> 3) &&& 1
+  let r4 := (d >>> 4) &&& 1
+  let r5 := (d >>> 5) &&& 1
+  let r6 := (d >>> 6) &&& 1
+  (r0 ^^^ r3 ^^^ r5 ^^^ r6) ||| ((r1 ^^^ r3 ^^^ r4 ^^^ r5) <<< 1) ||| ((r2 ^^^ r4 ^^^ r5 ^^^ r6) <<< 2)
 
-/-- A single-bit error at any place in the job pointer inverts its parity. So the check at the pop fails, and the
+/-- A single-bit error at any place in the job pointer changes its check. So the check at the pop fails, and the
 pop returns no job. -/
-theorem job_flip_inverts_parity (job i : BitVec 64) (hi : i < 64) :
-    parity (job ^^^ ((1 : BitVec 64) <<< i)) ≠ parity job := by
-  simp only [parity]
+theorem job_flip_changes_check (job i : BitVec 64) (hi : i < 64) :
+    check (job ^^^ ((1 : BitVec 64) <<< i)) ≠ check job := by
+  simp only [check]
   bv_decide
 
-/-- The parity stored in the pushed word comes back out of it, and the pop reads it there. -/
-theorem parity_recorded (s parity lane : BitVec 64) :
-    (statePushed s parity &&& parityBit) >>> 37 = parity &&& 1 ∧
-      (statePopped s parity lane &&& parityBit) >>> 37 = parity &&& 1 := by
-  simp only [statePopped, statePushed, stateGranted, transition, fields, flagMask, granted, pushed, popped, parityBit]
+/-- A double-bit error changes the check exactly where the two places are not a multiple of seven apart. -/
+theorem job_double_flip (job i d : BitVec 64) (hi : i < 64) (hd : 0 < d) (hd64 : d < 64) (hs : i + d < 64) :
+    (check (job ^^^ ((1 : BitVec 64) <<< i) ^^^ ((1 : BitVec 64) <<< (i + d))) ≠ check job) ↔ d % 7 ≠ 0 := by
+  simp only [check]
+  bv_decide
+
+/-- The check stored in the pushed word comes back out of it, and the pop reads it there. -/
+theorem check_recorded (s parity lane : BitVec 64) :
+    (statePushed s parity &&& checkMask) >>> 37 = parity &&& 7 ∧
+      (statePopped s parity lane &&& checkMask) >>> 37 = parity &&& 7 := by
+  simp only [statePopped, statePushed, stateGranted, transition, fields, flagMask, granted, pushed, popped, checkMask]
   bv_decide
 
 /-- Two flag bits set in either order give one word, and each bit stays set. -/

@@ -50,10 +50,11 @@ transition is one compare-and-swap inside a pass through a turnstile. It expects
 flags before it and writes the word with its own flag. So exactly one caller completes each
 transition, and a stamp that differs in any bit fails the compare.
 
-One flag bit is the parity of the job pointer. The push stores it and the pop checks it, so a
-single-bit error in the job pointer returns no job. The Lean proofs hold the fields of the stamp,
-the place of a ticket, and the roll. They also hold the flag matrix, the parity, and the collision
-of two pops on one slot.
+Three flag bits are a cyclic redundancy check of the job pointer. The push stores it and the pop
+checks it, so a single-bit error in the job pointer, or an adjacent double, returns no job. The Lean
+proofs hold the fields of the stamp, the place of a ticket, and the roll. They also hold the flag
+matrix, the check, the collision of two pops on one slot, and the integrated algorithm with its
+supervisor.
 
 ### The atomic types
 
@@ -196,7 +197,7 @@ git config core.hooksPath .githooks
 | [`test/support/`](test/support)                      | host threads for the contention cases, and the host's sleep on the address of a word |
 | [`test/prove/`](test/prove)                          | the GenMC clients of the turnstile, and the host that they run on                    |
 | [`test/harness.py`](test/harness.py)                 | suite discovery, Unity runner generation, the build trees, the proofs, and the site  |
-| [`theory/`](theory)                                  | the Lean proofs: the widths, the atomics, the lane, the manifold of the turnstile, the ticket ring, the flag matrix, the claim of a slot and the device arm; and the research paper on the two |
+| [`theory/`](theory)                                  | the Lean proofs: the widths, the atomics, the lane, the manifold of the turnstile, the ticket ring, the flag matrix, the claim of a slot, the device arm and the integrated algorithm; and the research paper on the two |
 | [`docs/`](docs)                                      | the site: the hand-written pages, and the API pages from the headers                 |
 | [`tools/api_pages.py`](tools/api_pages.py)           | the tool that writes the API pages                                                   |
 | [`LICENSES/`](LICENSES)                              | the AGPL text and the two LicenseRef documents                                       |
