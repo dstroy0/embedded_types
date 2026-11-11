@@ -14,7 +14,7 @@ Doxygen comments in the headers. The Doxygen block on a declaration is the contr
 | header                                                                       | what it holds                                                                                                                                                      |
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`include/embed_turnstile.h`](include/embed_turnstile.h)                     | the thread scheduler: turnstiles that readers pass through and that a writer drains, a backoff in nanoseconds, and the sleep on the address of a word               |
-| [`include/embed_ticket_ring.h`](include/embed_ticket_ring.h)                 | the ticket ring: a ring of job slots that a ticket indexes, with a push and a pop inside a pass through a turnstile                                                  |
+| [`include/embed_ticket_ring.h`](include/embed_ticket_ring.h)                 | the ticket ring: a ring of job slots that a ticket indexes, with a state machine per slot in the flag bits of its stamp, each transition one compare-and-swap inside a pass |
 | [`include/embed_atomic.h`](include/embed_atomic.h)                           | the atomic types: a 32-bit word and a 64-bit word, each with load, store, exchange, compare-and-swap, add, subtract, or, and, and raise, on the arm of the target |
 | [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | the compiler directives, feature checks, the static assertion, attribute wrappers, diagnostic pragmas and an argument count; and the platform directives, the byte order, the unaligned load, the widest vector register and the host and device marker |
 | [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | the dispatch table: assertions that pin each function pointer of a struct to its slot, and the macros that call and define an entry point                            |
@@ -42,13 +42,15 @@ queue, the drain and the sleeps. The GenMC clients under [`test/prove/`](test/pr
 and the resize under five memory models.
 
 The ticket ring is the job queue of the scheduler. It has 2^shift slots, and a slot holds a stamp
-and a job. The stamp is one 64-bit word, the epoch in the high 32 bits and the ticket in the low
-32 bits. The low shift bits of the ticket select the slot.
+and a job pointer. The stamp is one atomic 64-bit word: the epoch in the high 16 bits, 16 flag bits,
+and the ticket in the low 32 bits. The low shift bits of the ticket select the slot.
 
-A push and a pop each run inside a pass through a turnstile. Each is one shift, one mask and two
-moves, with no branch. The ring has no guard of its own, because the turnstile is the guard. The
-Lean proofs hold the fields of the stamp, the place of a ticket, and the roll. They also prove that
-a pop reads what the push of its ticket wrote.
+The flag bits are the state machine of the slot: granted, pushed, popped, replayed, released. Each
+transition is one compare-and-swap inside a pass through a turnstile. It expects the word with the
+flags before it and writes the word with its own flag. So exactly one caller completes each
+transition, and a stamp that differs in any bit fails the compare. The Lean proofs hold the fields
+of the stamp, the place of a ticket, and the roll. They also hold the flag matrix and the collision
+of two pops on one slot.
 
 ### The atomic types
 
@@ -191,7 +193,7 @@ git config core.hooksPath .githooks
 | [`test/support/`](test/support)                      | host threads for the contention cases, and the host's sleep on the address of a word |
 | [`test/prove/`](test/prove)                          | the GenMC clients of the turnstile, and the host that they run on                    |
 | [`test/harness.py`](test/harness.py)                 | suite discovery, Unity runner generation, the build trees, the proofs, and the site  |
-| [`theory/`](theory)                                  | the Lean proofs: the widths, the atomics, the lane, the manifold of the turnstile, the ticket ring and the claim of a slot; and the research paper on the two |
+| [`theory/`](theory)                                  | the Lean proofs: the widths, the atomics, the lane, the manifold of the turnstile, the ticket ring, the flag matrix and the claim of a slot; and the research paper on the two |
 | [`docs/`](docs)                                      | the site: the hand-written pages, and the API pages from the headers                 |
 | [`tools/api_pages.py`](tools/api_pages.py)           | the tool that writes the API pages                                                   |
 | [`LICENSES/`](LICENSES)                              | the AGPL text and the two LicenseRef documents                                       |

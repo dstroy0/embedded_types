@@ -12,9 +12,10 @@ per-slot sequence counter guards every slot, and the proof of the queue is the p
 coupling. We separate the two. A \emph{turnstile} is a manifold of lanes, each one atomic word on
 its own cache line. A reader enters with one fetch-or, leaves with one fetch-add, and a writer
 drains by reading each open lane once and waiting on the busy ones. A \emph{ticket ring} is a
-power-of-two array of slots that a 64-bit stamp indexes with one mask; its push and pop have no
-branch and no atomic operation, because the turnstile is the only guard. Every slot write records
-the stamp that wrote it, so the ring is a log of causal events as well as a queue.
+power-of-two array of slots that a 64-bit stamp indexes with one mask. Sixteen flag bits of the
+stamp are the state machine of its slot, and every transition is one compare-and-swap that
+succeeds for exactly one caller, with no loop. Every slot records the stamp that wrote it, so the
+ring is a log of causal events as well as a queue.
 
 The C11 implementation is seven headers. The Lean~4 formalization proves the lane word at 32 and
 64 bits, the open count, the queue word, the backoff, the drain and the sleeps of the turnstile, and

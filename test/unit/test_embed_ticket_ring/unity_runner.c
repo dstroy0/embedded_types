@@ -10,16 +10,18 @@
 extern void setUp(void);
 extern void tearDown(void);
 extern void test_the_stamp_gives_its_epoch_and_ticket_back(void);
+extern void test_the_flags_sit_between_the_ticket_and_the_epoch(void);
 extern void test_the_mask_is_the_count_of_slots_less_one(void);
 extern void test_the_place_is_the_low_bits_of_the_ticket(void);
 extern void test_a_ticket_a_ring_on_lands_at_the_same_place(void);
 extern void test_the_ticket_rolls_at_32_bits_onto_the_next_place(void);
-extern void test_the_epoch_does_not_move_the_place(void);
-extern void test_a_pop_reads_what_the_push_of_its_ticket_wrote(void);
-extern void test_a_push_at_another_place_leaves_a_slot(void);
-extern void test_a_push_a_ring_on_writes_over_the_slot(void);
-extern void test_the_pushes_of_one_window_each_pop_whole(void);
-extern void test_pushes_inside_passes_are_each_whole_after_the_drain(void);
+extern void test_the_epoch_and_the_flags_do_not_move_the_place(void);
+extern void test_the_life_of_a_slot_lands_each_step_once_in_order(void);
+extern void test_a_release_lands_with_no_replay(void);
+extern void test_the_next_grant_takes_a_released_word_over(void);
+extern void test_a_flipped_stamp_refuses_every_step(void);
+extern void test_lives_inside_passes_each_pop_whole_after_the_drain(void);
+extern void test_two_pops_of_one_stamp_land_once(void);
 
 
 /*=======Mock Management=====*/
@@ -81,17 +83,19 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 int main(void)
 {
   UnityBegin("D:/git_project/repos/owned/public/embedded_types/test/unit/test_embed_ticket_ring\\test_embed_ticket_ring.c");
-  run_test(test_the_stamp_gives_its_epoch_and_ticket_back, "test_the_stamp_gives_its_epoch_and_ticket_back", 51);
-  run_test(test_the_mask_is_the_count_of_slots_less_one, "test_the_mask_is_the_count_of_slots_less_one", 60);
-  run_test(test_the_place_is_the_low_bits_of_the_ticket, "test_the_place_is_the_low_bits_of_the_ticket", 66);
-  run_test(test_a_ticket_a_ring_on_lands_at_the_same_place, "test_a_ticket_a_ring_on_lands_at_the_same_place", 74);
-  run_test(test_the_ticket_rolls_at_32_bits_onto_the_next_place, "test_the_ticket_rolls_at_32_bits_onto_the_next_place", 83);
-  run_test(test_the_epoch_does_not_move_the_place, "test_the_epoch_does_not_move_the_place", 89);
-  run_test(test_a_pop_reads_what_the_push_of_its_ticket_wrote, "test_a_pop_reads_what_the_push_of_its_ticket_wrote", 95);
-  run_test(test_a_push_at_another_place_leaves_a_slot, "test_a_push_at_another_place_leaves_a_slot", 105);
-  run_test(test_a_push_a_ring_on_writes_over_the_slot, "test_a_push_a_ring_on_writes_over_the_slot", 116);
-  run_test(test_the_pushes_of_one_window_each_pop_whole, "test_the_pushes_of_one_window_each_pop_whole", 127);
-  run_test(test_pushes_inside_passes_are_each_whole_after_the_drain, "test_pushes_inside_passes_are_each_whole_after_the_drain", 158);
+  run_test(test_the_stamp_gives_its_epoch_and_ticket_back, "test_the_stamp_gives_its_epoch_and_ticket_back", 72);
+  run_test(test_the_flags_sit_between_the_ticket_and_the_epoch, "test_the_flags_sit_between_the_ticket_and_the_epoch", 83);
+  run_test(test_the_mask_is_the_count_of_slots_less_one, "test_the_mask_is_the_count_of_slots_less_one", 93);
+  run_test(test_the_place_is_the_low_bits_of_the_ticket, "test_the_place_is_the_low_bits_of_the_ticket", 99);
+  run_test(test_a_ticket_a_ring_on_lands_at_the_same_place, "test_a_ticket_a_ring_on_lands_at_the_same_place", 107);
+  run_test(test_the_ticket_rolls_at_32_bits_onto_the_next_place, "test_the_ticket_rolls_at_32_bits_onto_the_next_place", 116);
+  run_test(test_the_epoch_and_the_flags_do_not_move_the_place, "test_the_epoch_and_the_flags_do_not_move_the_place", 122);
+  run_test(test_the_life_of_a_slot_lands_each_step_once_in_order, "test_the_life_of_a_slot_lands_each_step_once_in_order", 128);
+  run_test(test_a_release_lands_with_no_replay, "test_a_release_lands_with_no_replay", 163);
+  run_test(test_the_next_grant_takes_a_released_word_over, "test_the_next_grant_takes_a_released_word_over", 176);
+  run_test(test_a_flipped_stamp_refuses_every_step, "test_a_flipped_stamp_refuses_every_step", 197);
+  run_test(test_lives_inside_passes_each_pop_whole_after_the_drain, "test_lives_inside_passes_each_pop_whole_after_the_drain", 237);
+  run_test(test_two_pops_of_one_stamp_land_once, "test_two_pops_of_one_stamp_land_once", 274);
 
   return UNITY_END();
 }

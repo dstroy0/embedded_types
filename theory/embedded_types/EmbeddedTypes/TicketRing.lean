@@ -3,9 +3,10 @@ import Std.Tactic.BVDecide
 /-!
 # embedded_types, the ticket ring
 
-`include/embed_ticket_ring.h` is a ring of 2^shift slots that a ticket indexes. A stamp is one 64-bit word: the epoch
-in the high 32 bits and the ticket in the low 32 bits. The ring has no guard of its own. The turnstile grants each
-ticket once and holds a push or a pop inside a pass, which `Manifold/LaneWord.lean` proves exclusive.
+`include/embed_ticket_ring.h` is a ring of 2^shift slots that a ticket indexes. A stamp is one 64-bit word. The
+epoch is in the high 16 bits, the flag field of `Flags.lean` in the 16 below them, and the ticket in the low 32 bits.
+The turnstile grants each ticket once and holds each transition of a slot inside a pass, which `Manifold/LaneWord.lean`
+proves exclusive.
 
 - `stamp_ticket`, `stamp_epoch` and `stamp_injective`. The two fields come back out of the stamp. Two stamps that
   agree are the same epoch and ticket.
@@ -30,24 +31,25 @@ namespace EmbeddedTypes.TicketRing
 /-! ## The stamp -/
 
 /-- The stamp of an epoch and a ticket, as `embed_ticket_stamp` builds it. -/
-def stamp (epoch ticket : BitVec 32) : BitVec 64 :=
-  (epoch.zeroExtend 64 <<< 32) ||| ticket.zeroExtend 64
+def stamp (epoch : BitVec 16) (ticket : BitVec 32) : BitVec 64 :=
+  (epoch.zeroExtend 64 <<< 48) ||| ticket.zeroExtend 64
 
 /-- The ticket of a stamp, as `embed_ticket_of_stamp` reads it. -/
 def ticketOf (s : BitVec 64) : BitVec 32 := (s &&& 0xffffffff#64).truncate 32
 
 /-- The epoch of a stamp, as `embed_epoch_of_stamp` reads it. -/
-def epochOf (s : BitVec 64) : BitVec 32 := (s >>> 32).truncate 32
+def epochOf (s : BitVec 64) : BitVec 16 := (s >>> 48).truncate 16
 
-theorem stamp_ticket (epoch ticket : BitVec 32) : ticketOf (stamp epoch ticket) = ticket := by
+theorem stamp_ticket (epoch : BitVec 16) (ticket : BitVec 32) : ticketOf (stamp epoch ticket) = ticket := by
   simp only [stamp, ticketOf]
   bv_decide
 
-theorem stamp_epoch (epoch ticket : BitVec 32) : epochOf (stamp epoch ticket) = epoch := by
+theorem stamp_epoch (epoch : BitVec 16) (ticket : BitVec 32) : epochOf (stamp epoch ticket) = epoch := by
   simp only [stamp, epochOf]
   bv_decide
 
-theorem stamp_injective (e1 t1 e2 t2 : BitVec 32) (h : stamp e1 t1 = stamp e2 t2) : e1 = e2 ∧ t1 = t2 := by
+theorem stamp_injective (e1 e2 : BitVec 16) (t1 t2 : BitVec 32) (h : stamp e1 t1 = stamp e2 t2) :
+    e1 = e2 ∧ t1 = t2 := by
   constructor
   · have := congrArg epochOf h
     rwa [stamp_epoch, stamp_epoch] at this

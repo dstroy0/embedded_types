@@ -98,12 +98,19 @@ A writer that drains waits until each pass that holds a lane at the drain ends. 
 a turnstile and never leaves it holds that lane, and the drain waits for it without end. The
 turnstile has no timeout on a drain and no owner on a lane. Nothing diagnoses this.
 
-### A ticket that no turnstile granted
+### A job pointer in a slot
 
-The ticket ring has no compare-and-swap and no guard of its own. The turnstile is the guard, and
-the grantor of a ticket holds it while it grants. A stamp built from a ticket that no turnstile
-granted indexes a slot that another ticket owns, and the ring does not detect that. The stamp that
-a pop reads shows which ticket wrote the slot.
+Every transition of a slot is one compare-and-swap on its stamp word. A corrupted stamp word fails
+the next transition, and a corrupted input stamp fails every transition. The job pointer beside the
+stamp is outside that compare. A corrupted job pointer reaches the caller of a pop, and the job must
+carry its own check. Nothing in the ring diagnoses it.
+
+### A grantor that exceeds the window
+
+The grantor keeps the number of live tickets below the slot count, and the epoch tick period longer
+than the lifetime of a stamp. A grant beyond the window finds a word in the middle of its sequence
+and fails, so the fault surfaces at the grantor. A stamp held past the epoch wrap can match a later
+stamp with the same ticket and epoch. The ring does not diagnose that hold.
 
 ### The run time
 
