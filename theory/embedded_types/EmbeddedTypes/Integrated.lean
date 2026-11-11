@@ -6,9 +6,11 @@ import EmbeddedTypes.Flags
 
 One model of the whole algorithm. It has the lane words of the turnstile and the slots of the ticket ring. It has
 the workers that pass through the lanes and pop the slots. It also has the supervisor that kills a worker and frees
-its lane. The lane words are the states of `Manifold/Drain.lean`. Each step on a lane is a step of that file, so its
-theorems apply to each lane here. The check of a job pointer is the check of `Flags.lean`, and a pop records
-whether the pointer passed it.
+its lane.
+
+The lane words are the states of `Manifold/Drain.lean`. Each step on a lane is a step of that file, so its theorems
+apply to each lane here. The check of a job pointer is the check of `Flags.lean`, and a pop records whether the
+pointer passed it.
 
 The steps:
 
