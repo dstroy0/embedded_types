@@ -1,0 +1,155 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.5) (preloaded format=pdflatex 2026.9.10)  11 NOV 2026 12:14
+entering extended mode
+ restricted \write18 enabled.
+ file:line:error style messages enabled.
+ %&-line parsing enabled.
+**d:/git_project/repos/owned/public/embedded_types/theory/papers/turnstile_ticket_ring/main.tex
+(d:/git_project/repos/owned/public/embedded_types/theory/papers/turnstile_ticket_ring/main.tex
+LaTeX2e <2026-06-01>
+L3 programming layer <2026-08-10>
+(C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrbook.cls
+Document Class: scrbook 2026/02/02 v3.49.2 KOMA-Script document class (book)
+(C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrkbase.sty
+Package: scrkbase 2026/02/02 v3.49.2 KOMA-Script package (KOMA-Script-dependent basics and keyval usage)
+ (C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrbase.sty
+Package: scrbase 2026/02/02 v3.49.2 KOMA-Script package (KOMA-Script-independent basics and keyval usage)
+ (C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrlfile.sty
+Package: scrlfile 2026/02/02 v3.49.2 KOMA-Script package (file load hooks)
+ (C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrlfile-hook.sty
+Package: scrlfile-hook 2026/02/02 v3.49.2 KOMA-Script package (using LaTeX hooks)
+ (C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrlogo.sty
+Package: scrlogo 2026/02/02 v3.49.2 KOMA-Script package (logo)
+))) (C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/latex/graphics\keyval.sty
+Package: keyval 2026-05-17 v1.15 key=value parser (DPC)
+\KV@toks@=\toks17
+)
+Applying: [2021/05/01] Usage of raw or classic option list on input line 254.
+Already applied: [0000/00/00] Usage of raw or classic option list on input line 370.
+)) (C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\tocbasic.sty
+Package: tocbasic 2026/02/02 v3.49.2 KOMA-Script package (handling toc-files)
+\scr@dte@tocline@numberwidth=\skip49
+\scr@dte@tocline@numbox=\box53
+)
+Package tocbasic Info: omitting babel extension for `toc'
+(tocbasic)             because of feature `nobabel' available
+(tocbasic)             for `toc' on input line 143.
+Package scrbook Info: You've used standard option `11pt'.
+(scrbook)             This is correct!
+(scrbook)             Internally I'm using `fontsize=11pt'.
+(scrbook)             If you'd like to set the option with \KOMAoptions,
+(scrbook)             you'd have to use `fontsize=11pt' there
+(scrbook)             instead of `11pt', too.
+Class scrbook Info: You've used standard option `openright'.
+(scrbook)           This is correct!
+(scrbook)           Internally I'm using `open=right'.
+(scrbook)           If you'd like to set the option with \KOMAoptions,
+(scrbook)           you'd have to use `open=right' there
+(scrbook)           instead of `openright', too.
+Class scrbook Info: File `scrsize11pt.clo' used to setup font sizes on input line 2713.
+ (C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\scrsize11pt.clo
+File: scrsize11pt.clo 2026/02/02 v3.49.2 KOMA-Script font size class option (11pt)
+) (C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/latex/koma-script\typearea.sty
+Package: typearea 2026/02/02 v3.49.2 KOMA-Script package (type area)
+\ta@bcor=\skip50
+\ta@div=\count276
+\ta@hblk=\skip51
+\ta@vblk=\skip52
+\ta@temp=\skip53
+\footheight=\skip54
+Package typearea Info: These are the values describing the layout:
+(typearea)             DIV  = 10
+(typearea)             BCOR = 14.22636pt
+(typearea)             \paperwidth      = 597.50793pt
+(typearea)              \textwidth      = 408.2971pt
+(typearea)              DIV departure   = -3%
+(typearea)              \evensidemargin = 44.38632pt
+(typearea)              \oddsidemargin  = 0.28453pt
+(typearea)             \paperheight     = 845.04694pt
+(typearea)              \textheight     = 514.20023pt
+(typearea)              \topmargin      = 12.2347pt
+(typearea)              \headheight     = 17.0pt
+(typearea)              \headsep        = 20.40001pt
+(typearea)              \topskip        = 11.0pt
+(typearea)              \footskip       = 47.6pt
+(typearea)              \baselineskip   = 13.6pt
+(typearea)              on input line 1810.
+)
+\c@part=\count277
+\c@chapter=\count278
+\c@section=\count279
+\c@subsection=\count280
+\c@subsubsection=\count281
+\c@paragraph=\count282
+\c@subparagraph=\count283
+\scr@dte@chapter@maxnumwidth=\skip55
+Class scrbook Info: using compatibility default `afterindent=bysign'
+(scrbook)           for `\chapter on input line 5945.
+\scr@dte@section@maxnumwidth=\skip56
+Class scrbook Info: using compatibility default `runin=bysign'
+(scrbook)           for `\section on input line 5956.
+Class scrbook Info: using compatibility default `afterindent=bysign'
+(scrbook)           for `\section on input line 5956.
+\scr@dte@part@maxnumwidth=\skip57
+Class scrbook Info: using compatibility default `afterindent=true'
+(scrbook)           for `\part on input line 5965.
+\scr@dte@subsection@maxnumwidth=\skip58
+Class scrbook Info: using compatibility default `runin=bysign'
+(scrbook)           for `\subsection on input line 5975.
+Class scrbook Info: using compatibility default `afterindent=bysign'
+(scrbook)           for `\subsection on input line 5975.
+\scr@dte@subsubsection@maxnumwidth=\skip59
+Class scrbook Info: using compatibility default `runin=bysign'
+(scrbook)           for `\subsubsection on input line 5985.
+Class scrbook Info: using compatibility default `afterindent=bysign'
+(scrbook)           for `\subsubsection on input line 5985.
+\scr@dte@paragraph@maxnumwidth=\skip60
+Class scrbook Info: using compatibility default `runin=bysign'
+(scrbook)           for `\paragraph on input line 5996.
+Class scrbook Info: using compatibility default `afterindent=bysign'
+(scrbook)           for `\paragraph on input line 5996.
+\scr@dte@subparagraph@maxnumwidth=\skip61
+Class scrbook Info: using compatibility default `runin=bysign'
+(scrbook)           for `\subparagraph on input line 6006.
+Class scrbook Info: using compatibility default `afterindent=bysign'
+(scrbook)           for `\subparagraph on input line 6006.
+\abovecaptionskip=\skip62
+\belowcaptionskip=\skip63
+\c@pti@nb@sid@b@x=\box54
+Package tocbasic Info: omitting babel extension for `lof'
+(tocbasic)             because of feature `nobabel' available
+(tocbasic)             for `lof' on input line 7242.
+\scr@dte@figure@maxnumwidth=\skip64
+\c@figure=\count284
+Package tocbasic Info: omitting babel extension for `lot'
+(tocbasic)             because of feature `nobabel' available
+(tocbasic)             for `lot' on input line 7255.
+\scr@dte@table@maxnumwidth=\skip65
+\c@table=\count285
+Class scrbook Info: Redefining `\numberline' on input line 7426.
+\bibindent=\dimen150
+) (preamble.tex (C:\Users\Douglas\AppData\Local\Programs\MiKTeX\tex/generic/iftex\iftex.sty
+Package: iftex 2024/12/12 v1.0g TeX engine tests
+)
+
+ ********************************************
+ * XeTeX is required to compile this document.
+ * Sorry!
+ ********************************************
+
+preamble.tex:3: Emergency stop.
+<read *> 
+         
+l.3 \RequireXeTeX
+                 
+*** (cannot \read from terminal in nonstop modes)
+
+ 
+Here is how much of TeX's memory you used:
+ 3641 strings out of 467441
+ 87973 string characters out of 5406619
+ 654411 words of memory out of 5000000
+ 33004 multiletter control sequences out of 15000+600000
+ 628571 words of font info for 42 fonts, out of 8000000 for 9000
+ 1141 hyphenation exceptions out of 8191
+ 108i,1n,107p,11292b,339s stack positions out of 10000i,1000n,20000p,200000b,200000s
+preamble.tex:3:  ==> Fatal error occurred, no output PDF file produced!

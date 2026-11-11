@@ -1,0 +1,27 @@
+\pdfbookmark[1]{Abstract}{Abstract}
+\thispagestyle{empty}
+\begin{center}
+  \rule{\textwidth}{0.4pt}\\[0.9em]
+  {\Large\spacedallcaps{Abstract}}\\[0.7em]
+  \rule{\textwidth}{0.4pt}
+\end{center}
+\bigskip
+
+\noindent Concurrent queues couple synchronization to storage: a compare-and-swap loop or a
+per-slot sequence counter guards every slot, and the proof of the queue is the proof of that
+coupling. We separate the two. A \emph{turnstile} is a manifold of lanes, each one atomic word on
+its own cache line. A reader enters with one fetch-or, leaves with one fetch-add, and a writer
+drains by reading each open lane once and waiting on the busy ones. A \emph{ticket ring} is a
+power-of-two array of slots that a 64-bit stamp indexes with one mask; its push and pop have no
+branch and no atomic operation, because the turnstile is the only guard. Every slot write records
+the stamp that wrote it, so the ring is a log of causal events as well as a queue.
+
+The C11 implementation is seven headers. The Lean~4 formalization proves the lane word at 32 and
+64 bits, the open count, the queue word, the backoff, the drain and the sleeps of the turnstile, and
+the stamp, the place, the window and the pushes of the ring. GenMC checks the drain and the resize
+of the manifold under five memory models. We state each theorem as it is checked, we name the
+trusted axioms (the atomics of the target, the futex contract of the host, the depth bound that the
+grantor of tickets keeps), and we state what the artifact does not provide: a rewind operation, a
+parity bit, and a sandbox case study are design arguments over the proved interface, not
+machine-checked results.
+\cleardoublepage
