@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(
   embedded_types
-  VERSION 1.2.0
+  VERSION 2.0.0
   DESCRIPTION "Fixed widths, a machine word, and the compile-time machinery a C11 embedded library is written in"
   LANGUAGES C)
 
