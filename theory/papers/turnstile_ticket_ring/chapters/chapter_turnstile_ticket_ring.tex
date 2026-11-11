@@ -85,7 +85,8 @@ typedef struct
     EmbedTicketRingSlot *slots;
 } EmbedTicketRing;
 
-EMBED_INLINE void embed_ticket_ring_begin(EmbedTicketRing *ring, EmbedTicketRingSlot *slots, unsigned int shift)
+EMBED_INLINE void embed_ticket_ring_begin(EmbedTicketRing *ring, EmbedTicketRingSlot *slots,
+                                          unsigned int shift)
 {
     ring->mask = ((embed_u64)1u << shift) - 1u;
     ring->slots = slots;
@@ -108,7 +109,8 @@ EMBED_INLINE void embed_ticket_ring_push(EmbedTicketRing *ring, embed_u64 stamp,
     slot->job = job;
 }
 
-EMBED_INLINE void *embed_ticket_ring_pop(const EmbedTicketRing *ring, embed_u64 stamp, embed_u64 *stamp_out)
+EMBED_INLINE void *embed_ticket_ring_pop(const EmbedTicketRing *ring, embed_u64 stamp,
+                                         embed_u64 *stamp_out)
 {
     const EmbedTicketRingSlot *const slot = &ring->slots[embed_ticket_ring_place(ring, stamp)];
 
@@ -246,7 +248,7 @@ The wake file models the sleeper bit, a pending clear and an owed wake. Its theo
 
 \subsection{\texorpdfstring{3.5 The backoff (\texttt{Manifold/\allowbreak{}Backoff.\allowbreak{}lean})}{3.5 The backoff (Manifold/Backoff.lean)}}
 
-\texttt{shift\_\allowbreak{}defined} proves that the shift \texttt{(embed\_\allowbreak{}u64)1u << (EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}UNIT\_\allowbreak{}SHIFT + exponent)} is below 64 bits for every exponent the C reaches, so the C is defined. \texttt{limit\_\allowbreak{}fits} and \texttt{ceilings} bound every wait at \(2^{30}\) nanoseconds on a CPU host and \(2^{20}\) on a device. \texttt{no\_\allowbreak{}call\_\allowbreak{}in\_\allowbreak{}unit} and \texttt{wait\_\allowbreak{}from\_\allowbreak{}unit} prove that a step inside the first unit makes no call and a step from one unit on waits with the limit of \(k\). \texttt{timespec\_\allowbreak{}fits}, \texttt{microseconds\_\allowbreak{}fit} and \texttt{milliseconds\_\allowbreak{}fit} prove that each host conversion of the limit fits its argument type. \texttt{update\_\allowbreak{}is\_\allowbreak{}next} proves that the branchless increment \texttt{exponent += (exponent < EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}K\_\allowbreak{}MOST)} is the function \texttt{next\allowbreak{}K}.
+\texttt{shift\_\allowbreak{}defined} proves that the shift of the C, one shifted left by the unit shift plus the exponent, is below 64 bits for every exponent the C reaches, so the C is defined. \texttt{limit\_\allowbreak{}fits} and \texttt{ceilings} bound every wait at \(2^{30}\) nanoseconds on a CPU host and \(2^{20}\) on a device. \texttt{no\_\allowbreak{}call\_\allowbreak{}in\_\allowbreak{}unit} and \texttt{wait\_\allowbreak{}from\_\allowbreak{}unit} prove that a step inside the first unit makes no call and a step from one unit on waits with the limit of \(k\). \texttt{timespec\_\allowbreak{}fits}, \texttt{microseconds\_\allowbreak{}fit} and \texttt{milliseconds\_\allowbreak{}fit} prove that each host conversion of the limit fits its argument type. \texttt{update\_\allowbreak{}is\_\allowbreak{}next} proves that the branchless increment \texttt{exponent += (exponent < EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}K\_\allowbreak{}MOST)} is the function \texttt{next\allowbreak{}K}.
 
 \subsection{\texorpdfstring{3.6 The ticket ring (\texttt{Ticket\allowbreak{}Ring.\allowbreak{}lean})}{3.6 The ticket ring (TicketRing.lean)}}
 

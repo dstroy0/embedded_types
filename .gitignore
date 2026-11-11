@@ -10,6 +10,13 @@ Testing/
 install_manifest.txt
 compile_commands.json
 
+theory/papers/*/main.aux
+theory/papers/*/main.log
+theory/papers/*/main.fls
+theory/papers/*/main.fdb_latexmk
+theory/papers/*/main.toc
+theory/papers/*/main.out
+
 *.o
 *.obj
 *.a
