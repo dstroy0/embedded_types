@@ -41,7 +41,7 @@ typedef struct
 EMBED_STATIC_ASSERT(sizeof(EmbedTurnstileLane) == 64u, "a lane takes one cache line");
 ```
 
-The **stamp** is the capability that the ring indexes by. It is one atomic 64-bit word: the epoch in bits 48 to 63, a 16-bit flag field in bits 32 to 47, and the ticket in bits 0 to 31. Five flag bits are the transitions of the slot state machine, seven hold the lane index of the pop, and bit 47 is reserved and never set:
+The **stamp** is the capability that the ring indexes by. It is one atomic 64-bit word: the epoch in bits 48 to 63, a 16-bit flag field in bits 32 to 47, and the ticket in bits 0 to 31. Five flag bits are the transitions of the slot state machine, one is the parity of the job pointer, seven hold the lane index of the pop, and bit 47 is reserved and never set:
 
 ```
 #define EMBED_TICKET_MASK ((embed_u64)0xffffffffu)
@@ -52,6 +52,7 @@ The **stamp** is the capability that the ring indexes by. It is one atomic 64-bi
 #define EMBED_TICKET_POPPED ((embed_u64)1u << 34)
 #define EMBED_TICKET_REPLAYED ((embed_u64)1u << 35)
 #define EMBED_TICKET_RELEASED ((embed_u64)1u << 36)
+#define EMBED_TICKET_PARITY ((embed_u64)1u << 37)
 #define EMBED_TICKET_LANE_SHIFT 40u
 #define EMBED_TICKET_RESERVED ((embed_u64)1u << 47)
 
@@ -127,7 +128,7 @@ EMBED_INLINE embed_bool embed_ticket_ring_pop(EmbedTicketRing *ring, embed_u64 s
 }
 ```
 
-The state sequence of a slot is grant, push, pop, replay, release, one transition each: `embed_ticket_ring_grant` from a zero or released word, `embed_ticket_ring_push`, `embed_ticket_ring_pop` with the lane index of the pass, `embed_ticket_ring_replay` for a rewind, and `embed_ticket_ring_release` by the writer after its drain. The job pointer is stored before the push's compare-and-swap, which has release semantics, and read after the pop's, which has acquire semantics. The shift is at most `EMBED_TICKET_RING_SHIFT_MOST`, which is 31, so the mask never reaches the flag field.
+The state sequence of a slot is grant, push, pop, replay, release, one transition each: `embed_ticket_ring_grant` from a zero or released word, `embed_ticket_ring_push`, `embed_ticket_ring_pop` with the lane index of the pass, `embed_ticket_ring_replay` for a rewind, and `embed_ticket_ring_release` by the writer after its drain. The job pointer is stored before the push's compare-and-swap, which has release semantics, and read after the pop's, which has acquire semantics. The push also folds the parity of the job pointer into one flag bit of the new value, and the pop and the replay fold the pointer they read and compare it with that bit. A pop whose compare succeeds but whose job pointer fails the parity returns no job and marks the reserved bit in the value it reports, so no caller runs a corrupted job and the fault is distinguishable from contention, since no slot word ever holds the reserved bit. The check is a six-step shift-and-xor fold, and `EMBED_TICKET_JOB_PARITY` turns it off. The shift is at most `EMBED_TICKET_RING_SHIFT_MOST`, which is 31, so the mask never reaches the flag field.
 
 ### 2.3 The turnstile
 
@@ -292,7 +293,7 @@ where $\mathrm{Pairwise}_{\neq}(l)$ states that any two members of $l$ have tick
 
 **Theorem 3 (bounded rewind).** A rewind of $k$ tickets from a current ticket $c$ is one pop at $\mathrm{stamp}(e, c - k)$, and the artifact needs no second operation for it. For $k < 2^{s}$, `window_distinct` puts $c - k$ at a place of its own among the live tickets, `place_wrap` and `place_roll` make the place the same across the wrap of the ring and the roll of the 32-bit ticket, and `pop_pushes` gives the pop the job that the push of $c - k$ wrote. The pop is $O(1)$: one shift, one mask, two loads. The echoed stamp confirms the rewind landed, by `stamp_injective`: a slot that a ticket outside the window overwrote carries that ticket's stamp and not $c - k$. The retention window $W$ is $2^{s}$ by `place_lt`, and an undo over the window is the same pop applied $k$ times, each one an instance of `pop_pushes`.
 
-**Theorem 4 (single-event upset containment).** `place_lt` holds for every natural number $t$, with no hypothesis on $t$. A stamp whose ticket field a single-event upset flipped in any bit still indexes a slot below $2^{s}$, because the mask of the C is the modulus (`place_mask`). The slot access is therefore in bounds for every 64-bit value of the stamp, flipped or not. Detection is the read-back and the claim, Section 3.9: `flip_changes` proves that any nonzero mask changes a stamp, so a flip in the stamp field of a slot always fails the compare against the stamp the consumer holds, and `collision_detected` proves that a flip in the consumer's own ticket, which lands on the live slot of another ticket, collides with that ticket's owner at the claim and one of the two fails. `pop_stamp_free_of_job` proves that the stamp of a pop does not depend on the job, so a flip in the job pointer is outside every stamp check and the job must carry its own.
+**Theorem 4 (single-event upset containment).** `place_lt` holds for every natural number $t$, with no hypothesis on $t$. A stamp whose ticket field a single-event upset flipped in any bit still indexes a slot below $2^{s}$, because the mask of the C is the modulus (`place_mask`). The slot access is therefore in bounds for every 64-bit value of the stamp, flipped or not. Detection is the read-back and the claim, Section 3.9: `flip_changes` proves that any nonzero mask changes a stamp, so a flip in the stamp field of a slot always fails the compare against the stamp the consumer holds, and `collision_detected` proves that a flip in the consumer's own ticket, which lands on the live slot of another ticket, collides with that ticket's owner at the claim and one of the two fails. `pop_stamp_free_of_job` proves that the stamp of a pop does not depend on the job; the job pointer is covered by its own parity bit in the stamp, Section 3.10, so a single-bit flip there fails the read and no caller runs the job.
 
 ### 3.7 Model checks (`test/prove`)
 
@@ -346,8 +347,11 @@ The flag field is the slot state machine, and `Flags.lean` is its matrix, every 
 - `lane_recorded`: $\forall s\, l,\; l < 128 \Rightarrow (\mathrm{statePopped}(s, l) \land \mathrm{laneMask}) \gg 40 = l$. The lane index of the pop is recoverable from the popped word.
 - `corruption_refuses`: $\forall x\, m,\; m \neq 0 \Rightarrow x \oplus m \neq x$. Any bit flip in a slot word fails the next transition.
 - `states_reserved_clear`, `invalid_input_refuses`, `valid_input_expects`: no state word has the reserved bit; an input stamp with a flag bit set expects a value with the reserved bit, so its transition fails on every state word; an input stamp with a clear flag field expects exactly the stamp with the prior flags. So a flip in any of the 64 bits of a held stamp fails the transition: a flip in the ticket or the epoch expects another stamp's word, a flip in the flag field expects the reserved bit.
+- `guarded_refuses`: a transition that reads the current value first and fails its state test expects the current value with the reserved bit inverted, which differs from every current value, the zero word of an empty slot among them. The pop, the replay and the release are of this form, because the lane and parity bits of the current value are not known to the caller in advance.
 
-Theorem 4 is therefore complete for the stamp on both sides: a flip in the slot word fails the next transition on it (`corruption_refuses`), and a flip in a held stamp fails every transition from it (`invalid_input_refuses` with `fields_tell_tickets`). The suite exercises the second half directly: it flips each of the 64 bits of a held stamp in turn and asserts that the pop fails on every one.
+- `job_flip_inverts_parity`: $\forall j\, i,\; i < 64 \Rightarrow \mathrm{parity}(j \oplus 2^{i}) \neq \mathrm{parity}(j)$, where $\mathrm{parity}$ is the six-step fold of the C. `parity_recorded`: the pushed and the popped words carry the parity the push stored, where the pop reads it. A single-bit error in the job pointer therefore fails the check at the pop or the replay, and the pop returns no job.
+
+Theorem 4 is therefore complete for the whole slot: a flip in the slot word fails the next transition on it (`corruption_refuses`), a flip in a held stamp fails every transition from it (`invalid_input_refuses` with `fields_tell_tickets`), and a flip in the job pointer fails the parity check at the read (`job_flip_inverts_parity`). The suite exercises the last two directly: it flips each of the 64 bits of a held stamp in turn and asserts that the pop fails on every one, and it flips each of the 64 bits of a stored job pointer in turn and asserts that the pop and the replay refuse the job and mark the reserved bit.
 
 ### 3.11 The device arm (`Device.lean`)
 

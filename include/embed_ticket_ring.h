@@ -22,6 +22,9 @@
  *       pop, which a rewind performs. A grant succeeds on a zero word or on a released word. A release succeeds
  *       after a pop. The next grant at the same index reuses the released word.
  * @note The pop writes the lane index of the pass that performed it into seven flag bits. The release keeps them.
+ * @note The push stores the parity of the job pointer in one flag bit. The pop and the replay check the pointer
+ *       they read against it. A single-bit error in the job pointer fails the check, and the pop returns no job.
+ *       EMBED_TICKET_JOB_PARITY turns the check off.
  * @note The epoch is 16 bits. The grantor derives it from the host clock. The tick period covers the lifetime of a
  *       stamp, so the epoch does not wrap while the stamp is live. A compare succeeds only where the ticket and the
  *       epoch both match, and the ticket alone distinguishes any two live stamps.
@@ -59,8 +62,23 @@ EMBED_BEGIN_DECLS
 #define EMBED_TICKET_LANE_MASK ((embed_u64)0x7fu << EMBED_TICKET_LANE_SHIFT)
 EMBED_STATIC_ASSERT(EMBED_TURNSTILE_LANES <= 128u, "the lane index of a pop fits seven flag bits");
 
+/** @brief The parity bit of the job pointer, which the push sets and the pop and the replay check. */
+#define EMBED_TICKET_PARITY ((embed_u64)1u << 37)
+#define EMBED_TICKET_PARITY_SHIFT 37u
+
 /** @brief The reserved bit. No transition sets it, so an expected value with it set always fails the compare. */
 #define EMBED_TICKET_RESERVED ((embed_u64)1u << 47)
+
+/**
+ * @brief 1 where the push stores the parity of the job pointer in the stamp and the pop and the replay check it,
+ *        0 where they do not. A build sets it before this header. This header defines both values. Test it with #if.
+ */
+#if !defined(EMBED_TICKET_JOB_PARITY)
+#define EMBED_TICKET_JOB_PARITY 1
+#endif
+#if (EMBED_TICKET_JOB_PARITY != 0) && (EMBED_TICKET_JOB_PARITY != 1)
+#error "EMBED_TICKET_JOB_PARITY must be 0 or 1"
+#endif
 
 /** @brief The maximum slot count as a shift: 2^EMBED_TICKET_RING_SHIFT_MOST slots. */
 #define EMBED_TICKET_RING_SHIFT_MOST 31u
@@ -141,6 +159,44 @@ EMBED_INLINE unsigned int embed_ticket_lane_of_stamp(embed_u64 stamp)
 }
 
 /**
+ * @brief The parity of a job pointer: 1 where its bits have an odd count of ones, 0 where even.
+ *
+ * @param[in] job The job pointer.
+ * @return        The parity, as the bit value for EMBED_TICKET_PARITY_SHIFT.
+ * @note A fold of six shifts and xors. Any single-bit error in the pointer inverts the parity, and so does any
+ *       error in an odd count of bits. An error in an even count of bits does not.
+ */
+EMBED_INLINE embed_u64 embed_ticket_job_parity(const void *job)
+{
+    // Explicit cast carries the pointer as an integer for the fold
+    embed_u64 bits = (embed_u64)(uintptr_t)job;
+
+    bits ^= bits >> 32u;
+    bits ^= bits >> 16u;
+    bits ^= bits >> 8u;
+    bits ^= bits >> 4u;
+    bits ^= bits >> 2u;
+    bits ^= bits >> 1u;
+    return bits & (embed_u64)1u;
+}
+
+/**
+ * @brief The parity bit that the push stores for a job pointer: the parity where the build checks it, 0 where not.
+ *
+ * @param[in] job The job pointer.
+ * @return        EMBED_TICKET_PARITY or 0.
+ */
+EMBED_INLINE embed_u64 embed_ticket_job_parity_bit(const void *job)
+{
+#if EMBED_TICKET_JOB_PARITY
+    return embed_ticket_job_parity(job) << EMBED_TICKET_PARITY_SHIFT;
+#else
+    (void)job;
+    return 0u;
+#endif
+}
+
+/**
  * @brief The epoch and ticket fields of a stamp, with the flag field cleared.
  *
  * @param[in] stamp The stamp.
@@ -208,6 +264,21 @@ EMBED_INLINE embed_u64 embed_ticket_ring_expected(embed_u64 stamp, embed_u64 fla
 }
 
 /**
+ * @brief The expected value of a transition that read the current value first. It is the current value where the
+ *        state test passed, and the current value with the reserved bit inverted where it did not.
+ *
+ * @param[in] current The current value of the slot word.
+ * @param[in] valid   All ones where the state test passed, all zeros where it did not.
+ * @return            The expected value.
+ * @note A word with the reserved bit inverted differs from the current value in one bit, so the compare fails. An
+ *       expected value of zero does not serve: a zero current value would match it.
+ */
+EMBED_INLINE embed_u64 embed_ticket_ring_guarded(embed_u64 current, embed_u64 valid)
+{
+    return current ^ (~valid & EMBED_TICKET_RESERVED);
+}
+
+/**
  * @brief One transition of a slot: a compare-and-swap from the expected value to the new value.
  *
  * @param[in,out] slot     The slot [BORROWS].
@@ -258,14 +329,43 @@ EMBED_INLINE embed_bool embed_ticket_ring_grant(EmbedTicketRing *ring, embed_u64
  * @return              EMBED_TRUE on success.
  * @note The store of the job pointer precedes the compare-and-swap, which has release semantics. A pop that succeeds
  *       after it has acquire semantics, so the pop reads the job pointer.
+ * @note The new value carries the parity bit of the job pointer where the build checks it.
  */
 EMBED_INLINE embed_bool embed_ticket_ring_push(EmbedTicketRing *ring, embed_u64 stamp, void *job, embed_u64 *seen)
 {
     EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
     const embed_u64 expected = embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED);
+    const embed_u64 value = expected | EMBED_TICKET_PUSHED | embed_ticket_job_parity_bit(job);
 
     slot->job = job;
-    return embed_ticket_ring_transition(slot, expected, expected | EMBED_TICKET_PUSHED, seen);
+    return embed_ticket_ring_transition(slot, expected, value, seen);
+}
+
+/**
+ * @brief The job pointer of a slot after a successful read transition, checked against the parity bit of the word.
+ *
+ * @param[in]  slot    The slot [BORROWS].
+ * @param[in]  current The word of the slot before the transition.
+ * @param[out] job     The job where the parity matches [BORROWS], and NULL where it does not.
+ * @param[out] seen    The word, with the reserved bit set where the parity does not match [BORROWS].
+ * @return             EMBED_TRUE where the parity matches, or where the build does not check it.
+ * @note The reserved bit in seen marks a corrupted job pointer, which no contention produces, since no slot word
+ *       ever holds that bit.
+ */
+EMBED_INLINE embed_bool embed_ticket_ring_job_checked(const EmbedTicketRingSlot *slot, embed_u64 current, void **job,
+                                                      embed_u64 *seen)
+{
+    void *const read = slot->job;
+#if EMBED_TICKET_JOB_PARITY
+    const embed_u64 stored = (current >> EMBED_TICKET_PARITY_SHIFT) & (embed_u64)1u;
+    const embed_bool match = (embed_bool)(embed_ticket_job_parity(read) == stored);
+#else
+    const embed_bool match = EMBED_TRUE;
+#endif
+
+    *job = match ? read : NULL;
+    *seen = match ? current : (current | EMBED_TICKET_RESERVED);
+    return match;
 }
 
 /**
@@ -275,20 +375,31 @@ EMBED_INLINE embed_bool embed_ticket_ring_push(EmbedTicketRing *ring, embed_u64 
  * @param[in]     stamp The input stamp of a pushed slot.
  * @param[in]     lane  The lane index of the pass of the caller, as embed_turnstile_enter returned it.
  * @param[out]    job   The job on success [BORROWS], and NULL on failure.
- * @param[out]    seen  The value found [BORROWS].
+ * @param[out]    seen  The value found [BORROWS], with the reserved bit set where the job pointer failed its parity.
  * @return              EMBED_TRUE on success.
  * @note Two pops of one stamp contend here. One succeeds, and the other finds the popped bit in seen.
+ * @note The expected value is the current value where the current value is the pushed word of the stamp, parity
+ *       bit aside. A pop whose compare succeeds but whose job pointer fails its parity returns failure, with the
+ *       reserved bit in seen. The slot stays popped, so no caller runs the corrupted job.
  */
 EMBED_INLINE embed_bool embed_ticket_ring_pop(EmbedTicketRing *ring, embed_u64 stamp, unsigned int lane, void **job,
                                               embed_u64 *seen)
 {
     EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
-    const embed_u64 expected = embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED | EMBED_TICKET_PUSHED);
-    const embed_u64 value = expected | EMBED_TICKET_POPPED | ((embed_u64)lane << EMBED_TICKET_LANE_SHIFT);
-    const embed_bool success = embed_ticket_ring_transition(slot, expected, value, seen);
+    const embed_u64 current = embed_atomic_u64_load(&slot->stamp);
+    const embed_u64 pushed = embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED | EMBED_TICKET_PUSHED);
+    // Explicit cast converts the state test, parity bit aside, to an all-ones or all-zeros mask over the current value
+    const embed_u64 valid = (embed_u64)0u - (embed_u64)((current & ~EMBED_TICKET_PARITY) == pushed);
+    const embed_u64 value = current | EMBED_TICKET_POPPED | ((embed_u64)lane << EMBED_TICKET_LANE_SHIFT);
+    const embed_bool success =
+        embed_ticket_ring_transition(slot, embed_ticket_ring_guarded(current, valid), value, seen);
 
-    *job = success ? slot->job : NULL;
-    return success;
+    if (!success)
+    {
+        *job = NULL;
+        return EMBED_FALSE;
+    }
+    return embed_ticket_ring_job_checked(slot, current, job, seen);
 }
 
 /**
@@ -300,7 +411,8 @@ EMBED_INLINE embed_bool embed_ticket_ring_pop(EmbedTicketRing *ring, embed_u64 s
  * @param[out]    seen  The value found [BORROWS].
  * @return              EMBED_TRUE on success.
  * @note A rewind of k tickets is a replay at the ticket k back. The expected value is the current value where the
- *       current value is the popped word of the stamp, lane bits aside. Any other current value fails the compare.
+ *       current value is the popped word of the stamp, lane and parity bits aside. Any other current value fails
+ *       the compare. The job pointer passes the same parity check as at the pop.
  */
 EMBED_INLINE embed_bool embed_ticket_ring_replay(EmbedTicketRing *ring, embed_u64 stamp, void **job, embed_u64 *seen)
 {
@@ -308,13 +420,18 @@ EMBED_INLINE embed_bool embed_ticket_ring_replay(EmbedTicketRing *ring, embed_u6
     const embed_u64 current = embed_atomic_u64_load(&slot->stamp);
     const embed_u64 popped =
         embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED | EMBED_TICKET_PUSHED | EMBED_TICKET_POPPED);
-    // Explicit cast converts the state test to an all-ones or all-zeros mask over the current value
-    const embed_u64 valid = (embed_u64)0u - (embed_u64)((current & ~EMBED_TICKET_LANE_MASK) == popped);
-    const embed_bool success =
-        embed_ticket_ring_transition(slot, current & valid, current | EMBED_TICKET_REPLAYED, seen);
+    // Explicit cast converts the state test, lane and parity bits aside, to an all-ones or all-zeros mask
+    const embed_u64 valid =
+        (embed_u64)0u - (embed_u64)((current & ~(EMBED_TICKET_LANE_MASK | EMBED_TICKET_PARITY)) == popped);
+    const embed_bool success = embed_ticket_ring_transition(slot, embed_ticket_ring_guarded(current, valid),
+                                                            current | EMBED_TICKET_REPLAYED, seen);
 
-    *job = success ? slot->job : NULL;
-    return success;
+    if (!success)
+    {
+        *job = NULL;
+        return EMBED_FALSE;
+    }
+    return embed_ticket_ring_job_checked(slot, current, job, seen);
 }
 
 /**
@@ -332,11 +449,13 @@ EMBED_INLINE embed_bool embed_ticket_ring_release(EmbedTicketRing *ring, embed_u
     const embed_u64 current = embed_atomic_u64_load(&slot->stamp);
     const embed_u64 popped =
         embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED | EMBED_TICKET_PUSHED | EMBED_TICKET_POPPED);
-    // Explicit cast converts the state test, lane and replayed bits aside, to an all-ones or all-zeros mask
+    // Explicit cast converts the state test, lane, replayed and parity bits aside, to an all-ones or all-zeros mask
     const embed_u64 valid =
-        (embed_u64)0u - (embed_u64)((current & ~(EMBED_TICKET_LANE_MASK | EMBED_TICKET_REPLAYED)) == popped);
+        (embed_u64)0u -
+        (embed_u64)((current & ~(EMBED_TICKET_LANE_MASK | EMBED_TICKET_REPLAYED | EMBED_TICKET_PARITY)) == popped);
 
-    return embed_ticket_ring_transition(slot, current & valid, current | EMBED_TICKET_RELEASED, seen);
+    return embed_ticket_ring_transition(slot, embed_ticket_ring_guarded(current, valid),
+                                        current | EMBED_TICKET_RELEASED, seen);
 }
 
 /**

@@ -48,8 +48,11 @@ and the ticket in the low 32 bits. The low shift bits of the ticket select the s
 The flag bits are the state machine of the slot: granted, pushed, popped, replayed, released. Each
 transition is one compare-and-swap inside a pass through a turnstile. It expects the word with the
 flags before it and writes the word with its own flag. So exactly one caller completes each
-transition, and a stamp that differs in any bit fails the compare. The Lean proofs hold the fields
-of the stamp, the place of a ticket, and the roll. They also hold the flag matrix and the collision
+transition, and a stamp that differs in any bit fails the compare.
+
+One flag bit is the parity of the job pointer. The push stores it and the pop checks it, so a
+single-bit error in the job pointer returns no job. The Lean proofs hold the fields of the stamp,
+the place of a ticket, and the roll. They also hold the flag matrix, the parity, and the collision
 of two pops on one slot.
 
 ### The atomic types

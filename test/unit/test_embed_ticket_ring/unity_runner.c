@@ -20,6 +20,8 @@ extern void test_the_life_of_a_slot_lands_each_step_once_in_order(void);
 extern void test_a_release_lands_with_no_replay(void);
 extern void test_the_next_grant_takes_a_released_word_over(void);
 extern void test_a_flipped_stamp_refuses_every_step(void);
+extern void test_the_push_records_the_parity_of_the_job_pointer(void);
+extern void test_a_corrupted_job_pointer_fails_the_pop_and_the_replay(void);
 extern void test_lives_inside_passes_each_pop_whole_after_the_drain(void);
 extern void test_two_pops_of_one_stamp_land_once(void);
 
@@ -91,11 +93,13 @@ int main(void)
   run_test(test_the_ticket_rolls_at_32_bits_onto_the_next_place, "test_the_ticket_rolls_at_32_bits_onto_the_next_place", 116);
   run_test(test_the_epoch_and_the_flags_do_not_move_the_place, "test_the_epoch_and_the_flags_do_not_move_the_place", 122);
   run_test(test_the_life_of_a_slot_lands_each_step_once_in_order, "test_the_life_of_a_slot_lands_each_step_once_in_order", 128);
-  run_test(test_a_release_lands_with_no_replay, "test_a_release_lands_with_no_replay", 163);
-  run_test(test_the_next_grant_takes_a_released_word_over, "test_the_next_grant_takes_a_released_word_over", 176);
-  run_test(test_a_flipped_stamp_refuses_every_step, "test_a_flipped_stamp_refuses_every_step", 197);
-  run_test(test_lives_inside_passes_each_pop_whole_after_the_drain, "test_lives_inside_passes_each_pop_whole_after_the_drain", 237);
-  run_test(test_two_pops_of_one_stamp_land_once, "test_two_pops_of_one_stamp_land_once", 274);
+  run_test(test_a_release_lands_with_no_replay, "test_a_release_lands_with_no_replay", 165);
+  run_test(test_the_next_grant_takes_a_released_word_over, "test_the_next_grant_takes_a_released_word_over", 178);
+  run_test(test_a_flipped_stamp_refuses_every_step, "test_a_flipped_stamp_refuses_every_step", 199);
+  run_test(test_the_push_records_the_parity_of_the_job_pointer, "test_the_push_records_the_parity_of_the_job_pointer", 219);
+  run_test(test_a_corrupted_job_pointer_fails_the_pop_and_the_replay, "test_a_corrupted_job_pointer_fails_the_pop_and_the_replay", 233);
+  run_test(test_lives_inside_passes_each_pop_whole_after_the_drain, "test_lives_inside_passes_each_pop_whole_after_the_drain", 285);
+  run_test(test_two_pops_of_one_stamp_land_once, "test_two_pops_of_one_stamp_land_once", 322);
 
   return UNITY_END();
 }

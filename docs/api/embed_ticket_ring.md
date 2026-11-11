@@ -14,6 +14,8 @@ The ring has `2^shift` slots. A slot holds a stamp and a job pointer. The stamp 
 
 > **Note:** The pop writes the lane index of the pass that performed it into seven flag bits. The release keeps them.
 
+> **Note:** The push stores the parity of the job pointer in one flag bit. The pop and the replay check the pointer they read against it. A single-bit error in the job pointer fails the check, and the pop returns no job. [`EMBED_TICKET_JOB_PARITY`](#EMBED_TICKET_JOB_PARITY) turns the check off.
+
 > **Note:** The epoch is 16 bits. The grantor derives it from the host clock. The tick period covers the lifetime of a stamp, so the epoch does not wrap while the stamp is live. A compare succeeds only where the ticket and the epoch both match, and the ticket alone distinguishes any two live stamps.
 
 > **Note:** The turnstile serializes the transitions with respect to the writer. A transition executes inside a pass, and the drain of a writer waits for every pass that started before it. The functions at the end of this header wrap each transition in a pass.
@@ -86,6 +88,15 @@ EMBED_STATIC_ASSERT(EMBED_TURNSTILE_LANES <= 128u, "the lane index of a pop fits
 
 The flag bits: one per transition of the slot state machine, and the lane index of the pop.
 
+### `EMBED_TICKET_PARITY` { #EMBED_TICKET_PARITY }
+
+```c
+#define EMBED_TICKET_PARITY ((embed_u64)1u << 37)
+#define EMBED_TICKET_PARITY_SHIFT 37u
+```
+
+The parity bit of the job pointer, which the push sets and the pop and the replay check.
+
 ### `EMBED_TICKET_RESERVED` { #EMBED_TICKET_RESERVED }
 
 ```c
@@ -93,6 +104,16 @@ The flag bits: one per transition of the slot state machine, and the lane index 
 ```
 
 The reserved bit. No transition sets it, so an expected value with it set always fails the compare.
+
+### `EMBED_TICKET_JOB_PARITY` { #EMBED_TICKET_JOB_PARITY }
+
+```c
+#if !defined(EMBED_TICKET_JOB_PARITY)
+#define EMBED_TICKET_JOB_PARITY 1
+#endif
+```
+
+1 where the push stores the parity of the job pointer in the stamp and the pop and the replay check it, 0 where they do not. A build sets it before this header. This header defines both values. Test it with `#if`.
 
 ### `EMBED_TICKET_RING_SHIFT_MOST` { #EMBED_TICKET_RING_SHIFT_MOST }
 
@@ -165,6 +186,32 @@ The lane index of the pass that performed the pop, from the stamp of the slot.
 
 \*\*Returns:\*\* The lane index, seven bits.
 
+### `embed_ticket_job_parity` { #embed_ticket_job_parity }
+
+```c
+EMBED_INLINE embed_u64 embed_ticket_job_parity(const void *job);
+```
+
+The parity of a job pointer: 1 where its bits have an odd count of ones, 0 where even.
+
+- `[in]`: job The job pointer.
+
+\*\*Returns:\*\* The parity, as the bit value for [`EMBED_TICKET_PARITY_SHIFT`](#EMBED_TICKET_PARITY).
+
+> **Note:** A fold of six shifts and xors. Any single-bit error in the pointer inverts the parity, and so does any error in an odd count of bits. An error in an even count of bits does not.
+
+### `embed_ticket_job_parity_bit` { #embed_ticket_job_parity_bit }
+
+```c
+EMBED_INLINE embed_u64 embed_ticket_job_parity_bit(const void *job);
+```
+
+The parity bit that the push stores for a job pointer: the parity where the build checks it, 0 where not.
+
+- `[in]`: job The job pointer.
+
+\*\*Returns:\*\* [`EMBED_TICKET_PARITY`](#EMBED_TICKET_PARITY) or 0.
+
 ### `embed_ticket_fields_of_stamp` { #embed_ticket_fields_of_stamp }
 
 ```c
@@ -232,6 +279,21 @@ The expected value of a transition: the input stamp with the flag bits of the tr
 
 > **Note:** An input stamp with any flag bit set is invalid. The expected value then has the reserved bit set, and no slot word has it, so the compare fails. An input stamp with a corrupted ticket or epoch expects a word of another stamp, so the compare fails too.
 
+### `embed_ticket_ring_guarded` { #embed_ticket_ring_guarded }
+
+```c
+EMBED_INLINE embed_u64 embed_ticket_ring_guarded(embed_u64 current, embed_u64 valid);
+```
+
+The expected value of a transition that read the current value first. It is the current value where the state test passed, and the current value with the reserved bit inverted where it did not.
+
+- `[in]`: current The current value of the slot word.
+- `[in]`: valid All ones where the state test passed, all zeros where it did not.
+
+\*\*Returns:\*\* The expected value.
+
+> **Note:** A word with the reserved bit inverted differs from the current value in one bit, so the compare fails. An expected value of zero does not serve: a zero current value would match it.
+
 ### `embed_ticket_ring_transition` { #embed_ticket_ring_transition }
 
 ```c
@@ -283,6 +345,26 @@ The push transition: the job pointer stored, then the pushed bit added to the gr
 
 > **Note:** The store of the job pointer precedes the compare-and-swap, which has release semantics. A pop that succeeds after it has acquire semantics, so the pop reads the job pointer.
 
+> **Note:** The new value carries the parity bit of the job pointer where the build checks it.
+
+### `embed_ticket_ring_job_checked` { #embed_ticket_ring_job_checked }
+
+```c
+EMBED_INLINE embed_bool embed_ticket_ring_job_checked(const EmbedTicketRingSlot *slot, embed_u64 current, void **job,
+                                                      embed_u64 *seen);
+```
+
+The job pointer of a slot after a successful read transition, checked against the parity bit of the word.
+
+- `[in]`: slot The slot \[BORROWS\].
+- `[in]`: current The word of the slot before the transition.
+- `[out]`: job The job where the parity matches \[BORROWS\], and NULL where it does not.
+- `[out]`: seen The word, with the reserved bit set where the parity does not match \[BORROWS\].
+
+\*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) where the parity matches, or where the build does not check it.
+
+> **Note:** The reserved bit in seen marks a corrupted job pointer, which no contention produces, since no slot word ever holds that bit.
+
 ### `embed_ticket_ring_pop` { #embed_ticket_ring_pop }
 
 ```c
@@ -296,11 +378,13 @@ The pop transition: the popped bit and the lane index added to the pushed word, 
 - `[in]`: stamp The input stamp of a pushed slot.
 - `[in]`: lane The lane index of the pass of the caller, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) returned it.
 - `[out]`: job The job on success \[BORROWS\], and NULL on failure.
-- `[out]`: seen The value found \[BORROWS\].
+- `[out]`: seen The value found \[BORROWS\], with the reserved bit set where the job pointer failed its parity.
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
 > **Note:** Two pops of one stamp contend here. One succeeds, and the other finds the popped bit in seen.
+
+> **Note:** The expected value is the current value where the current value is the pushed word of the stamp, parity bit aside. A pop whose compare succeeds but whose job pointer fails its parity returns failure, with the reserved bit in seen. The slot stays popped, so no caller runs the corrupted job.
 
 ### `embed_ticket_ring_replay` { #embed_ticket_ring_replay }
 
@@ -317,7 +401,7 @@ The replay transition: the replayed bit added to the popped word, and the job po
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
-> **Note:** A rewind of k tickets is a replay at the ticket k back. The expected value is the current value where the current value is the popped word of the stamp, lane bits aside. Any other current value fails the compare.
+> **Note:** A rewind of k tickets is a replay at the ticket k back. The expected value is the current value where the current value is the popped word of the stamp, lane and parity bits aside. Any other current value fails the compare. The job pointer passes the same parity check as at the pop.
 
 ### `embed_ticket_ring_release` { #embed_ticket_ring_release }
 
