@@ -96,7 +96,7 @@ The truth value.
 
 > **Note:** This header does not include `<stdbool.h>`. Its bool macro collides with the bool that some embedded SDKs define for themselves.
 
-> **Note:** Both types change any nonzero value to 1 on conversion. Then a value that crosses between a library and its caller compares equal on either side. A plain eight-bit alias keeps the value that it gets, and two true values can differ.
+> **Note:** Both types change any nonzero value to 1 on conversion. Then a value that crosses between a library and its caller compares equal on either side. A plain eight-bit alias retains the value that it gets, and two true values can differ.
 
 ### `embed_word` { #embed_word }
 
@@ -336,7 +336,7 @@ Asserts [`embed_index`](#embed_index) is no larger than [`embed_word`](#embed_wo
 
 ```c
 EMBED_STATIC_ASSERT(sizeof(EmbedEnumProbe) == 1,
-                    "EMBED_ENUM_BYTE gave an enum more than one byte here, so no enum keeps its declared width "
+                    "EMBED_ENUM_BYTE gave an enum more than one byte here, so no enum retains its declared width "
                     "(TI: pass --small_enum)");
 ```
 

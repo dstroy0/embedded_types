@@ -125,7 +125,7 @@
 /**
  * @brief Expands to `static inline` followed by `__attribute__((always_inline))`.
  *
- * @note GCC and clang put the body in line, also where their size heuristic would keep it out of
+ * @note GCC and clang put the body in line, also where their size heuristic would retain it out of
  *       line. A plain `static inline` gives that decision to the compiler.
  * @note Expands to `static inline` where `EMBED_HAS_ATTRIBUTE(always_inline)` is 0. The code stays
  *       correct. It can run slower.
@@ -168,7 +168,7 @@
  *       checks a switch on it, or a value of another enum.
  * @note Clang on the MSVC ABI and C++ take the fixed type `: unsigned char`. C++11 made that form
  *       standard, and clang takes it in C as the C23 form.
- * @note Clang on the MSVC ABI also accepts the packed attribute, but it keeps the enum as wide as an
+ * @note Clang on the MSVC ABI also accepts the packed attribute, but it retains the enum as wide as an
  *       int, as MSVC does. So that arm takes the fixed type before it looks for the attribute. Each
  *       other compiler with the packed attribute takes the attribute.
  * @note Where the compiler cannot pin an enum, MSVC's C among them, the enumerators become constants
@@ -217,15 +217,15 @@
  * @note This macro works both ways. It can raise the alignment of an object above its natural
  *       alignment, or lower it to 1. EMBED_RAW uses the form that lowers it to 1.
  * @warning Expands to nothing where `EMBED_HAS_ATTRIBUTE(aligned)` is 0, and discards bytes_. Then an
- *          object that you mean to align more keeps its natural alignment. A type that you mean to
- *          drop to alignment 1 also keeps its natural alignment, and the code still reads it from
+ *          object that you mean to align more retains its natural alignment. A type that you mean to
+ *          drop to alignment 1 also retains its natural alignment, and the code still reads it from
  *          any address.
  */
 #if EMBED_HAS_ATTRIBUTE(aligned)
 #define EMBED_ALIGN(bytes_) __attribute__((aligned(bytes_)))
 #elif defined(_MSC_VER)
-// MSVC takes the C11 _Alignas. It stands before a member or an object, and it takes a constant
-// expression. It can raise an alignment but it cannot lower one: a request for 1 keeps the natural
+// MSVC takes the C11 _Alignas. It is before a member or an object, and it takes a constant
+// expression. It can raise an alignment but it cannot lower one: a request for 1 retains the natural
 // alignment, as the warning above states. C++ writes the same specifier as alignas. That is the
 // case where nvcc compiles a device source with cl as its host compiler.
 #if defined(__cplusplus)
@@ -268,7 +268,7 @@
 #if EMBED_HAS_ATTRIBUTE(aligned)
 #define EMBED_RAW EMBED_ALIGN(1) EMBED_ALIAS
 #else
-// _Alignas stands before a declaration, and it cannot lower an alignment. EMBED_RAW stands after the
+// _Alignas is before a declaration, and it cannot lower an alignment. EMBED_RAW is after the
 // name and asks for 1, so it has no form there. The type is the plain word, as the warning above
 // states.
 #define EMBED_RAW EMBED_ALIAS
@@ -291,7 +291,7 @@
 /**
  * @brief Set to 1 where `EMBED_HAS_ATTRIBUTE(vector_size)` is not zero, else 0.
  *
- * @note The vector_size attribute on a scalar type makes a type that the compiler keeps in a vector
+ * @note The vector_size attribute on a scalar type makes a type that the compiler retains in a vector
  *       register. The plain operators then run over each element at once. The lane header takes
  *       its vector arm where this macro is 1, and its portable arm where it is 0.
  * @note Both arms define this macro. Test it with #if.
@@ -433,7 +433,7 @@
  * @param[in] name_ The name that callers reach and that a port defines.
  * @return          The name of the definition of the default.
  * @note The MSVC linker has no weak definition. Its /alternatename option gives a second name to a
- *       name that no unit defines. So the default stands under the second name. A port that defines
+ *       name that no unit defines. So the default is under the second name. A port that defines
  *       name_ then wins, with no duplicate. EMBED_WEAK_DEFAULT emits that alternate name.
  * @note Write both at the default: `EMBED_WEAK_DEFAULT(name_)` at file scope, then the definition
  *       with EMBED_WEAK and `EMBED_WEAK_NAME(name_)`.
@@ -469,7 +469,7 @@
  * @return          text_ as a string literal.
  * @note EMBED_DIAGNOSTIC_IGNORE calls this macro. _Pragma takes a string literal, and this macro
  *       makes the full pragma line into one.
- * @note This macro stands above the compiler arms below. A definition in each arm would put two
+ * @note This macro is above the compiler arms below. A definition in each arm would put two
  *       copies in the file, and they would drift at the first edit of one.
  */
 #define EMBED_DIAGNOSTIC_STRING(text_) #text_
@@ -532,7 +532,7 @@
  * @brief Expands to nothing where the compiler defines neither __clang__ nor __GNUC__.
  *
  * @note A compiler with no diagnostic pragma has no state to save. The code that calls these macros
- *       keeps the same push, ignore, and pop shape on each compiler, and this arm costs nothing.
+ *       retains the same push, ignore, and pop shape on each compiler, and this arm costs nothing.
  */
 #define EMBED_DIAGNOSTIC_PUSH
 

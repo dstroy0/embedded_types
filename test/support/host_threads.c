@@ -35,11 +35,11 @@ static DWORD WINAPI host_threads_entry(LPVOID unused)
 
 int host_threads_run(void (*each)(void), unsigned int count)
 {
-    if (count > HOST_THREADS_MOST)
+    if (count > HOST_THREADS_MAX)
     {
         return 0;
     }
-    HANDLE threads[HOST_THREADS_MOST];
+    HANDLE threads[HOST_THREADS_MAX];
     int started = 1;
     s_each = each;
     for (unsigned int at = 0u; at < count; at += 1u)
@@ -79,12 +79,12 @@ static void *host_threads_entry(void *unused)
 
 int host_threads_run(void (*each)(void), unsigned int count)
 {
-    if (count > HOST_THREADS_MOST)
+    if (count > HOST_THREADS_MAX)
     {
         return 0;
     }
-    pthread_t threads[HOST_THREADS_MOST];
-    int made[HOST_THREADS_MOST];
+    pthread_t threads[HOST_THREADS_MAX];
+    int made[HOST_THREADS_MAX];
     int started = 1;
     s_each = each;
     for (unsigned int at = 0u; at < count; at += 1u)

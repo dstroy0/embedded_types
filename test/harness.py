@@ -308,7 +308,7 @@ def borrowed_toolchain(skip):
     """Generator and compiler taken from whichever tree is already configured.
 
     cmake's default generator is not always the one that works on a given machine, and a tree that
-    already built is proof of one that does. Reading it back keeps the toolchain path in one place.
+    already built is proof of one that does. Reading it back retains the toolchain path in one place.
     """
     keys = {
         "CMAKE_GENERATOR": "-G",
@@ -506,7 +506,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    # The whole build is a few small suites. Parallelism buys little and a low default keeps the
+    # The whole build is a few small suites. Parallelism buys little and a low default retains the
     # machine usable while it runs.
     parser = sub.add_parser("build", help="configure if needed, then build")
     parser.add_argument("--tree", default="build", choices=sorted(TREES), help="which build tree")

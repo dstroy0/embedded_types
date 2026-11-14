@@ -66,7 +66,7 @@ void test_the_widths_are_the_widths_they_are_named_for(void)
 void test_the_signed_aliases_carry_a_sign_and_the_unsigned_ones_do_not(void)
 {
     // Each cast below converts the int -1 to the alias under test, and the assertion reads the
-    // converted value. For an unsigned alias, C defines the conversion, and it gives the maximum of
+    // converted value. For an unsigned alias, C defines the conversion, and it gives the max of
     // that type, above 0. For a signed alias the value fits and stays -1.
     TEST_ASSERT_TRUE_MESSAGE((embed_u8)-1 > 0, "embed_u8 is unsigned");
     TEST_ASSERT_TRUE_MESSAGE((embed_u16)-1 > 0, "embed_u16 is unsigned");
@@ -92,7 +92,7 @@ void test_the_word_matches_the_pointer_it_was_derived_from(void)
 #endif
     TEST_ASSERT_EQUAL_size_t_MESSAGE(sizeof(embed_word), sizeof(embed_iword), "the signed word is the same register");
     // The cast of the int -1 to each word type is the sign check. The unsigned word gives its
-    // maximum, which is above 0. The signed word holds -1.
+    // max, which is above 0. The signed word holds -1.
     TEST_ASSERT_TRUE_MESSAGE((embed_iword)-1 < 0, "embed_iword is signed");
     TEST_ASSERT_TRUE_MESSAGE((embed_word)-1 > 0, "embed_word is unsigned");
 }
@@ -108,7 +108,7 @@ void test_the_index_fits_the_register_and_is_two_or_four_bytes(void)
     TEST_ASSERT_TRUE_MESSAGE(sizeof(embed_index) <= sizeof(embed_word), "an index fits the word");
     TEST_ASSERT_TRUE_MESSAGE(sizeof(embed_index) == 2u || sizeof(embed_index) == 4u, "an index is two or four bytes");
     // The cast of the int -1 to embed_index is the sign check. C defines the conversion, and it gives
-    // the maximum of that type, which is above 0.
+    // the max of that type, which is above 0.
     TEST_ASSERT_TRUE_MESSAGE((embed_index)-1 > 0, "embed_index is unsigned");
 }
 

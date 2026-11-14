@@ -76,7 +76,7 @@ theorem place_roll (shift ticket : Nat) (h : shift ≤ 32) : place shift (ticket
 theorem place_mask (shift ticket : Nat) : ticket &&& (2 ^ shift - 1) = place shift ticket := by
   simp [place, Nat.and_two_pow_sub_one_eq_mod]
 
-/-- Two tickets fewer than 2^shift apart stand at places of their own. -/
+/-- Two tickets fewer than 2^shift apart are at places of their own. -/
 theorem window_distinct (shift t1 t2 : Nat) (hlt : t1 < t2) (hwin : t2 - t1 < 2 ^ shift) :
     place shift t1 ≠ place shift t2 := by
   intro heq
@@ -126,7 +126,7 @@ theorem pop_pushes_other (shift : Nat) (r : Ring) (l : List (Nat × Nat)) (t : N
     rw [ih (push shift r s.1 s.2) (fun x hx => hother x (List.mem_cons_of_mem _ hx))]
     exact pop_push_other shift r s.1 s.2 t (hother s (List.mem_cons_self ..))
 
-/-- After the pushes of a list whose tickets each stand at a place of their own, each pop reads its own job. -/
+/-- After the pushes of a list whose tickets each are at a place of their own, each pop reads its own job. -/
 theorem pop_pushes (shift : Nat) (r : Ring) (l : List (Nat × Nat)) (t j : Nat) (hmem : (t, j) ∈ l)
     (hdistinct : l.Pairwise (fun a b => place shift a.1 ≠ place shift b.1)) :
     pop shift (pushes shift r l) t = ⟨t, j⟩ := by

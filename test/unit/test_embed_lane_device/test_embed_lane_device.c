@@ -151,7 +151,7 @@ void test_the_device_logic_and_arithmetic_match_the_scalar(void)
         TEST_ASSERT_EQUAL_HEX32_MESSAGE(a ^ b, u32_at(out_xor + (4u * at)), "xor");
         TEST_ASSERT_EQUAL_HEX32_MESSAGE(a + b, u32_at(out_add + (4u * at)), "add wraps");
         TEST_ASSERT_EQUAL_HEX32_MESSAGE(a - b, u32_at(out_sub + (4u * at)), "sub wraps");
-        TEST_ASSERT_EQUAL_HEX32_MESSAGE(a * b, u32_at(out_mul + (4u * at)), "mul keeps the low 32 bits");
+        TEST_ASSERT_EQUAL_HEX32_MESSAGE(a * b, u32_at(out_mul + (4u * at)), "mul retains the low 32 bits");
         TEST_ASSERT_EQUAL_HEX32_MESSAGE(a << 7u, u32_at(out_left + (4u * at)), "a left shift stays in its lane");
         TEST_ASSERT_EQUAL_HEX32_MESSAGE(a >> 7u, u32_at(out_right + (4u * at)), "a right shift stays in its lane");
     }

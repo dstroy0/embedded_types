@@ -108,7 +108,7 @@ carry its own check. Nothing in the ring diagnoses it.
 
 ### A grantor that exceeds the window
 
-The grantor keeps the number of live tickets below the slot count, and the epoch tick period longer
+The grantor retains the number of live tickets below the slot count, and the epoch tick period longer
 than the lifetime of a stamp. A grant beyond the window finds a word in the middle of its sequence
 and fails, so the fault surfaces at the grantor. A stamp held past the epoch wrap can match a later
 stamp with the same ticket and epoch. The ring does not diagnose that hold.
@@ -129,7 +129,7 @@ measures nothing. Neither is a failure. A build with no device arm holds the hos
 Build with `-DEMBEDDED_TYPES_WERROR=ON`, in CI and on each desk. That adds `-Werror` to the flags
 that this project puts on its own suite executables.
 
-Keep `-Wconversion` and `-Wsign-conversion` on in the consumer build. Those two report a narrower
+Retain `-Wconversion` and `-Wsign-conversion` on in the consumer build. Those two report a narrower
 type at the call site where it happens, and nothing in this library turns them on for you.
 
 Run the thread sanitizer tree, `python test/harness.py test --tree build-tsan`, over each change to

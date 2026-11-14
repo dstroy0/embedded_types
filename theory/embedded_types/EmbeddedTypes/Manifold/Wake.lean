@@ -2,7 +2,7 @@
 # embedded_types, the sleeps on a lane word
 
 Two threads sleep on a lane word. One is a drain that waits for the pass of the lane to end. The other is a worker
-that found every lane busy with the manifold at its most. Each one reads the word, and sleeps only where the value
+that found every lane busy with the manifold at its max. Each one reads the word, and sleeps only where the value
 read has the busy bit. Then it sets the sleeper bit with a fetch-or.
 
 The wait of the host sleeps while the word holds the value read with the bit set. The wait is the futex contract: the
@@ -50,7 +50,7 @@ inductive Step : State → State → Prop where
   | wait {s : State} {v : Word} (h : s.sleeper = .flagged v) :
       Step s { s with sleeper := if s.word = { v with flag := true } then .asleep s.word else .done }
   /-- A leave, a close, a release or a reopen: one fetch-add, the generation counted, busy as the operation leaves it,
-  the bit kept. -/
+  the bit retained. -/
   | change {s : State} (busy : Bool) :
       Step s { s with word := { s.word with busy := busy, generation := s.word.generation + 1 },
                       pending := s.pending || s.word.flag }
@@ -75,7 +75,7 @@ def Inv (s : State) : Prop :=
     ∀ t, s.sleeper = .asleep t → t.busy = true ∧ t.flag = true ∧ (s.word = t ∨ s.pending = true ∨ s.owed = true)
 
 /-- A fetch-or of the bit on a word that has it set changes nothing. -/
-theorem flag_kept (w : Word) (h : w.flag = true) : { w with flag := true } = w := by
+theorem flag_retained (w : Word) (h : w.flag = true) : { w with flag := true } = w := by
   cases w
   simp_all
 
@@ -123,7 +123,7 @@ theorem step_inv {s t : State} (i : Inv s) (st : Step s t) : Inv t := by
     refine ⟨hf, fun t ht => ?_⟩
     obtain ⟨hb, hfl, hw | hp | ho⟩ := ha t ht
     · subst hw
-      exact ⟨hb, hfl, Or.inl (flag_kept _ hfl)⟩
+      exact ⟨hb, hfl, Or.inl (flag_retained _ hfl)⟩
     · exact ⟨hb, hfl, Or.inr (Or.inl hp)⟩
     · exact ⟨hb, hfl, Or.inr (Or.inr ho)⟩
   | woken h ho => exact ⟨fun v hv => by simp at hv, fun t ht => by simp at ht⟩

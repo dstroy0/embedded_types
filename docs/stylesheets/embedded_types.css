@@ -83,7 +83,7 @@
     color: var(--md-default-fg-color);
     font-stretch: 75%;
     font-weight: 600;
-    letter-spacing: 0;
+    character-spacing: 0;
 }
 
 .md-typeset h1 {
@@ -234,7 +234,7 @@
         border-color 160ms ease-out calc(var(--i) * 7ms);
 }
 
-/* Each second group of four bytes in the lane, one 32-bit lane, stands a shade darker */
+/* Each second group of four bytes in the lane, one 32-bit lane, is a shade darker */
 .embed-row--lane i:nth-child(8n + 5),
 .embed-row--lane i:nth-child(8n + 6),
 .embed-row--lane i:nth-child(8n + 7),

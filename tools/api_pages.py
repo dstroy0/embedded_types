@@ -65,10 +65,10 @@ class Block:
 
 
 class Decl:
-    """One declaration: its kind, its name, its source text and the #if arms around it."""
+    """One declaration: its type, its name, its source text and the #if arms around it."""
 
-    def __init__(self, kind, name, text, line, stack, members=None):
-        self.kind = kind
+    def __init__(self, type, name, text, line, stack, members=None):
+        self.type = type
         self.name = name
         self.text = text
         self.line = line
@@ -79,18 +79,18 @@ class Decl:
 class Entry:
     """One documented item: the blocks that document it and every declaration of its names."""
 
-    def __init__(self, block, name=None, kind=None):
+    def __init__(self, block, name=None, type=None):
         self.blocks = [block]
         self.names = [name] if name else []
-        self.kind = kind
+        self.type = type
         self.decls = []
 
     def add(self, decl):
         self.decls.append(decl)
         if decl.name not in self.names:
             self.names.append(decl.name)
-        if self.kind is None:
-            self.kind = decl.kind
+        if self.type is None:
+            self.type = decl.type
 
 
 def parse_block(lines, line, depth):
@@ -243,14 +243,14 @@ class Header:
     def fail(self, line, what):
         raise ReadError("include/%s:%d: %s" % (self.name, line + 1, what))
 
-    def new_entry(self, block, decl=None, name=None, kind=None):
+    def new_entry(self, block, decl=None, name=None, type=None):
         """The entry of a block: a new one, or the one that holds the declaration's name already."""
         key = decl.name if decl else name
         if key in self.by_name:
             entry = self.by_name[key]
             entry.blocks.append(block)
         else:
-            entry = Entry(block, name, kind)
+            entry = Entry(block, name, type)
             self.entries.append(entry)
             if name:
                 self.by_name[name] = entry
@@ -323,7 +323,7 @@ class Header:
                         guard_name = named.group(1)
                     elif pending is not None and named:
                         # A block above a #ifndef of a name documents that name in every arm below it
-                        self.new_entry(pending, name=named.group(1), kind="macro")
+                        self.new_entry(pending, name=named.group(1), type="macro")
                         pending = None
                         owner = None
                     stack.append((gid, 0))
@@ -373,11 +373,11 @@ class Header:
 
     def attach(self, decl, pending, owner, owner_depth, depth, orphans):
         """Give the declaration to its entry; answer the block that waits, the owner and the depth of the owner."""
-        if decl.kind == "invocation":
+        if decl.type == "invocation":
             self.expand(decl)
             return pending, owner, owner_depth
         if pending is not None:
-            entry = self.new_entry(pending, decl=decl, name=decl.name, kind=decl.kind)
+            entry = self.new_entry(pending, decl=decl, name=decl.name, type=decl.type)
             return None, entry, pending.depth
         if decl.name in self.by_name:
             self.place(decl, self.by_name[decl.name])
@@ -457,7 +457,7 @@ class Header:
         return None, at + 1
 
     def template(self, name, directive):
-        """Keep a macro whose body holds Doxygen blocks, for the functions its invocations write."""
+        """Retain a macro whose body holds Doxygen blocks, for the functions its invocations write."""
         head = re.match(r"\s*#\s*define\s+\w+\(([^)]*)\)", directive[0])
         params = [part.strip() for part in head.group(1).split(",")]
         body = [re.sub(r"\s*\\\s*$", "", part) for part in directive[1:]]
@@ -505,7 +505,7 @@ def known_names(headers):
     table = {}
     for header in headers:
         for entry in header.entries:
-            if entry.kind == "assert":
+            if entry.type == "assert":
                 continue
             for name in entry.names:
                 table.setdefault(name, (header.slug, entry.names[0]))
@@ -547,7 +547,7 @@ def link(code, names, slug):
 
 
 def skeleton(decls, groups):
-    """The declarations of one entry in the #if arms they stand in, as C."""
+    """The declarations of one entry in the #if arms they are in, as C."""
     out = []
     current = []
     for decl in decls:
@@ -608,8 +608,8 @@ class Page:
         if block.returns:
             self.paragraph("**Returns:** " + block.returns, block.line)
         # A warning's label is bold italic and a note's is bold, and the stylesheet tells the two apart by that
-        for kind, text in block.notes:
-            label = "_**Warning:**_" if kind == "warning" else "**Note:**"
+        for type, text in block.notes:
+            label = "_**Warning:**_" if type == "warning" else "**Note:**"
             body = prose(" ".join(text.split()), self.names, slug)
             self.emit("> %s %s" % (label, body), block.line)
             self.emit()
@@ -625,14 +625,14 @@ class Page:
         self.emit()
         if header.file_block:
             self.block(header.file_block)
-        for kind, title in SECTIONS:
-            entries = [entry for entry in header.entries if entry.kind == kind]
+        for type, title in SECTIONS:
+            entries = [entry for entry in header.entries if entry.type == type]
             if not entries:
                 continue
             self.emit("## %s" % title)
             self.emit()
             for entry in entries:
-                if kind == "assert":
+                if type == "assert":
                     self.emit("### `%s`" % entry.names[0].replace("`", ""))
                 else:
                     self.emit("### `%s` { #%s }" % (entry.names[0], entry.names[0]))

@@ -2,7 +2,7 @@
 # embedded_types, the drain of the manifold
 
 A writer swaps a published pointer, then drains. The drain reads `open` after its fence, then each open lane. The
-drain skips a lane whose read has busy clear or closed set: no pass holds such a lane. On each other lane it keeps
+drain skips a lane whose read has busy clear or closed set: no pass holds such a lane. On each other lane it retains
 the generation it read, and waits until busy reads clear or the generation moves.
 
 `Open.passes_below_open` puts each pass below `open`. This file holds one lane. Its steps are each operation on the
@@ -45,7 +45,7 @@ inductive Step : State → State → Prop where
                       ended := fun q => if q = p then true else s.ended q }
   /-- A contraction's claim, or a grower's claim, of a free lane. -/
   | claim {s : State} (h : s.busy = false) : Step s { s with busy := true, holder := none }
-  /-- A contraction's close, or a grower's give-back of a closed lane: busy kept, closed set, the generation
+  /-- A contraction's close, or a grower's give-back of a closed lane: busy retained, closed set, the generation
   counted. -/
   | shut {s : State} (hb : s.busy = true) (h : s.holder = none) :
       Step s { s with closed := true, generation := s.generation + 1 }
@@ -53,13 +53,13 @@ inductive Step : State → State → Prop where
   counted. -/
   | free {s : State} (hb : s.busy = true) (h : s.holder = none) :
       Step s { s with busy := false, closed := false, generation := s.generation + 1 }
-  /-- A grower's takeover of a closed lane: busy kept, closed cleared, the generation counted. -/
+  /-- A grower's takeover of a closed lane: busy retained, closed cleared, the generation counted. -/
   | takeover {s : State} (hc : s.closed = true) (h : s.holder = none) :
       Step s { s with closed := false, generation := s.generation + 1 }
   /-- A grower's swap of `open` lands, and the lane it holds is its pass. The word does not change. -/
   | adopt {s : State} (p : Nat) (hb : s.busy = true) (hc : s.closed = false) (h : s.holder = none)
       (fresh : s.ended p = false) : Step s { s with holder := some p }
-  /-- The sleeper bit set or cleared: busy, closed and the generation kept. -/
+  /-- The sleeper bit set or cleared: busy, closed and the generation retained. -/
   | sleeper {s : State} : Step s s
 
 /-- The states that follow a state through zero or more steps. -/

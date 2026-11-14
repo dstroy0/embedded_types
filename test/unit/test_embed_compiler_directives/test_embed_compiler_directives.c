@@ -106,7 +106,7 @@ typedef uint32_t RaisedAlignmentProbe EMBED_ALIGN(16);
  * @brief A word whose alignment EMBED_ALIGN lowered to one byte.
  *
  * @note embed_types.h depends on this direction. EMBED_RAW lowers a word to alignment one there.
- *       Where the attribute expands to nothing the type keeps its natural alignment, and the code
+ *       Where the attribute expands to nothing the type retains its natural alignment, and the code
  *       still reads it from any address.
  */
 typedef uint32_t LoweredAlignmentProbe EMBED_ALIGN(1);
@@ -194,7 +194,7 @@ static const uint32_t unreferenced_probe_table[] EMBED_UNUSED = {1u, 2u, 4u};
  *
  * @note This object exists for that case. A shadow of an object that the suite also uses would make
  *       the warning depend on what else the file declares. The case reads this value before it
- *       shadows it, and that read keeps a reference to the outer name.
+ *       shadows it, and that read retains a reference to the outer name.
  */
 static const uint32_t shadowed_probe_value = 11u;
 
@@ -261,7 +261,7 @@ void test_the_feature_tests_evaluate_to_zero_for_an_unknown_name(void)
 }
 
 /**
- * @brief Checks that EMBED_BIG_ENDIAN agrees with how the target lays a word out in memory.
+ * @brief Checks that EMBED_BIG_ENDIAN agrees with how the target positions a word out in memory.
  *
  * @note This case reads the bytes of a word through a byte pointer, which C defines for any object.
  *       EMBED_BIG_ENDIAN comes from __BYTE_ORDER__, and a read of that macro restates the
@@ -280,7 +280,7 @@ void test_the_endian_flag_agrees_with_the_bytes_of_a_word(void)
     const int bytes_are_little_endian = (as_bytes[0] == 1u);
 
     TEST_ASSERT_TRUE_MESSAGE(bytes_are_big_endian || bytes_are_little_endian,
-                             "the target lays a word out in one of the two orders");
+                             "the target positions a word out in one of the two orders");
     TEST_ASSERT_FALSE_MESSAGE(EMBED_BIG_ENDIAN && bytes_are_little_endian,
                               "EMBED_BIG_ENDIAN is never 1 where the low byte comes first");
 #if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__)
@@ -302,7 +302,7 @@ void test_the_inline_and_flattened_helpers_run_their_bodies(void)
 }
 
 /**
- * @brief Checks that a byte enum takes one byte and keeps its enumerators' values.
+ * @brief Checks that a byte enum takes one byte and retains its enumerators' values.
  *
  * @note embed_types.h asserts the same width on its own probe enum. This case checks EMBED_ENUM_BYTE
  *       directly on a type declared here, on every compiler, with no arm left out.
@@ -330,7 +330,7 @@ void test_the_alignment_attribute_raises_and_lowers(void)
     TEST_ASSERT_EQUAL_size_t_MESSAGE(16u, _Alignof(RaisedAlignmentProbe), "the raised type aligns to sixteen");
     TEST_ASSERT_EQUAL_size_t_MESSAGE(1u, _Alignof(LoweredAlignmentProbe), "the lowered type aligns to one");
 #elif defined(_MSC_VER)
-    // MSVC's form stands before an object and raises its alignment only, as the header states
+    // MSVC's form is before an object and raises its alignment only, as the header states
     static EMBED_ALIGN(16) uint32_t raised;
     TEST_ASSERT_EQUAL_size_t_MESSAGE(0u, (size_t)((uintptr_t)&raised % 16u), "the raised object aligns to sixteen");
 #else
@@ -368,14 +368,14 @@ void test_a_raw_word_reads_from_an_odd_address(void)
  * @brief Checks that the diagnostic bracket suppresses a warning and stringizes its pragma text.
  *
  * @note The inner declaration shadows shadowed_probe_value. EMBED_DIAGNOSTIC_IGNORE("-Wshadow")
- *       suppresses the warning that a compiler raises for that shadow, and the bracket keeps the
+ *       suppresses the warning that a compiler raises for that shadow, and the bracket retains the
  *       suppression to those lines.
  * @note EMBED_DIAGNOSTIC_STRING is the part that a case can read back. _Pragma takes a string
- *       literal, and the text that EMBED_DIAGNOSTIC_IGNORE builds has to keep the warning name in
+ *       literal, and the text that EMBED_DIAGNOSTIC_IGNORE builds has to retain the warning name in
  *       quotes inside it.
  * @note Nothing below the bracket shadows a name, so a suppression that stays in force does not
  *       show in this case. It silences the rest of the translation unit instead. For that reason,
- *       EMBED_DIAGNOSTIC_PUSH and EMBED_DIAGNOSTIC_POP stand as a pair.
+ *       EMBED_DIAGNOSTIC_PUSH and EMBED_DIAGNOSTIC_POP are as a pair.
  */
 void test_the_diagnostic_bracket_bounds_a_suppression(void)
 {

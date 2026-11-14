@@ -34,7 +34,7 @@ The word is the register, and each count, mask and carry runs in it. The lane is
 | no vector unit, 64-bit word           | 64                                                     |
 | no vector unit, 32-bit or 16-bit word | 32                                                     |
 
-Define `EMBED_LANE_BITS` on the command line to set the width yourself. The header then sets `EMBED_LANE_BITS_WAS_OVERRIDDEN` to 1, and to 0 where it derives the width. Assertions hold each width to whole 32-bit lanes and whole words, and to 512 bits at most. The byte mask has room for 512 bits.
+Define `EMBED_LANE_BITS` on the command line to set the width yourself. The header then sets `EMBED_LANE_BITS_WAS_OVERRIDDEN` to 1, and to 0 where it derives the width. Assertions hold each width to whole 32-bit lanes and whole words, and to 512 bits at max. The byte mask has room for 512 bits.
 
 ### The two arms
 

@@ -14,12 +14,12 @@ each arm succeeds for exactly one caller.
 
 This file is the flag matrix. `bv_decide` checks each theorem on every 64-bit value.
 
-- `set_keeps_fields` and `set_keeps_others`. A transition preserves the ticket, the epoch and every other flag bit.
+- `set_retains_fields` and `set_retains_others`. A transition preserves the ticket, the epoch and every other flag bit.
 
 - `set_once`. The word after a transition differs from the word before it. So the compare-and-swap that expects
   the word before succeeds exactly once, and a repeat of the transition fails on the word after.
 
-- `states_distinct` and `states_keep_fields`. The five state words of a slot are pairwise distinct along the
+- `states_distinct` and `states_retain_fields`. The five state words of a slot are pairwise distinct along the
   sequence, and each one preserves the fields of the stamp.
 
 - `independent`. Two flag bits set in either order give one word, and each bit stays set.
@@ -66,13 +66,13 @@ def transition (x flag : BitVec 64) : BitVec 64 := x ||| flag
 /-! ## The matrix -/
 
 /-- A transition preserves the ticket and the epoch. -/
-theorem set_keeps_fields (x flag : BitVec 64) (h : flag &&& flagMask = flag) :
+theorem set_retains_fields (x flag : BitVec 64) (h : flag &&& flagMask = flag) :
     fields (transition x flag) = fields x := by
   simp only [fields, transition, flagMask] at *
   bv_decide
 
 /-- A transition preserves every other flag bit, and the lane bits. -/
-theorem set_keeps_others (x flag other : BitVec 64) (h : flag &&& other = 0) :
+theorem set_retains_others (x flag other : BitVec 64) (h : flag &&& other = 0) :
     transition x flag &&& other = x &&& other := by
   simp only [transition]
   bv_decide
@@ -106,7 +106,7 @@ theorem states_distinct (s parity lane : BitVec 64) :
   bv_decide
 
 /-- Every state word preserves the fields of the stamp. -/
-theorem states_keep_fields (s parity lane : BitVec 64) :
+theorem states_retain_fields (s parity lane : BitVec 64) :
     fields (stateGranted s) = fields s ∧ fields (statePushed s parity) = fields s ∧
       fields (statePopped s parity lane) = fields s ∧ fields (stateReplayed s parity lane) = fields s ∧
       fields (stateReleased s parity lane) = fields s := by

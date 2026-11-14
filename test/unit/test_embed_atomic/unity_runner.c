@@ -13,7 +13,7 @@ extern void test_store_load_and_exchange_round_trip(void);
 extern void test_swap_if_takes_the_expected_word_alone(void);
 extern void test_the_fetch_operations_answer_the_word_before_and_wrap(void);
 extern void test_raise_moves_the_word_up_and_never_down(void);
-extern void test_ordered_keeps_two_threads_from_both_missing_each_others_write(void);
+extern void test_ordered_retains_two_threads_from_both_missing_each_others_write(void);
 extern void test_contending_threads_lose_no_add_and_raise_to_the_highest(void);
 extern void test_contending_threads_claim_each_slot_once(void);
 
@@ -82,7 +82,7 @@ int main(void)
   run_test(test_swap_if_takes_the_expected_word_alone, "test_swap_if_takes_the_expected_word_alone", 124);
   run_test(test_the_fetch_operations_answer_the_word_before_and_wrap, "test_the_fetch_operations_answer_the_word_before_and_wrap", 141);
   run_test(test_raise_moves_the_word_up_and_never_down, "test_raise_moves_the_word_up_and_never_down", 158);
-  run_test(test_ordered_keeps_two_threads_from_both_missing_each_others_write, "test_ordered_keeps_two_threads_from_both_missing_each_others_write", 201);
+  run_test(test_ordered_retains_two_threads_from_both_missing_each_others_write, "test_ordered_retains_two_threads_from_both_missing_each_others_write", 201);
   run_test(test_contending_threads_lose_no_add_and_raise_to_the_highest, "test_contending_threads_lose_no_add_and_raise_to_the_highest", 208);
   run_test(test_contending_threads_claim_each_slot_once, "test_contending_threads_claim_each_slot_once", 218);
 

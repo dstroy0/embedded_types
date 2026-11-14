@@ -34,7 +34,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # The device arm. Where the configure step finds a CUDA compiler, the suites that hold the device arm
 # of a header compile their kernels with it. They run on the part that the host has. Where it finds
 # none, or where it cannot read the architectures off the part, it leaves those suites out with a
-# message. Every other suite stands. EMBEDDED_TYPES_DEVICE is 1 or 0 on every path.
+# message. Every other suite is. EMBEDDED_TYPES_DEVICE is 1 or 0 on every path.
 option(EMBEDDED_TYPES_DEVICE_TESTS "Compile the device suites where a CUDA compiler is found" ON)
 set(EMBEDDED_TYPES_DEVICE 0)
 if(EMBEDDED_TYPES_BUILD_TESTS AND EMBEDDED_TYPES_DEVICE_TESTS)

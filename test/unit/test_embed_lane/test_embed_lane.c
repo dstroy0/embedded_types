@@ -110,8 +110,8 @@ void test_a_lane_loaded_at_an_odd_address_puts_back_the_same_bytes(void)
     bytes_set(out, sizeof(out), 0xeeu);
     embed_lane_put(out + 3, lane);
     TEST_ASSERT_EQUAL_MEMORY_MESSAGE(s_bytes + 1, out + 3, EMBED_LANE_BYTES, "the bytes come back as loaded");
-    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0xeeu, out[2], "the byte before the put stands");
-    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0xeeu, out[3u + EMBED_LANE_BYTES], "the byte after the put stands");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0xeeu, out[2], "the byte before the put is");
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(0xeeu, out[3u + EMBED_LANE_BYTES], "the byte after the put is");
 }
 
 void test_a_lane_loaded_aligned_puts_back_aligned(void)
@@ -166,7 +166,7 @@ void test_add_sub_and_mul_of_32_bit_lanes_wrap_as_the_scalar_does(void)
         const embed_u32 step = (at + 1u) * 0x01000003u;
         TEST_ASSERT_EQUAL_UINT32_MESSAGE(0xfffffff0u + step, u32_of(embed_lane_add_u32(one, other), at), "add wraps");
         TEST_ASSERT_EQUAL_UINT32_MESSAGE(0xfffffff0u - step, u32_of(embed_lane_sub_u32(one, other), at), "sub wraps");
-        TEST_ASSERT_EQUAL_UINT32_MESSAGE(0xfffffff0u * step, u32_of(embed_lane_mul_u32(one, other), at), "mul keeps the low 32 bits");
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(0xfffffff0u * step, u32_of(embed_lane_mul_u32(one, other), at), "mul retains the low 32 bits");
     }
 }
 

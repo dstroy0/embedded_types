@@ -13,7 +13,7 @@
  * This header gives a 32-bit word and a 64-bit word. A host thread, a task on a part and a GPU thread
  * read, write, swap, compare and swap, add to and mask them. Each operation is one indivisible step.
  *
- * @note These steps alone keep a structure that contexts share consistent, and no context waits for
+ * @note These steps alone retain a structure that contexts share consistent, and no context waits for
  *       another. A counter is a fetch-add. A claim is a compare-and-swap that takes, or that reports
  *       who took. A boundary is a compare-and-swap loop that moves, or that tries again over the value
  *       that it found. Nothing here spins on the progress of another context.

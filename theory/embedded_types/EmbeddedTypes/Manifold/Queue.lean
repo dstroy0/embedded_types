@@ -11,7 +11,7 @@ queue.
 - `queue_counts`. The word holds the count of workers in the queue, so it never reads below zero.
 - `empty_at_zero`. A word read at zero or below has no worker in the queue. So a contraction on that read leaves no
   worker that wants a lane.
-- `round_sum`, `rounds_sum` and `entry_balanced`. The entry of the C, with its flag `queued`, adds at most once and
+- `round_sum`, `rounds_sum` and `entry_balanced`. The entry of the C, with its flag `queued`, adds at max once and
   subtracts only its own addition. So an entry that takes its lane leaves the word as it found it.
 -/
 
@@ -46,9 +46,9 @@ theorem empty_at_zero {s : State} (r : Reach s) (h : s.word ≤ 0) : s.waiting =
 
 /-! ## One worker's entry
 
-The entry of the C keeps a flag `queued`. A round that finds every open lane busy adds the worker to the queue
+The entry of the C retains a flag `queued`. A round that finds every open lane busy adds the worker to the queue
 where the flag is clear, and sets it. The round that takes a lane subtracts the worker where the flag has the set
-value. So each entry adds at most once, and subtracts only after its own addition. -/
+value. So each entry adds at max once, and subtracts only after its own addition. -/
 
 /-- A worker's entry: spilling with the flag clear, spilling with it set, or done with a lane. -/
 inductive Entry where

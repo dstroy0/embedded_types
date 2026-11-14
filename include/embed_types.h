@@ -67,7 +67,7 @@ typedef int64_t embed_i64;
  * @note This header does not include <stdbool.h>. Its bool macro collides with the bool that some
  *       embedded SDKs define for themselves.
  * @note Both types change any nonzero value to 1 on conversion. Then a value that crosses between a
- *       library and its caller compares equal on either side. A plain eight-bit alias keeps the
+ *       library and its caller compares equal on either side. A plain eight-bit alias retains the
  *       value that it gets, and two true values can differ.
  */
 #ifdef __cplusplus
@@ -258,7 +258,7 @@ EMBED_ENUM_BYTE(EmbedEnumProbe, EMBED_ENUM_PROBE_MIN = 0, /**< Low end of the pr
 
 /** @brief Asserts EMBED_ENUM_BYTE gave the probe one byte. */
 EMBED_STATIC_ASSERT(sizeof(EmbedEnumProbe) == 1,
-                    "EMBED_ENUM_BYTE gave an enum more than one byte here, so no enum keeps its declared width "
+                    "EMBED_ENUM_BYTE gave an enum more than one byte here, so no enum retains its declared width "
                     "(TI: pass --small_enum)");
 
 EMBED_END_DECLS

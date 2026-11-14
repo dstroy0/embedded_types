@@ -12,7 +12,7 @@ The ring has `2^shift` slots. A slot holds a stamp and a job pointer. The stamp 
 
 > **Note:** The state sequence of a slot is grant, push, pop, replay, release. A replay is the read of a slot after its pop, which a rewind performs. A grant succeeds on a zero word or on a released word. A release succeeds after a pop. The next grant at the same index reuses the released word.
 
-> **Note:** The pop writes the lane index of the pass that performed it into seven flag bits. The release keeps them.
+> **Note:** The pop writes the lane index of the pass that performed it into seven flag bits. The release retains them.
 
 > **Note:** The push stores a three-bit cyclic redundancy check of the job pointer in three flag bits. The pop and the replay check the pointer they read against it. Every single-bit error in the job pointer fails the check. Every double-bit error fails it too, except one whose two bits are a multiple of seven places apart. The pop then returns no job. [`EMBED_TICKET_JOB_CHECK`](#EMBED_TICKET_JOB_CHECK) turns the check off.
 
@@ -115,13 +115,13 @@ The reserved bit. No transition sets it, so an expected value with it set always
 
 1 where the push stores the check of the job pointer in the stamp and the pop and the replay verify it, 0 where they do not. A build sets it before this header. This header defines both values. Test it with `#if`.
 
-### `EMBED_TICKET_RING_SHIFT_MOST` { #EMBED_TICKET_RING_SHIFT_MOST }
+### `EMBED_TICKET_RING_SHIFT_MAX` { #EMBED_TICKET_RING_SHIFT_MAX }
 
 ```c
-#define EMBED_TICKET_RING_SHIFT_MOST 31u
+#define EMBED_TICKET_RING_SHIFT_MAX 31u
 ```
 
-The maximum slot count as a shift: `2^EMBED_TICKET_RING_SHIFT_MOST` slots.
+The max slot count as a shift: `2^EMBED_TICKET_RING_SHIFT_MAX` slots.
 
 ## Functions
 
@@ -236,7 +236,7 @@ Initializes the ring over a slot array of `2^shift` slots.
 
 - `[out]`: ring The ring \[BORROWS\].
 - `[in]`: slots The slot array \[BORROWS\], `2^shift` slots, zero-initialized, which the caller owns.
-- `[in]`: shift The slot count as a power of two, at most [`EMBED_TICKET_RING_SHIFT_MOST`](#EMBED_TICKET_RING_SHIFT_MOST).
+- `[in]`: shift The slot count as a power of two, at max [`EMBED_TICKET_RING_SHIFT_MAX`](#EMBED_TICKET_RING_SHIFT_MAX).
 
 > **Note:** The slot count is a power of two by construction, so the index is a mask and not a modulo.
 

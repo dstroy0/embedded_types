@@ -12,29 +12,29 @@
  * @date 2026-10-23
  *
  * @note The generator of Unity copies every #include of a suite into its runner and reads no #if. A
- *       suite with windows.h on one arm and pthread.h on the other hands the runner both. The
+ *       suite with windows.h on one arm and pthread.h on the other passes the runner both. The
  *       headers of the platform are in host_threads.c alone.
  */
 #ifndef HOST_THREADS_H
 #define HOST_THREADS_H
 
-/** @brief The most threads host_threads_run starts at once. */
-#define HOST_THREADS_MOST 16u
+/** @brief The max threads host_threads_run starts at once. */
+#define HOST_THREADS_MAX 16u
 
 /**
  * @brief Runs count host threads, and each one calls each once. Waits for every one to end.
  *
  * @param[in] each  The work every thread does.
- * @param[in] count Threads to start, at most HOST_THREADS_MOST.
+ * @param[in] count Threads to start, at max HOST_THREADS_MAX.
  * @return          1 where every thread started and ended, 0 where the system refused one or count
- *                  passed HOST_THREADS_MOST.
+ *                  passed HOST_THREADS_MAX.
  */
 int host_threads_run(void (*each)(void), unsigned int count);
 
 /**
  * @brief The rest of this thread's time slice given to another thread.
  *
- * @note A wait loop calls it on each turn. Thus a thread that waits does not keep a core from the thread that it
+ * @note A wait loop calls it on each turn. Thus a thread that waits does not retain a core from the thread that it
  *       waits for, on a host with fewer cores than threads.
  */
 void host_threads_yield(void);

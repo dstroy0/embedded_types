@@ -112,7 +112,7 @@ theorem entry_refused_32 (x : BitVec 32) (h : x &&& 1 = 1) : entered x = x ∧ t
 
 /-! ## The leave -/
 
-/-- A leave on a word that its pass holds busy clears busy, keeps closed and the sleeper bit, and adds one to the
+/-- A leave on a word that its pass holds busy clears busy, retains closed and the sleeper bit, and adds one to the
 generation. -/
 theorem leave_64 (x : BitVec 64) (h : x &&& 1 = 1) :
     left x &&& busy 64 = 0 ∧ left x &&& closed 64 = x &&& closed 64 ∧ left x &&& sleeper 64 = x &&& sleeper 64 ∧
@@ -128,7 +128,7 @@ theorem leave_32 (x : BitVec 32) (h : x &&& 1 = 1) :
 
 /-! ## The close and the takeover -/
 
-/-- A close on a word that the contraction holds busy, and that has no closed bit, sets the closed bit. It keeps
+/-- A close on a word that the contraction holds busy, and that has no closed bit, sets the closed bit. It retains
 the busy bit and the sleeper bit, and adds one to the generation. -/
 theorem close_64 (x : BitVec 64) (h : x &&& 3 = 1) :
     shut x &&& busy 64 = busy 64 ∧ shut x &&& closed 64 = closed 64 ∧ shut x &&& sleeper 64 = x &&& sleeper 64 ∧
@@ -142,7 +142,7 @@ theorem close_32 (x : BitVec 32) (h : x &&& 3 = 1) :
   simp only [shut, generation, counted, busy, closed, sleeper, unit]
   bv_decide
 
-/-- A takeover of a closed word clears closed, keeps busy and the sleeper bit, and adds one to the generation. The
+/-- A takeover of a closed word clears closed, retains busy and the sleeper bit, and adds one to the generation. The
 lane is then the grower's. -/
 theorem takeover_64 (x : BitVec 64) (h : x &&& 3 = 3) :
     takenOver x &&& 3 = 1 ∧ takenOver x &&& sleeper 64 = x &&& sleeper 64 ∧
@@ -158,7 +158,7 @@ theorem takeover_32 (x : BitVec 32) (h : x &&& 3 = 3) :
 
 /-! ## The sleeper bit -/
 
-/-- The sleeper bit set and cleared keeps busy, closed and the generation. -/
+/-- The sleeper bit set and cleared retains busy, closed and the generation. -/
 theorem sleeper_bit_64 (x : BitVec 64) :
     flagged x &&& 3 = x &&& 3 ∧ generation (flagged x) = generation x ∧
       unflagged x &&& 3 = x &&& 3 ∧ generation (unflagged x) = generation x ∧ unflagged x &&& sleeper 64 = 0 := by
@@ -266,7 +266,7 @@ theorem classes_64 (x : BitVec 64) :
       (lane x = 1 → lane (left x) = 0) ∧
       -- a close makes a taken lane closed, and a takeover makes a closed lane taken
       (lane x = 1 → lane (shut x) = 3) ∧ (lane x = 3 → lane (takenOver x) = 1) ∧
-      -- the sleeper bit keeps the class
+      -- the sleeper bit retains the class
       lane (flagged x) = lane x ∧ lane (unflagged x) = lane x := by
   simp only [lane, entered, left, shut, takenOver, flagged, unflagged, busy, closed, sleeper, unit]
   bv_decide

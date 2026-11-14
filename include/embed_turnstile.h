@@ -27,10 +27,10 @@
  *       found every open lane busy. An entry on a free lane writes no word but the lane word.
  * @note The order of the passes is not the turnstile's. A consumer that needs an order keys it by the address of the
  *       worker and the worker's own sequence.
- * @note A backoff keeps its start on the clock and its exponent in the caller's locals. No shared word holds a time.
+ * @note A backoff retains its start on the clock and its exponent in the caller's locals. No shared word holds a time.
  *       Inside the first unit, 2^EMBED_TURNSTILE_UNIT_SHIFT ns, a step is a pause and no call. From one unit on, a
- *       step waits on the word for 2^(EMBED_TURNSTILE_UNIT_SHIFT + k) ns at most, and k goes up to
- *       EMBED_TURNSTILE_K_MOST. A wake or a moved word ends the wait first.
+ *       step waits on the word for 2^(EMBED_TURNSTILE_UNIT_SHIFT + k) ns at max, and k goes up to
+ *       EMBED_TURNSTILE_K_MAX. A wake or a moved word ends the wait first.
  * @note The host defines embed_word_wait, embed_word_wake and embed_clock_ns. A build that defines none of the three
  *       fails at the link, and the error names them.
  * @note theory/embedded_types/EmbeddedTypes/Manifold proves the lane word, the backoff, the open count, the queue,
@@ -59,10 +59,10 @@ EMBED_STATIC_ASSERT((EMBED_TURNSTILE_LANES >= 1u) && (EMBED_TURNSTILE_LANES <= 6
 #if !defined(EMBED_TURNSTILE_UNIT_SHIFT)
 #define EMBED_TURNSTILE_UNIT_SHIFT 10u
 #endif
-EMBED_STATIC_ASSERT(EMBED_TURNSTILE_UNIT_SHIFT <= 10u, "EMBED_TURNSTILE_UNIT_SHIFT must be 10 at most");
+EMBED_STATIC_ASSERT(EMBED_TURNSTILE_UNIT_SHIFT <= 10u, "EMBED_TURNSTILE_UNIT_SHIFT must be 10 at max");
 
-/** @brief The most the backoff's exponent reaches: a wait of 2^(EMBED_TURNSTILE_UNIT_SHIFT + 20) ns at most. */
-#define EMBED_TURNSTILE_K_MOST 20u
+/** @brief The max the backoff's exponent reaches: a wait of 2^(EMBED_TURNSTILE_UNIT_SHIFT + 20) ns at max. */
+#define EMBED_TURNSTILE_K_MAX 20u
 
 /** @brief The fields of a lane word, and the unit of its generation. */
 #define EMBED_TURNSTILE_BUSY ((embed_atomic_word_value)1u)
@@ -97,16 +97,16 @@ typedef struct
 typedef struct
 {
     embed_u64 start;  /**< The nanosecond that embed_clock_ns read at the start. */
-    unsigned int exponent; /**< The exponent of the next wait, from 0 to EMBED_TURNSTILE_K_MOST. */
+    unsigned int exponent; /**< The exponent of the next wait, from 0 to EMBED_TURNSTILE_K_MAX. */
 } EmbedTurnstileBackoff;
 
 /**
- * @brief A sleep on word while it reads seen, at most nanoseconds, EMBED_WAIT_FOREVER for no end, and none at all
+ * @brief A sleep on word while it reads seen, at max nanoseconds, EMBED_WAIT_FOREVER for no end, and none at all
  *        for 0.
  *
  * @param[in] word        The word slept on [BORROWS].
  * @param[in] seen        The value that the caller read.
- * @param[in] nanoseconds The most the sleep lasts. 0 answers at once with no sleep and no system call.
+ * @param[in] nanoseconds The max the sleep lasts. 0 answers at once with no sleep and no system call.
  * @return                1 where the word moved off seen, 0 where it did not. A sleep is free to end early, so a
  *                        sleeper tests what it waits for in a loop.
  * @note The host defines this function on its address wait. That is a futex on Linux, WaitOnAddress on Windows, and
@@ -132,7 +132,7 @@ embed_u64 embed_clock_ns(void);
 
 /**
  * @brief The processor's pause in a spin, a compiler barrier alone where the processor has none the compiler reaches.
- * @note A build that defines it before this header keeps its own, as a model checker's build does with no processor.
+ * @note A build that defines it before this header retains its own, as a model checker's build does with no processor.
  */
 #if !defined(EMBED_TURNSTILE_PAUSE) && defined(__has_builtin)
 #if __has_builtin(__builtin_ia32_pause)
@@ -161,7 +161,7 @@ EMBED_INLINE void embed_turnstile_backoff_begin(EmbedTurnstileBackoff *backoff)
  *
  * The step does one pause. Where the time since the start is less than one unit, or where `on` is 0, that is all.
  * Otherwise the step sets the sleeper bit `flag` on the word, and the host waits on the word for the limit of the
- * exponent. Then the exponent goes up by one, to EMBED_TURNSTILE_K_MOST at most.
+ * exponent. Then the exponent goes up by one, to EMBED_TURNSTILE_K_MAX at max.
  *
  * @param[in]     word    The word [BORROWS].
  * @param[in]     read    What it was last read as.
@@ -182,7 +182,7 @@ EMBED_INLINE void embed_turnstile_backed_off(embed_atomic_word *word, embed_atom
     {
         (void)embed_atomic_word_fetch_or(word, flag);
         (void)embed_word_wait(word, read | flag, (embed_u64)1u << (EMBED_TURNSTILE_UNIT_SHIFT + backoff->exponent));
-        backoff->exponent += (unsigned int)(backoff->exponent < EMBED_TURNSTILE_K_MOST);
+        backoff->exponent += (unsigned int)(backoff->exponent < EMBED_TURNSTILE_K_MAX);
     }
 }
 
@@ -417,7 +417,7 @@ EMBED_INLINE void embed_turnstile_leave(EmbedTurnstiles *set, unsigned int at)
  *       led to. A pass that starts after the fence of the drain reads the new pointer, and the drain does not wait
  *       for it.
  * @note The drain reads the open count after its fence, then each open lane. Each pass is below the open count, so
- *       these are each lane that a pass can hold. The drain waits on each lane whose first read has busy, and keeps
+ *       these are each lane that a pass can hold. The drain waits on each lane whose first read has busy, and retains
  *       the generation of that read. Its wait on a lane ends where busy reads clear or where the generation moved.
  * @note A round that finds the lane still held backs off on that lane word, with the sleeper bit. The end of the pass
  *       changes the word and wakes it.

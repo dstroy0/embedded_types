@@ -5,7 +5,7 @@ name: Proofs
 #
 # One GenMC job runs each memory model. The resize client explores tens of millions of executions under one model,
 # and that takes hours. Five models in one job pass the six-hour limit of a job, so each model has a job of its own.
-# A cache keeps the GenMC build between runs, with the hash of the prove tool as its key. An edit to the tool makes
+# A cache retains the GenMC build between runs, with the hash of the prove tool as its key. An edit to the tool makes
 # a new build, and the tag of GenMC is among its contents.
 
 on:
@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Keep the GenMC build between runs
+      - name: Retain the GenMC build between runs
         uses: actions/cache@v6
         with:
           path: |
@@ -75,7 +75,7 @@ jobs:
         # test/prove/prove.py names. A run with the build from the cache installs the packages alone.
         run: python3 test/harness.py prove --model ${{ matrix.model }}
 
-      - name: Keep the run
+      - name: Retain the run
         if: always()
         uses: actions/upload-artifact@v7
         with:

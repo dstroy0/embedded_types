@@ -20,7 +20,7 @@
 
 #include "unity.h"
 
-/** @brief The most milliseconds a test waits on another thread before it fails. */
+/** @brief The max milliseconds a test waits on another thread before it fails. */
 #define TEST_PATIENCE_MS 5000u
 
 /** @brief The workers that read beside the writer, and the writer's swaps. */
@@ -177,11 +177,11 @@ void test_a_backoff_past_its_first_unit_waits_and_raises_its_exponent_to_the_cei
     embed_turnstile_backoff_begin(&backoff);
     backoff.start = embed_clock_ns() - TEST_SECOND_NS;
     // The word reads other than the value passed, so each wait answers at once
-    for (unsigned int step = 0u; step < (EMBED_TURNSTILE_K_MOST + 4u); step += 1u)
+    for (unsigned int step = 0u; step < (EMBED_TURNSTILE_K_MAX + 4u); step += 1u)
     {
         embed_turnstile_backed_off(&word, 1u, EMBED_TURNSTILE_SLEEPER, &backoff, 1u);
     }
-    TEST_ASSERT_EQUAL_UINT(EMBED_TURNSTILE_K_MOST, backoff.exponent);
+    TEST_ASSERT_EQUAL_UINT(EMBED_TURNSTILE_K_MAX, backoff.exponent);
     TEST_ASSERT_EQUAL_UINT64(EMBED_TURNSTILE_SLEEPER, embed_atomic_word_load(&word));
 }
 
@@ -326,7 +326,7 @@ void test_a_drain_waits_out_a_pass_begun_before_it(void)
 
 static EmbedTurnstiles s_crowd;
 static embed_atomic_u32 s_crowd_passed = EMBED_ATOMIC_INIT(0u);
-static embed_atomic_u32 s_crowd_lanes_most = EMBED_ATOMIC_INIT(0u);
+static embed_atomic_u32 s_crowd_lanes_max = EMBED_ATOMIC_INIT(0u);
 
 /** @brief Each thread passes through s_crowd for a rest on one start lane, and it records the lanes it saw open. */
 static void crowd(void)
@@ -334,7 +334,7 @@ static void crowd(void)
     (void)thread_id();
     const unsigned int at = embed_turnstile_enter(&s_crowd, address_of_lane(0u));
 
-    (void)embed_atomic_u32_raise(&s_crowd_lanes_most, (embed_u32)embed_turnstile_lanes(&s_crowd));
+    (void)embed_atomic_u32_raise(&s_crowd_lanes_max, (embed_u32)embed_turnstile_lanes(&s_crowd));
     clock_passes(5u);
     (void)embed_atomic_u32_fetch_add(&s_crowd_passed, 1u);
     embed_turnstile_leave(&s_crowd, at);
@@ -343,10 +343,10 @@ static void crowd(void)
 void test_a_crowd_grows_the_set_to_its_pressure_and_no_lane_stays_busy(void)
 {
     embed_atomic_u32_store(&s_crowd_passed, 0u);
-    embed_atomic_u32_store(&s_crowd_lanes_most, 0u);
+    embed_atomic_u32_store(&s_crowd_lanes_max, 0u);
     TEST_ASSERT_TRUE_MESSAGE(host_threads_run(crowd, 4u), "every thread started");
     TEST_ASSERT_EQUAL_UINT32(4u, embed_atomic_u32_load(&s_crowd_passed));
-    TEST_ASSERT_TRUE_MESSAGE(embed_atomic_u32_load(&s_crowd_lanes_most) > 1u, "a lane opened under the crowd");
+    TEST_ASSERT_TRUE_MESSAGE(embed_atomic_u32_load(&s_crowd_lanes_max) > 1u, "a lane opened under the crowd");
     TEST_ASSERT_EQUAL_UINT32(0u, embed_atomic_u32_load(&s_crowd.queue));
     const unsigned int count = embed_turnstile_lanes(&s_crowd);
 

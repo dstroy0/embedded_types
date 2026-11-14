@@ -65,7 +65,7 @@ A case is `void test_<name>(void)` at file scope. Two shapes make a case that ne
 
 ## Where the proof is
 
-The compiler proves most of this library. The width assertions in `embed_types.h`, the packed-enum
+The compiler proves the majority of this library. The width assertions in `embed_types.h`, the packed-enum
 probe, and each expansion of `EMBED_TABLE_LAYOUT` are static. A build that reaches the link step
 passed them all, and no case in `test/` repeats that work. The Lean proofs under `theory/` hold the
 widths, the atomics, the byte operations of the lane, the manifold of the turnstile, and the ticket
@@ -75,18 +75,18 @@ The suites under `test/unit/`, one for each header, cover what a static assertio
 
 - **Signedness.** A typedef of the wrong signedness has the right size, and `sizeof` passes either
   way. Each case casts `-1` to the alias and tests the sign of the result.
-- **Boolean normalization.** Each nonzero value converts to 1. A plain eight-bit alias keeps the
+- **Boolean normalization.** Each nonzero value converts to 1. A plain eight-bit alias retains the
   value that it receives, and two true values can then compare unequal across an API boundary.
 - **`EMBED_RAW`.** A word read from an odd address, checked against a shift of the same literal
   bytes.
 - **The dispatch table.** The offsets are properties of the struct type. An initializer that names the
   wrong function changes none of them. The suite calls through each member.
 - **Generated entry points.** `EMBED_ENTRY` and `EMBED_ENTRY_V` emit a function that builds a
-  compound literal from the configuration of the caller and hands it to a backend. The suite calls
+  compound literal from the configuration of the caller and passes it to a backend. The suite calls
   both entries and checks what the backend received, with the context member that the entry leaves
   out of its initializer.
 - **The byte order.** `EMBED_BIG_ENDIAN` comes from `__BYTE_ORDER__`. The case measures how the
-  target lays a word out in memory. A read of the same macro compares the macro with itself.
+  target positions a word out in memory. A read of the same macro compares the macro with itself.
 - **The feature tests.** `EMBED_HAS_ATTRIBUTE` and `EMBED_HAS_BUILTIN` give zero for a name that
   nothing defines. A nonzero result there is nonzero for each name, and each attribute wrapper then
   expands on a compiler that rejects it.
@@ -166,7 +166,7 @@ something to say. Pad each `@param` text to the longest name, and pad `@return` 
 #define EMBED_HAS_ATTRIBUTE(attribute_) __has_attribute(attribute_)
 ```
 
-Each attribute wrapper carries a `@warning` that names what its absence costs. Most cost speed where
+Each attribute wrapper carries a `@warning` that names what its absence costs. Max cost speed where
 they expand to nothing. `EMBED_ALIGN` and `EMBED_ALIAS` cost correctness. The `#if` does not tell
 the two apart.
 
@@ -199,7 +199,7 @@ Contributions are accepted under the same terms as the project. There is no CLA.
 states that you have the right to contribute the code, and that you contribute it under
 AGPL-3.0-or-later.
 
-Keep the banner on each new file. Both `LicenseRef-` identifiers in it resolve to files in
+Retain the banner on each new file. Both `LicenseRef-` identifiers in it resolve to files in
 `LICENSES/`, and a scanner reports the expression as unresolved where one is absent.
 
 **Author:** dstroy0 (Douglas Quigg) <dquigg123@gmail.com>

@@ -47,7 +47,7 @@
  *       word's width, and 32 where the word is narrower, since a lane holds whole 32-bit lanes.
  * @note A build that wants another width defines this macro ahead of this header, as for
  *       EMBED_WORD_BITS. The assertions below hold any width to whole 32-bit lanes, whole words, and
- *       at most 512 bits, the width that the byte mask can hold.
+ *       at max 512 bits, the width that the byte mask can hold.
  */
 #ifndef EMBED_LANE_BITS
 /**
@@ -80,7 +80,7 @@
 
 EMBED_STATIC_ASSERT((EMBED_LANE_BITS % 32u) == 0u, "EMBED_LANE_BITS must be whole 32-bit lanes");
 EMBED_STATIC_ASSERT(EMBED_LANE_BITS >= 32u, "EMBED_LANE_BITS must hold at least one 32-bit lane");
-EMBED_STATIC_ASSERT(EMBED_LANE_BITS <= 512u, "EMBED_LANE_BITS must be at most 512: the byte mask holds 64 bytes");
+EMBED_STATIC_ASSERT(EMBED_LANE_BITS <= 512u, "EMBED_LANE_BITS must be at max 512: the byte mask holds 64 bytes");
 EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must be whole words");
 
 /**
@@ -122,7 +122,7 @@ EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must 
  * @brief The arm the lane takes: EMBED_LANE_VECTOR is 1 and EMBED_LANE_PLAIN 0, or the other way.
  *
  * @note The vector arm needs the vector type of the compiler, EMBED_HAS_VECTOR_SIZE. A CUDA device
- *       does not take it, because its compiler keeps the lanes of a thread in registers from the struct.
+ *       does not take it, because its compiler retains the lanes of a thread in registers from the struct.
  */
 #if EMBED_HAS_VECTOR_SIZE && !EMBED_LANE_PORTABLE && !defined(__CUDA_ARCH__)
 #define EMBED_LANE_VECTOR 1
@@ -137,7 +137,7 @@ EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must 
  *        the vector type of the compiler. On the portable arm it is a struct with the alignment of
  *        the lane.
  *
- * @note On both arms lanes in a row lay out as the registers do, each lane at a multiple of its
+ * @note On both arms lanes in a row arrange as the registers do, each lane at a multiple of its
  *       width.
  */
 #if EMBED_LANE_VECTOR
@@ -434,7 +434,7 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_sub_u32(embed_lane one, emb
 }
 
 /**
- * @brief The 32-bit lanes of two lanes multiplied, the low 32 bits of each product kept.
+ * @brief The 32-bit lanes of two lanes multiplied, the low 32 bits of each product retained.
  *
  * @param one    A lane.
  * @param other  A lane.
@@ -536,7 +536,7 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
 #endif
 #else
     // A byte of the difference of a word is zero where its high bit is clear after the carry test. The sum
-    // carries out of each byte that holds a bit, and the complement keeps the other bytes.
+    // carries out of each byte that holds a bit, and the complement retains the other bytes.
 #define EMBED_LANE_ZERO_BYTES(at_)                                                                                    \
     ((~((((one.at[at_] ^ other.at[at_]) & 0x7f7f7f7fu) + 0x7f7f7f7fu) | (one.at[at_] ^ other.at[at_]) | 0x7f7f7f7fu)) >> 7u)
 #define EMBED_LANE_EQUAL_WORD(at_)                                                                                    \

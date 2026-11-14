@@ -7,7 +7,7 @@
 /**
  * @file test_embed_lane_device.h
  * @brief The kernels of the device suite of the lane, as the host cases call them. Each takes a span
- *        of bytes, runs the operations of the lane over it on the device, and hands the answer back.
+ *        of bytes, runs the operations of the lane over it on the device, and passes the answer back.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-10-29
  *

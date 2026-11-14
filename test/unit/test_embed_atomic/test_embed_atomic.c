@@ -12,7 +12,7 @@
  * @date 2026-10-29
  *
  * @note The contention cases are the ones that tell an atomic word from a plain one. A plain word
- *       loses increments under contention and hands one claim to two takers. The counts here are
+ *       loses increments under contention and passes one claim to two takers. The counts here are
  *       exact, or the arm is wrong.
  */
 #include "embed_atomic.h"
@@ -127,7 +127,7 @@ void test_swap_if_takes_the_expected_word_alone(void)
     embed_u32 expected = 4u;
     TEST_ASSERT_FALSE_MESSAGE(embed_atomic_u32_swap_if(&word, &expected, 9u), "a wrong expectation swaps nothing");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(5u, expected, "and the expectation takes the word found");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(5u, embed_atomic_u32_load(&word), "the word stands");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(5u, embed_atomic_u32_load(&word), "the word is");
     TEST_ASSERT_TRUE_MESSAGE(embed_atomic_u32_swap_if(&word, &expected, 9u), "the right expectation swaps");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(5u, expected, "and the expectation is the word that was there");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(9u, embed_atomic_u32_load(&word), "the word is the one given");
@@ -159,7 +159,7 @@ void test_raise_moves_the_word_up_and_never_down(void)
 {
     embed_atomic_u32 word = EMBED_ATOMIC_INIT(10u);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(10u, embed_atomic_u32_raise(&word, 4u), "a lower value answers the word and leaves it");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(10u, embed_atomic_u32_load(&word), "the word stands");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(10u, embed_atomic_u32_load(&word), "the word is");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(10u, embed_atomic_u32_raise(&word, 12u), "a higher value answers the word before");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(12u, embed_atomic_u32_load(&word), "and raises it");
     embed_atomic_u64 wide = EMBED_ATOMIC_INIT(3u);
@@ -198,7 +198,7 @@ static void order_rounds(void)
     }
 }
 
-void test_ordered_keeps_two_threads_from_both_missing_each_others_write(void)
+void test_ordered_retains_two_threads_from_both_missing_each_others_write(void)
 {
     TEST_ASSERT_TRUE_MESSAGE(host_threads_run(order_rounds, 2u), "both threads started");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, embed_atomic_u32_load(&s_order_both_missed),

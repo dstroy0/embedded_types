@@ -32,7 +32,7 @@ The theorems:
 - `refused_never_runs`. A popped slot whose job pointer failed the check never ran its job. With
   `Flags.job_flip_changes_check`, a single-bit error in a job pointer never runs.
 
-- `runs_at_most_once`. A popped slot stays popped, so its job ran at most once.
+- `runs_at_max_once`. A popped slot stays popped, so its job ran at max once.
 
 - `lane_identifies_worker`. A worker in a pass or dead holds the lane that its state names, and that lane names
   the worker back. Two workers never share a lane.
@@ -148,7 +148,7 @@ theorem left_is_step (l : Manifold.Drain.State) (w : Nat) (h : l.holder = some w
     Manifold.Drain.Step l (laneLeft l w) :=
   Manifold.Drain.Step.leave w h
 
-/-- The leave of the holder of a lane keeps the invariant, for a leave and for a free. -/
+/-- The leave of the holder of a lane retains the invariant, for a leave and for a free. -/
 theorem left_inv {s : State} (i : Inv s) (w l : Nat) (hw : s.worker w = .inPass l ∨ s.worker w = .dead l)
     (hold : (s.lane l).busy = true ∧ (s.lane l).holder = some w)
     (v : Worker) (hv : ∀ l', v ≠ .inPass l' ∧ v ≠ .dead l') :
@@ -325,8 +325,8 @@ theorem single_flip_never_runs (job i : BitVec 64) (hi : i < 64) :
     decide (Flags.check (job ^^^ ((1 : BitVec 64) <<< i)) = Flags.check job) = false :=
   decide_eq_false (Flags.job_flip_changes_check job i hi)
 
-/-- No step changes a popped slot, so a popped slot stays popped and its job ran at most once. -/
-theorem runs_at_most_once {s t : State} (st : Step s t) (at_ stamp l : Nat) (ran : Bool)
+/-- No step changes a popped slot, so a popped slot stays popped and its job ran at max once. -/
+theorem runs_at_max_once {s t : State} (st : Step s t) (at_ stamp l : Nat) (ran : Bool)
     (hs : s.slot at_ = .popped stamp l ran) : t.slot at_ = .popped stamp l ran := by
   cases st with
   | pop w l' at' stamp' intact hw hs' =>

@@ -21,7 +21,7 @@
  * @note The state sequence of a slot is grant, push, pop, replay, release. A replay is the read of a slot after its
  *       pop, which a rewind performs. A grant succeeds on a zero word or on a released word. A release succeeds
  *       after a pop. The next grant at the same index reuses the released word.
- * @note The pop writes the lane index of the pass that performed it into seven flag bits. The release keeps them.
+ * @note The pop writes the lane index of the pass that performed it into seven flag bits. The release retains them.
  * @note The push stores a three-bit cyclic redundancy check of the job pointer in three flag bits. The pop and the
  *       replay check the pointer they read against it. Every single-bit error in the job pointer fails the check.
  *       Every double-bit error fails it too, except one whose two bits are a multiple of seven places apart. The
@@ -81,8 +81,8 @@ EMBED_STATIC_ASSERT(EMBED_TURNSTILE_LANES <= 128u, "the lane index of a pop fits
 #error "EMBED_TICKET_JOB_CHECK must be 0 or 1"
 #endif
 
-/** @brief The maximum slot count as a shift: 2^EMBED_TICKET_RING_SHIFT_MOST slots. */
-#define EMBED_TICKET_RING_SHIFT_MOST 31u
+/** @brief The max slot count as a shift: 2^EMBED_TICKET_RING_SHIFT_MAX slots. */
+#define EMBED_TICKET_RING_SHIFT_MAX 31u
 
 /** @brief One slot: the stamp word, the state of the slot, and the job pointer. */
 typedef struct
@@ -223,7 +223,7 @@ EMBED_INLINE embed_u64 embed_ticket_fields_of_stamp(embed_u64 stamp)
  *
  * @param[out] ring  The ring [BORROWS].
  * @param[in]  slots The slot array [BORROWS], 2^shift slots, zero-initialized, which the caller owns.
- * @param[in]  shift The slot count as a power of two, at most EMBED_TICKET_RING_SHIFT_MOST.
+ * @param[in]  shift The slot count as a power of two, at max EMBED_TICKET_RING_SHIFT_MAX.
  * @note The slot count is a power of two by construction, so the index is a mask and not a modulo.
  */
 EMBED_INLINE void embed_ticket_ring_begin(EmbedTicketRing *ring, EmbedTicketRingSlot *slots, unsigned int shift)

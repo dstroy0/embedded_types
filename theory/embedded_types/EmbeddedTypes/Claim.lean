@@ -20,7 +20,7 @@ ticket, and the compare passes there. The claim closes that case. The slot admit
 flipped worker and the owner collide on it, and one of the two fails. The fault surfaces at that failure, and no
 job runs twice.
 
-The third section is the lane. A claim step needs the lane in the hands of the pass that claims. So each consumed
+The third section is the lane. A claim step needs the lane in the passes of the pass that claims. So each consumed
 slot names a pass that held a lane at its claim. The drain theorem applies to that pass. A drain that waits on a
 lane that a pass holds does not end before that pass ends.
 
@@ -30,9 +30,9 @@ The theorems:
 
 - `pop_stamp_free_of_job`. The stamp of a pop is the same after any change to the job at any place.
 
-- `push_once`, `claim_pushed`, `claim_other_fails`, `claim_once` and `claims_at_most_one`. A push lands on an empty
+- `push_once`, `claim_pushed`, `claim_other_fails`, `claim_once` and `claims_at_max_one`. A push lands on an empty
   slot alone. A claim with the stamp of the slot lands on a pushed slot. A claim with another stamp fails. After one
-  claim lands, no claim lands. Any sequence of claims on one slot lands at most once.
+  claim lands, no claim lands. Any sequence of claims on one slot lands at max once.
 
 - `collision_detected`. Two claims on one pushed slot, in either order: the first lands and the second fails.
 
@@ -129,8 +129,8 @@ theorem claims_consumed_zero (s p : Nat) (l : List (Nat × Nat)) : (claims (.con
     obtain ⟨t, q⟩ := head
     simp [claims, claim, ih]
 
-/-- Any sequence of claims on one slot lands at most once. -/
-theorem claims_at_most_one (slot : Slot) (l : List (Nat × Nat)) : (claims slot l).2 ≤ 1 := by
+/-- Any sequence of claims on one slot lands at max once. -/
+theorem claims_at_max_one (slot : Slot) (l : List (Nat × Nat)) : (claims slot l).2 ≤ 1 := by
   induction l generalizing slot with
   | nil => simp [claims]
   | cons head rest ih =>

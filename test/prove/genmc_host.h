@@ -42,7 +42,7 @@ int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value seen, embed
 {
     const embed_atomic_word_value epoch = embed_atomic_word_load(&s_genmc_wakes);
 
-    // Explicit casts keep the low 32 bits of each value, the bits the futex compares
+    // Explicit casts retain the low 32 bits of each value, the bits the futex compares
     if ((uint32_t)embed_atomic_word_load(word) != (uint32_t)seen)
     {
         return 1;

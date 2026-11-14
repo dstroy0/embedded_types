@@ -8,7 +8,7 @@ Atomic words on the atomics of the target, with no lock and no system call.
 
 This header gives a 32-bit word and a 64-bit word. A host thread, a task on a part and a GPU thread read, write, swap, compare and swap, add to and mask them. Each operation is one indivisible step.
 
-> **Note:** These steps alone keep a structure that contexts share consistent, and no context waits for another. A counter is a fetch-add. A claim is a compare-and-swap that takes, or that reports who took. A boundary is a compare-and-swap loop that moves, or that tries again over the value that it found. Nothing here spins on the progress of another context.
+> **Note:** These steps alone retain a structure that contexts share consistent, and no context waits for another. A counter is a fetch-add. A claim is a compare-and-swap that takes, or that reports who took. A boundary is a compare-and-swap loop that moves, or that tries again over the value that it found. Nothing here spins on the progress of another context.
 
 > **Note:** The switch below selects one of four arms, one time. The first arm is the device atomics of CUDA in a device pass. The second is C11 atomics, where a C compiler has them. The third is the GCC and clang `__atomic` builtins, where C11 atomics are absent or the consumer is C++. The fourth is the interlocked intrinsics under MSVC. Each arm gives a load acquire ordering, a store release ordering, and each read-modify-write both.
 

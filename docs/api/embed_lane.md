@@ -37,7 +37,7 @@ typedef struct
 
 The lane, [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES) wide. On the vector arm it is [`EMBED_LANE_U32S`](#EMBED_LANE_U32S) 32-bit lanes in the vector type of the compiler. On the portable arm it is a struct with the alignment of the lane.
 
-> **Note:** On both arms lanes in a row lay out as the registers do, each lane at a multiple of its width.
+> **Note:** On both arms lanes in a row arrange as the registers do, each lane at a multiple of its width.
 
 - `at`: The 32-bit lanes, the lowest address first.
 
@@ -133,7 +133,7 @@ The lane's width in bits, derived from the target's widest vector register.
 
 > **Note:** [`EMBED_VECTOR_REGISTER_BITS`](embed_compiler_directives.md#EMBED_VECTOR_REGISTER_BITS) comes from the compiler's own instruction set macros. A CUDA device takes 256, a thread's eight 32-bit registers. A target with no vector unit takes the word's width, and 32 where the word is narrower, since a lane holds whole 32-bit lanes.
 
-> **Note:** A build that wants another width defines this macro ahead of this header, as for [`EMBED_WORD_BITS`](embed_types.md#EMBED_WORD_BITS). The assertions below hold any width to whole 32-bit lanes, whole words, and at most 512 bits, the width that the byte mask can hold.
+> **Note:** A build that wants another width defines this macro ahead of this header, as for [`EMBED_WORD_BITS`](embed_types.md#EMBED_WORD_BITS). The assertions below hold any width to whole 32-bit lanes, whole words, and at max 512 bits, the width that the byte mask can hold.
 
 ### `EMBED_LANE_BITS_WAS_OVERRIDDEN` { #EMBED_LANE_BITS_WAS_OVERRIDDEN }
 
@@ -215,7 +215,7 @@ Set to 1 by the build to take the portable arm on any target, else 0.
 
 The arm the lane takes: [`EMBED_LANE_VECTOR`](#EMBED_LANE_VECTOR) is 1 and [`EMBED_LANE_PLAIN`](#EMBED_LANE_VECTOR) 0, or the other way.
 
-> **Note:** The vector arm needs the vector type of the compiler, [`EMBED_HAS_VECTOR_SIZE`](embed_compiler_directives.md#EMBED_HAS_VECTOR_SIZE). A CUDA device does not take it, because its compiler keeps the lanes of a thread in registers from the struct.
+> **Note:** The vector arm needs the vector type of the compiler, [`EMBED_HAS_VECTOR_SIZE`](embed_compiler_directives.md#EMBED_HAS_VECTOR_SIZE). A CUDA device does not take it, because its compiler retains the lanes of a thread in registers from the struct.
 
 ### `EMBED_LANE_MASK_ALL` { #EMBED_LANE_MASK_ALL }
 
@@ -394,7 +394,7 @@ The 32-bit lanes of `other` taken from those of `one`, each with wrap around at 
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_mul_u32(embed_lane one, embed_lane other);
 ```
 
-The 32-bit lanes of two lanes multiplied, the low 32 bits of each product kept.
+The 32-bit lanes of two lanes multiplied, the low 32 bits of each product retained.
 
 - `one`: A lane.
 - `other`: A lane.

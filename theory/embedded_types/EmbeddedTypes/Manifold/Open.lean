@@ -20,7 +20,7 @@ compare-and-swap.
 - The end of a pass on the top lane contracts again while each step closes a lane: the cascade.
 
 An arrival can read a value of `open` that a later growth or contraction replaces. Each value that it reads is at
-most `high`, the most lanes that were ever open. The model lets an arrival read any value from 1 to `high`, which
+max `high`, the max lanes that were ever open. The model lets an arrival read any value from 1 to `high`, which
 covers every value that it can read.
 
 The theorems:
@@ -95,7 +95,7 @@ def cascade (closes : Nat → Bool) : Nat → Nat
   | 1 => 1
   | c + 2 => if closes (c + 2) then cascade closes (c + 1) else c + 2
 
-/-- The cascade ends, at most c - 1 steps from c lanes, and leaves one lane open at least. -/
+/-- The cascade ends, at max c - 1 steps from c lanes, and leaves one lane open at least. -/
 theorem cascade_bounded (closes : Nat → Bool) (c : Nat) (h : 1 ≤ c) :
     1 ≤ cascade closes c ∧ cascade closes c ≤ c := by
   induction c with
@@ -143,7 +143,7 @@ inductive Lane where
 structure State where
   /-- The value of `open`. -/
   count : Nat
-  /-- The most lanes that were ever open. -/
+  /-- The max lanes that were ever open. -/
   high : Nat
   lane : Nat → Lane
 
@@ -158,43 +158,43 @@ def State.set (s : State) (at_ : Nat) (value : Lane) : State :=
 def State.reset (s : State) (at_ : Nat) (value : Lane) (count high : Nat) : State :=
   ⟨count, high, fun l => if l = at_ then value else s.lane l⟩
 
-/-- The steps, on a manifold of `most` lanes. -/
-inductive Step (most : Nat) : State → State → Prop where
+/-- The steps, on a manifold of `max` lanes. -/
+inductive Step (max : Nat) : State → State → Prop where
   /-- An arrival that read r lanes open takes a free lane below r. -/
   | enter {s : State} (r l : Nat) (hr : 1 ≤ r ∧ r ≤ s.high) (hl : l < r) (hf : s.lane l = .free) :
-      Step most s (s.set l .pass)
-  | leave {s : State} (l : Nat) (h : s.lane l = .pass) : Step most s (s.set l .free)
+      Step max s (s.set l .pass)
+  | leave {s : State} (l : Nat) (h : s.lane l = .pass) : Step max s (s.set l .free)
   /-- A contraction that read n lanes open, n above 1, claims lane n - 1. -/
   | claim {s : State} (n : Nat) (hn : 1 < n ∧ n ≤ s.high) (hf : s.lane (n - 1) = .free) :
-      Step most s (s.set (n - 1) .held)
+      Step max s (s.set (n - 1) .held)
   /-- The swap of `open` from l + 1 to l lands. -/
   | shut {s : State} (l : Nat) (h : s.lane l = .held) (ho : s.count = l + 1) :
-      Step most s (s.reset l .sealing l s.high)
+      Step max s (s.reset l .sealing l s.high)
   /-- The swap fails, and the contraction releases its lane. -/
-  | release {s : State} (l : Nat) (h : s.lane l = .held) (ho : s.count ≠ l + 1) : Step most s (s.set l .free)
+  | release {s : State} (l : Nat) (h : s.lane l = .held) (ho : s.count ≠ l + 1) : Step max s (s.set l .free)
   /-- The fetch-add closes a sealing lane. -/
-  | finish {s : State} (l : Nat) (h : s.lane l = .sealing) : Step most s (s.set l .closed)
+  | finish {s : State} (l : Nat) (h : s.lane l = .sealing) : Step max s (s.set l .closed)
   /-- A grower's compare-and-swap takes a free lane. -/
-  | takeFree {s : State} (l : Nat) (h : s.lane l = .free) : Step most s (s.set l (.growing false))
+  | takeFree {s : State} (l : Nat) (h : s.lane l = .free) : Step max s (s.set l (.growing false))
   /-- A grower's compare-and-swap takes a closed lane, and counts the reopen. -/
-  | takeClosed {s : State} (l : Nat) (h : s.lane l = .closed) : Step most s (s.set l (.growing true))
+  | takeClosed {s : State} (l : Nat) (h : s.lane l = .closed) : Step max s (s.set l (.growing true))
   /-- The swap of `open` from l to l + 1 lands, and the lane is the grower's pass. -/
-  | grow {s : State} (l : Nat) (b : Bool) (h : s.lane l = .growing b) (ho : s.count = l) (hm : l < most) :
-      Step most s (s.reset l .pass (l + 1) (max s.high (l + 1)))
+  | grow {s : State} (l : Nat) (b : Bool) (h : s.lane l = .growing b) (ho : s.count = l) (hm : l < max) :
+      Step max s (s.reset l .pass (l + 1) (max s.high (l + 1)))
   /-- The swap fails, and the grower gives the lane back as it was. -/
   | giveBack {s : State} (l : Nat) (b : Bool) (h : s.lane l = .growing b) (ho : s.count ≠ l) :
-      Step most s (s.set l (if b then .closed else .free))
+      Step max s (s.set l (if b then .closed else .free))
 
 /-- The states the steps reach from rest. -/
-inductive Reach (most : Nat) : State → Prop where
-  | rest : Reach most rest
-  | step {s t : State} : Reach most s → Step most s t → Reach most t
+inductive Reach (max : Nat) : State → Prop where
+  | rest : Reach max rest
+  | step {s t : State} : Reach max s → Step max s t → Reach max t
 
 /-- The invariant. -/
-structure Inv (most : Nat) (s : State) : Prop where
+structure Inv (max : Nat) (s : State) : Prop where
   count_pos : 1 ≤ s.count
   count_high : s.count ≤ s.high
-  high_most : s.high ≤ most
+  high_max : s.high ≤ max
   /-- Each lane at or above `high` is free, or a grower holds it from free. -/
   above : ∀ l, s.high ≤ l → s.lane l = .free ∨ s.lane l = .growing false
   /-- Each lane from `open` up to `high` has the closed state or the sealing state, or a grower holds it from closed. -/
@@ -208,7 +208,7 @@ structure Inv (most : Nat) (s : State) : Prop where
 
 /-- A lane that is free, a pass or held is below `open` where it is below `high`, and a pass or a held lane is below
 `open`. -/
-theorem below_open {most : Nat} {s : State} (i : Inv most s) (l : Nat)
+theorem below_open {max : Nat} {s : State} (i : Inv max s) (l : Nat)
     (h : s.lane l = .pass ∨ s.lane l = .held) : l < s.count := by
   by_cases hc : s.count ≤ l
   · by_cases hh : l < s.high
@@ -216,17 +216,17 @@ theorem below_open {most : Nat} {s : State} (i : Inv most s) (l : Nat)
     · rcases i.above l (by omega) with e | e <;> rcases h with h | h <;> rw [h] at e <;> cases e
   · omega
 
-theorem free_below_open {most : Nat} {s : State} (i : Inv most s) (l : Nat) (hf : s.lane l = .free)
+theorem free_below_open {max : Nat} {s : State} (i : Inv max s) (l : Nat) (hf : s.lane l = .free)
     (hh : l < s.high) : l < s.count := by
   by_cases hc : s.count ≤ l
   · rcases i.between l hc hh with e | e | e <;> rw [hf] at e <;> cases e
   · omega
 
-theorem rest_inv (most : Nat) (h : 1 ≤ most) : Inv most rest := by
+theorem rest_inv (max : Nat) (h : 1 ≤ max) : Inv max rest := by
   refine ⟨by simp [rest], by simp [rest], by simpa [rest] using h, fun _ _ => Or.inl rfl, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
     intro l <;> simp [rest] <;> omega
 
-/-- A lane set to a value, the rest of the state kept: each field of the invariant at another lane is the old one. -/
+/-- A lane set to a value, the rest of the state retained: each field of the invariant at another lane is the old one. -/
 theorem set_other (s : State) (l m : Nat) (v : Lane) (h : m ≠ l) : (s.set l v).lane m = s.lane m := by
   simp [State.set, h]
 
@@ -239,11 +239,11 @@ theorem reset_other (s : State) (l m : Nat) (v : Lane) (c h : Nat) (hm : m ≠ l
 theorem reset_same (s : State) (l : Nat) (v : Lane) (c h : Nat) : (s.reset l v c h).lane l = v := by
   simp [State.reset]
 
-/-- A lane below `open` set to free, a pass, held above lane 0, or a grower's from free keeps the invariant. -/
-theorem set_inv {most : Nat} {s : State} (i : Inv most s) (l : Nat) (v : Lane) (hl : l < s.count)
-    (hv : v = .free ∨ v = .pass ∨ (v = .held ∧ 1 ≤ l) ∨ v = .growing false) : Inv most (s.set l v) := by
+/-- A lane below `open` set to free, a pass, held above lane 0, or a grower's from free retains the invariant. -/
+theorem set_inv {max : Nat} {s : State} (i : Inv max s) (l : Nat) (v : Lane) (hl : l < s.count)
+    (hv : v = .free ∨ v = .pass ∨ (v = .held ∧ 1 ≤ l) ∨ v = .growing false) : Inv max (s.set l v) := by
   have hch := i.count_high
-  refine ⟨i.count_pos, i.count_high, i.high_most, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨i.count_pos, i.count_high, i.high_max, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro m hm
     rw [set_other _ _ _ _ (by simp only [State.set] at hm; omega)]
     exact i.above m hm
@@ -285,10 +285,10 @@ theorem set_inv {most : Nat} {s : State} (i : Inv most s) (l : Nat) (v : Lane) (
     · rw [set_other _ _ _ _ e] at hm
       exact i.growing_false m hm
 
-/-- A lane from `open` up to `high` set to closed, sealing or a grower's from closed keeps the invariant. -/
-theorem set_inv_between {most : Nat} {s : State} (i : Inv most s) (l : Nat) (v : Lane) (h1 : s.count ≤ l)
-    (h2 : l < s.high) (hv : v = .closed ∨ v = .sealing ∨ v = .growing true) : Inv most (s.set l v) := by
-  refine ⟨i.count_pos, i.count_high, i.high_most, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+/-- A lane from `open` up to `high` set to closed, sealing or a grower's from closed retains the invariant. -/
+theorem set_inv_between {max : Nat} {s : State} (i : Inv max s) (l : Nat) (v : Lane) (h1 : s.count ≤ l)
+    (h2 : l < s.high) (hv : v = .closed ∨ v = .sealing ∨ v = .growing true) : Inv max (s.set l v) := by
+  refine ⟨i.count_pos, i.count_high, i.high_max, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro m hm
     rw [set_other _ _ _ _ (by simp only [State.set] at hm; omega)]
     exact i.above m hm
@@ -322,9 +322,9 @@ theorem set_inv_between {most : Nat} {s : State} (i : Inv most s) (l : Nat) (v :
         | exact i.growing_true m hm
         | exact i.growing_false m hm
 
-theorem step_inv {most : Nat} {s t : State} (i : Inv most s) (st : Step most s t) : Inv most t := by
+theorem step_inv {max : Nat} {s t : State} (i : Inv max s) (st : Step max s t) : Inv max t := by
   have hch := i.count_high
-  have hhm := i.high_most
+  have hhm := i.high_max
   cases st with
   | enter r l hr hl hf => exact set_inv i l .pass (free_below_open i l hf (by omega)) (Or.inr (Or.inl rfl))
   | leave l h => exact set_inv i l .free (below_open i l (Or.inl h)) (Or.inl rfl)
@@ -338,7 +338,7 @@ theorem step_inv {most : Nat} {s t : State} (i : Inv most s) (st : Step most s t
     by_cases hh : l < s.high
     · exact set_inv i l (.growing false) (free_below_open i l h hh) (Or.inr (Or.inr (Or.inr rfl)))
     · -- a lane at or above `high`: the invariant holds it free or the grower's from free
-      refine ⟨i.count_pos, i.count_high, i.high_most, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+      refine ⟨i.count_pos, i.count_high, i.high_max, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
       · intro m hm
         by_cases e : m = l
         · subst e; rw [set_same]; exact Or.inr rfl
@@ -364,7 +364,7 @@ theorem step_inv {most : Nat} {s t : State} (i : Inv most s) (st : Step most s t
     exact set_inv_between i l (.growing true) this.1 this.2 (Or.inr (Or.inr rfl))
   | shut l h ho =>
     have hpos := i.held_pos l h
-    refine ⟨by simp only [State.reset]; omega, by simp only [State.reset]; omega, i.high_most, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    refine ⟨by simp only [State.reset]; omega, by simp only [State.reset]; omega, i.high_max, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
     · intro m hm
       simp only [State.reset] at hm
       rw [reset_other _ _ _ _ _ _ (by omega)]
@@ -435,7 +435,7 @@ theorem step_inv {most : Nat} {s t : State} (i : Inv most s) (st : Step most s t
     | false =>
       rcases i.growing_false l h with hl | hl
       · exact set_inv i l .free hl (Or.inl rfl)
-      · refine ⟨i.count_pos, i.count_high, i.high_most, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+      · refine ⟨i.count_pos, i.count_high, i.high_max, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
         · intro m hm
           by_cases e : m = l
           · subst e; rw [set_same]; exact Or.inl rfl
@@ -457,22 +457,22 @@ theorem step_inv {most : Nat} {s t : State} (i : Inv most s) (st : Step most s t
               | exact i.growing_true m hm
               | exact i.growing_false m hm
 
-theorem reach_inv (most : Nat) (h : 1 ≤ most) {s : State} (r : Reach most s) : Inv most s := by
+theorem reach_inv (max : Nat) (h : 1 ≤ max) {s : State} (r : Reach max s) : Inv max s := by
   induction r with
-  | rest => exact rest_inv most h
+  | rest => exact rest_inv max h
   | step _ st ih => exact step_inv ih st
 
 /-- In each state that the steps reach, each pass and each held lane is below `open`, and no closed lane is. `open`
 is from 1 to the lane count. So a drain that reads `open` after its fence reads each lane that a pass can hold, and
 no lane below `open` stays closed. -/
-theorem passes_below_open (most : Nat) (h : 1 ≤ most) {s : State} (r : Reach most s) :
+theorem passes_below_open (max : Nat) (h : 1 ≤ max) {s : State} (r : Reach max s) :
     (∀ l, s.lane l = .pass → l < s.count) ∧ (∀ l, s.lane l = .held → l < s.count) ∧
-      (∀ l, s.lane l = .closed → s.count ≤ l) ∧ 1 ≤ s.count ∧ s.count ≤ most := by
-  have i := reach_inv most h r
+      (∀ l, s.lane l = .closed → s.count ≤ l) ∧ 1 ≤ s.count ∧ s.count ≤ max := by
+  have i := reach_inv max h r
   refine ⟨fun l hl => below_open i l (Or.inl hl), fun l hl => below_open i l (Or.inr hl),
     fun l hl => (i.closed_range l hl).1, i.count_pos, ?_⟩
   have := i.count_high
-  have := i.high_most
+  have := i.high_max
   omega
 
 end EmbeddedTypes.Manifold.Open

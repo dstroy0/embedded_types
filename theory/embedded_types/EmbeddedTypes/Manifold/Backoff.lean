@@ -3,7 +3,7 @@ import Std.Tactic.BVDecide
 /-!
 # embedded_types, the backoff of the manifold
 
-A backoff keeps two locals: the nanosecond that `embed_clock_ns` read at its start, and the exponent `k`. No shared
+A backoff retains two locals: the nanosecond that `embed_clock_ns` read at its start, and the exponent `k`. No shared
 word holds a time.
 
 - The unit is 2^s ns, with `EMBED_TURNSTILE_UNIT_SHIFT` as s. That is 10 for a CPU host, about 1.024 µs, and 0 for
@@ -11,11 +11,11 @@ word holds a time.
 
 - While the time since the start is below one unit, a step is a pause alone, with no call to `embed_word_wait`.
 
-- From one unit on, a step waits on the word for at most 2^(s + k) ns. Then k goes up by one, to 20 at most. The
+- From one unit on, a step waits on the word for at max 2^(s + k) ns. Then k goes up by one, to 20 at max. The
   ceiling is 2^30 ns on a CPU host, about 1.07 s, and 2^20 ns on a device, about 1.05 ms. A wake or a moved word ends
   the wait first. So the limit is a ceiling and not a delay.
 
-- k from 0 to 20 fits in 5 bits. The C raises it with `exponent += (exponent < EMBED_TURNSTILE_K_MOST)`, which
+- k from 0 to 20 fits in 5 bits. The C raises it with `exponent += (exponent < EMBED_TURNSTILE_K_MAX)`, which
   `update_is_next` holds to `nextK`, and its shift is below 64 bits (`shift_defined`).
 
 The hosts take the limit in their own unit: a `timespec` for the futex, microseconds for `__ulock_wait`, and
@@ -24,16 +24,16 @@ milliseconds for `WaitOnAddress`. The theorems at the end bound each conversion.
 
 namespace EmbeddedTypes.Manifold.Backoff
 
-/-- The most the exponent reaches. -/
+/-- The max the exponent reaches. -/
 def kMost : Nat := 20
 
-/-- The most the unit shift is: the CPU host's. -/
+/-- The max the unit shift is: the CPU host's. -/
 def shiftMost : Nat := 10
 
 /-- The limit of a wait at exponent k, in ns. -/
 def limitNs (s k : Nat) : Nat := 2 ^ (s + k)
 
-/-- The exponent after a wait: one more, and kMost at most. -/
+/-- The exponent after a wait: one more, and kMost at max. -/
 def nextK (k : Nat) : Nat := if k < kMost then k + 1 else kMost
 
 /-- One step: no call while the time since the start is below one unit, else a wait with the limit of k. -/
@@ -51,7 +51,7 @@ theorem next_bounded (k : Nat) : nextK k ≤ kMost := by
   unfold nextK
   split <;> omega
 
-theorem next_at_most : nextK kMost = kMost := by
+theorem next_at_max : nextK kMost = kMost := by
   simp [nextK]
 
 /-- Below the ceiling, each wait doubles the limit of the next. -/
@@ -67,7 +67,7 @@ theorem after_waits (j : Nat) : Nat.repeat nextK j 0 = min j kMost := by
     simp only [Nat.repeat, ih, nextK, kMost]
     split <;> omega
 
-/-- The C's update, `exponent += (exponent < EMBED_TURNSTILE_K_MOST)`, is `nextK` on each exponent up to kMost. -/
+/-- The C's update, `exponent += (exponent < EMBED_TURNSTILE_K_MAX)`, is `nextK` on each exponent up to kMost. -/
 theorem update_is_next (k : Nat) (h : k ≤ kMost) : k + (if k < kMost then 1 else 0) = nextK k := by
   unfold nextK
   split <;> omega
@@ -115,7 +115,7 @@ theorem elapsed_rolls (start e : BitVec 64) : (start + e) - start = e := by
 /-! ## The hosts' units -/
 
 /-- The futex's `timespec`: the seconds and the rest. The rest is below one second, the two give back the limit, and
-the seconds are 1 at most. -/
+the seconds are 1 at max. -/
 theorem timespec_fits (ns : Nat) (h : ns ≤ 2 ^ 30) :
     ns % 1000000000 < 1000000000 ∧ (ns / 1000000000) * 1000000000 + ns % 1000000000 = ns ∧ ns / 1000000000 ≤ 1 := by
   refine ⟨Nat.mod_lt _ (by decide), ?_, ?_⟩
@@ -130,7 +130,7 @@ theorem microseconds_fit (ns : Nat) (h : ns ≤ 2 ^ 30) : ns / 1000 < 2 ^ 32 := 
   have : (2 : Nat) ^ 32 = 4294967296 := by decide
   omega
 
-/-- `WaitOnAddress` takes milliseconds. The limit rounded up to whole milliseconds is 1074 at most, and a limit of
+/-- `WaitOnAddress` takes milliseconds. The limit rounded up to whole milliseconds is 1074 at max, and a limit of
 one ns or more is one millisecond at least. -/
 theorem milliseconds_fit (ns : Nat) (h : ns ≤ 2 ^ 30) (h1 : 1 ≤ ns) :
     (ns + 999999) / 1000000 ≤ 1074 ∧ 1 ≤ (ns + 999999) / 1000000 := by

@@ -732,7 +732,7 @@
  * @note One pointer costs one register at any arity. A long parameter list fills the registers and
  *       spills the rest onto the stack.
  * @note C sets to zero each member that the initializer does not name. A compound literal in an
- *       argument lives to the end of the block around it. So entry_ can keep the pointer for the full
+ *       argument lives to the end of the block around it. So entry_ can retain the pointer for the full
  *       call.
  * @note Use this macro from C only. No revision of C++ has compound literals. GNU C++ accepts one as
  *       an extension, but its lifetime there ends at the full-expression. That breaks the [BORROWS]

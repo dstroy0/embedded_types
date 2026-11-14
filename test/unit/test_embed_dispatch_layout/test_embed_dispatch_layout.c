@@ -55,7 +55,7 @@ typedef struct
 static embed_index call_probe(const CallProbeArgs *args)
 {
     // The 2u and 4u operands promote the sum to unsigned int. The cast back to embed_index is safe
-    // because every call site passes members of 0 or 1, and the sum is at most 7.
+    // because every call site passes members of 0 or 1, and the sum is at max 7.
     return (embed_index)(args->first + (2u * args->second) + (4u * args->third));
 }
 
@@ -225,7 +225,7 @@ static embed_index recorded_weighted_sum;
 static embed_index entry_probe_backend_weighted_sum(const EntryProbeContext *args)
 {
     // The 2u and 4u operands promote the sum to unsigned int. The cast back to embed_index is safe
-    // because every case passes members of 0 or 1, and the sum is at most 7.
+    // because every case passes members of 0 or 1, and the sum is at max 7.
     return (embed_index)(args->carried_first + (2u * args->carried_second) + (4u * args->omitted_member));
 }
 
@@ -246,7 +246,7 @@ static void entry_probe_backend_record_sum(const EntryProbeContext *args)
  *
  * @param[in] args Configuration the entry forwards to its backend [BORROWS].
  * @return         What entry_probe_backend_weighted_sum computed.
- * @note EMBED_ENTRY emits a definition with external linkage. A consumer keeps this prototype in
+ * @note EMBED_ENTRY emits a definition with external linkage. A consumer retains this prototype in
  *       its public header, and the suite writes it here for the same reason.
  */
 embed_index entry_probe_weighted_sum(const EntryProbeConfig *args);
