@@ -355,8 +355,8 @@ static void lives_in_passes(void)
     for (unsigned int round_index = 0u; round_index < RING_PUSHES; round_index += 1u)
     {
         const embed_u32 ticket = embed_atomic_u32_fetch_add(&s_next_ticket, 1u);
-        // The epoch follows the ticket and not the round, so the check after the run rebuilds each stamp whatever
-        // order the threads took their tickets in
+        // The epoch follows the ticket and not the round. So the check after the run rebuilds each stamp, in each
+        // order of the tickets of the threads
         const embed_word stamp = stamp_of_fields(ticket % RING_PUSHES, ticket);
         embed_word found_stamp = 0u;
 
