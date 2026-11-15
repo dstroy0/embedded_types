@@ -28,6 +28,9 @@ function(embedded_types_add_suite suite_name)
         "${unity_SOURCE_DIR}/src/unity.c")
     add_dependencies(${suite_name} ${suite_name}_runner)
     target_include_directories(${suite_name} PRIVATE "${unity_SOURCE_DIR}/src")
+    # Unity turns off its 64-bit assertions on a target with 32-bit pointers. The suites check 64-bit values on
+    # every target, so each suite turns them on.
+    target_compile_definitions(${suite_name} PRIVATE UNITY_SUPPORT_64)
 
     target_compile_options(${suite_name} PRIVATE ${EMBEDDED_TYPES_TEST_WARNINGS})
     target_link_libraries(${suite_name} PRIVATE embedded_types::embedded_types)
@@ -75,6 +78,8 @@ function(embedded_types_add_device_suite suite_name)
         "${unity_SOURCE_DIR}/src/unity.c")
     add_dependencies(${suite_name} ${suite_name}_runner)
     target_include_directories(${suite_name} PRIVATE "${unity_SOURCE_DIR}/src")
+    # The 64-bit assertions of Unity, as in embedded_types_add_suite
+    target_compile_definitions(${suite_name} PRIVATE UNITY_SUPPORT_64)
 
     target_compile_options(${suite_name} PRIVATE $<$<COMPILE_LANGUAGE:C>:${EMBEDDED_TYPES_TEST_WARNINGS}>)
     target_compile_features(${suite_name} PRIVATE cuda_std_17)

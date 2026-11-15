@@ -12,7 +12,7 @@ This header gives a 32-bit word and a 64-bit word. A host thread, a task on a pa
 
 > **Note:** The switch below selects one of four arms, one time. The first arm is the device atomics of CUDA in a device pass. The second is C11 atomics, where a C compiler has them. The third is the GCC and clang `__atomic` builtins, where C11 atomics are absent or the consumer is C++. The fourth is the interlocked intrinsics under MSVC. Each arm gives a load acquire ordering, a store release ordering, and each read-modify-write both.
 
-> **Note:** There are two widths. Each arm has the 32-bit word, the CUDA atomics among them. The counters and packed boundaries of a host need the 64-bit word. CUDA, C11, the builtins and MSVC on a 64-bit host all have it. [`embed_atomic_word`](#embed_atomic_word) matches the machine word.
+> **Note:** There are two widths. Each arm has the 32-bit word, the CUDA atomics among them. The counters and packed boundaries of a host need the 64-bit word. CUDA, C11, the builtins and MSVC on a 64-bit host all have it. MSVC on a 32-bit host does not, and [`EMBED_ATOMIC_HAS_64`](#EMBED_ATOMIC_HAS_64) is then 0. [`embed_atomic_word`](#embed_atomic_word) matches the machine word.
 
 > **Note:** Every entry carries [`EMBED_HOST_DEVICE`](embed_compiler_directives.md#EMBED_HOST_DEVICE). Under nvcc one definition compiles into the host pass and the device pass, each on its own arm, over the same word in memory.
 
@@ -31,6 +31,7 @@ typedef struct
     volatile embed_u32 value; /**< The word. */
 #endif
 } embed_atomic_u32;
+EMBED_STATIC_ASSERT(sizeof(embed_atomic_u32) == 4u, "embed_atomic_u32 must be one 32-bit word on every arm");
 ```
 
 A 32-bit word every access to which is one indivisible step.
@@ -42,6 +43,7 @@ A 32-bit word every access to which is one indivisible step.
 ### `embed_atomic_u64` { #embed_atomic_u64 }
 
 ```c
+#if EMBED_ATOMIC_HAS_64
 typedef struct
 {
 #if EMBED_ATOMIC_ARM == 2
@@ -50,9 +52,15 @@ typedef struct
     volatile embed_u64 value; /**< The word. */
 #endif
 } embed_atomic_u64;
+EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be one 64-bit word on every arm");
+#else
+#define embed_atomic_u64 embed_atomic_u64_needs_a_target_with_64_bit_atomics
+#endif
 ```
 
-A 64-bit word every access to which is one indivisible step.
+A 64-bit word every access to which is one indivisible step, where [`EMBED_ATOMIC_HAS_64`](#EMBED_ATOMIC_HAS_64) is 1.
+
+The 64-bit word on a target whose arm has none. Each use of the type stops the compile of that file, and the error names the cause.
 
 - `value`: The word.
 
@@ -204,6 +212,20 @@ The plain integer [`embed_atomic_uptr`](#embed_atomic_uptr) holds and its operat
 
 > **Note:** Always defined. Under nvcc the host pass and the device pass each read this header, and each selects its own arm over the same word.
 
+### `EMBED_ATOMIC_HAS_64` { #EMBED_ATOMIC_HAS_64 }
+
+```c
+#if (EMBED_ATOMIC_ARM == 4) && !defined(_M_X64) && !defined(_M_ARM64)
+#define EMBED_ATOMIC_HAS_64 0
+#else
+#define EMBED_ATOMIC_HAS_64 1
+#endif
+```
+
+1 where the arm has a 64-bit atomic word, and 0 where it has none. The MSVC arm has none on a 32-bit target, because MSVC gives the 64-bit interlocked intrinsics only to its 64-bit targets.
+
+> **Note:** Always defined. Test it with `#if`. Where it is 0, the header defines no 64-bit word and no operation on one, as it defines no 16-bit word. The word, the size and the pointer of such a target are 32 bits.
+
 ### `EMBED_ATOMIC_INIT` { #EMBED_ATOMIC_INIT }
 
 ```c
@@ -273,30 +295,32 @@ An atomic word that holds `value_`, for the declaration that makes one.
 #define EMBED_ATOMIC_STORE(atom_, value_) ((atom_)->value = (value_))
 #define EMBED_ATOMIC_EXCHANGE_32(atom_, value_) \
     ((embed_u32)_InterlockedExchange((volatile long *)&(atom_)->value, (long)(value_)))
-#define EMBED_ATOMIC_EXCHANGE_64(atom_, value_) \
-    ((embed_u64)_InterlockedExchange64((volatile __int64 *)&(atom_)->value, (__int64)(value_)))
 #define EMBED_ATOMIC_SWAP_IF_32(atom_, expected_, value_) \
     ((embed_u32)_InterlockedCompareExchange((volatile long *)&(atom_)->value, (long)(value_), (long)(expected_)))
+#define EMBED_ATOMIC_ADD_32(atom_, value_) \
+    ((embed_u32)_InterlockedExchangeAdd((volatile long *)&(atom_)->value, (long)(value_)))
+#define EMBED_ATOMIC_OR_32(atom_, value_) ((embed_u32)_InterlockedOr((volatile long *)&(atom_)->value, (long)(value_)))
+#define EMBED_ATOMIC_AND_32(atom_, value_) \
+    ((embed_u32)_InterlockedAnd((volatile long *)&(atom_)->value, (long)(value_)))
+#if EMBED_ATOMIC_HAS_64
+#define EMBED_ATOMIC_EXCHANGE_64(atom_, value_) \
+    ((embed_u64)_InterlockedExchange64((volatile __int64 *)&(atom_)->value, (__int64)(value_)))
 #define EMBED_ATOMIC_SWAP_IF_64(atom_, expected_, value_) \
     ((embed_u64)_InterlockedCompareExchange64((volatile __int64 *)&(atom_)->value, (__int64)(value_), \
                                               (__int64)(expected_)))
-#define EMBED_ATOMIC_ADD_32(atom_, value_) \
-    ((embed_u32)_InterlockedExchangeAdd((volatile long *)&(atom_)->value, (long)(value_)))
 #define EMBED_ATOMIC_ADD_64(atom_, value_) \
     ((embed_u64)_InterlockedExchangeAdd64((volatile __int64 *)&(atom_)->value, (__int64)(value_)))
-#define EMBED_ATOMIC_OR_32(atom_, value_) ((embed_u32)_InterlockedOr((volatile long *)&(atom_)->value, (long)(value_)))
 #define EMBED_ATOMIC_OR_64(atom_, value_) \
     ((embed_u64)_InterlockedOr64((volatile __int64 *)&(atom_)->value, (__int64)(value_)))
-#define EMBED_ATOMIC_AND_32(atom_, value_) \
-    ((embed_u32)_InterlockedAnd((volatile long *)&(atom_)->value, (long)(value_)))
 #define EMBED_ATOMIC_AND_64(atom_, value_) \
     ((embed_u64)_InterlockedAnd64((volatile __int64 *)&(atom_)->value, (__int64)(value_)))
+#endif
 #endif
 ```
 
 The device arm's load: a volatile read, then a fence, which no later read moves ahead of.
 
-MSVC's intrinsics take a long for 32 bits and an `__int64` for 64; the casts read the same bits as the unsigned words they are. A plain volatile read and write are one step each on the targets MSVC compiles for, and the fences give them their ordering.
+MSVC's intrinsics take a long for 32 bits and an `__int64` for 64; the casts read the same bits as the unsigned words they are. A plain volatile read and write of a 32-bit word are one step each on every target of MSVC. Those of a 64-bit word are one step on its 64-bit targets. The fences give them their ordering.
 
 ### `EMBED_ATOMIC_OPERATIONS` { #EMBED_ATOMIC_OPERATIONS }
 
@@ -385,17 +409,14 @@ Defines the operations over one atomic width. `name_` is the suffix and `type_` 
 ```c
 #if (EMBED_ATOMIC_ARM == 1) || (EMBED_ATOMIC_ARM == 4)
 #define EMBED_ATOMIC_CAS_32(atom_, expected_, value_) embed_atomic_cas_u32(atom_, expected_, value_)
-#define EMBED_ATOMIC_CAS_64(atom_, expected_, value_) embed_atomic_cas_u64(atom_, expected_, value_)
 #elif EMBED_ATOMIC_ARM == 2
 #define EMBED_ATOMIC_CAS_32(atom_, expected_, value_) \
     ((embed_bool)atomic_compare_exchange_strong_explicit(&(atom_)->value, (expected_), (value_), memory_order_acq_rel, \
                                                          memory_order_acquire))
-#define EMBED_ATOMIC_CAS_64(atom_, expected_, value_) EMBED_ATOMIC_CAS_32(atom_, expected_, value_)
 #else
 #define EMBED_ATOMIC_CAS_32(atom_, expected_, value_) \
     ((embed_bool)__atomic_compare_exchange_n(&(atom_)->value, (expected_), (value_), 0, __ATOMIC_ACQ_REL, \
                                              __ATOMIC_ACQUIRE))
-#define EMBED_ATOMIC_CAS_64(atom_, expected_, value_) EMBED_ATOMIC_CAS_32(atom_, expected_, value_)
 #endif
 ```
 
@@ -409,7 +430,9 @@ The swap occurred where that word is the expected word. Otherwise, \*expected ta
 
 ```c
 EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_load(const embed_atomic_u32 *atom);
+#if EMBED_ATOMIC_HAS_64
 EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_load(const embed_atomic_u64 *atom);
+#endif
 ```
 
 The word, with acquire ordering: no later read moves ahead of it.
@@ -418,7 +441,9 @@ The word, with acquire ordering: no later read moves ahead of it.
 
 ```c
 EMBED_HOST_DEVICE EMBED_INLINE void embed_atomic_u32_store(embed_atomic_u32 *atom, embed_u32 value);
+#if EMBED_ATOMIC_HAS_64
 EMBED_HOST_DEVICE EMBED_INLINE void embed_atomic_u64_store(embed_atomic_u64 *atom, embed_u64 value);
+#endif
 ```
 
 The word set to value, with release ordering: every earlier write is out before it.
@@ -427,7 +452,9 @@ The word set to value, with release ordering: every earlier write is out before 
 
 ```c
 EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_exchange(embed_atomic_u32 *atom, embed_u32 value);
+#if EMBED_ATOMIC_HAS_64
 EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_exchange(embed_atomic_u64 *atom, embed_u64 value);
+#endif
 ```
 
 The word set to value, and the word before.
@@ -436,7 +463,9 @@ The word set to value, and the word before.
 
 ```c
 EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_u32_swap_if(embed_atomic_u32 *atom, embed_u32 *expected, embed_u32 value);
+#if EMBED_ATOMIC_HAS_64
 EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_u64_swap_if(embed_atomic_u64 *atom, embed_u64 *expected, embed_u64 value);
+#endif
 ```
 
 The word set to value where it holds \*expected, else \*expected set to what it holds.
@@ -445,7 +474,9 @@ The word set to value where it holds \*expected, else \*expected set to what it 
 
 ```c
 EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_add(embed_atomic_u32 *atom, embed_u32 value);
+#if EMBED_ATOMIC_HAS_64
 EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_add(embed_atomic_u64 *atom, embed_u64 value);
+#endif
 ```
 
 value added to the word, with wrap around, and the word before the add.
@@ -454,7 +485,9 @@ value added to the word, with wrap around, and the word before the add.
 
 ```c
 EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_sub(embed_atomic_u32 *atom, embed_u32 value);
+#if EMBED_ATOMIC_HAS_64
 EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_sub(embed_atomic_u64 *atom, embed_u64 value);
+#endif
 ```
 
 value taken from the word, with wrap around, and the word before the subtract.
@@ -463,7 +496,9 @@ value taken from the word, with wrap around, and the word before the subtract.
 
 ```c
 EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_or(embed_atomic_u32 *atom, embed_u32 value);
+#if EMBED_ATOMIC_HAS_64
 EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_or(embed_atomic_u64 *atom, embed_u64 value);
+#endif
 ```
 
 The word ored with value, and the word before the or.
@@ -472,7 +507,9 @@ The word ored with value, and the word before the or.
 
 ```c
 EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_and(embed_atomic_u32 *atom, embed_u32 value);
+#if EMBED_ATOMIC_HAS_64
 EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_and(embed_atomic_u64 *atom, embed_u64 value);
+#endif
 ```
 
 The word anded with value, and the word before the and.
@@ -481,7 +518,9 @@ The word anded with value, and the word before the and.
 
 ```c
 EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_raise(embed_atomic_u32 *atom, embed_u32 value);
+#if EMBED_ATOMIC_HAS_64
 EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_raise(embed_atomic_u64 *atom, embed_u64 value);
+#endif
 ```
 
 The word raised to value where value is above it, by a swap, and the word before.

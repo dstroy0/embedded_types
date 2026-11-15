@@ -1,0 +1,61 @@
+# embedded_types - Copyright (C) 2026 Douglas Quigg (dstroy0) <dquigg123@gmail.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later OR LicenseRef-Commercial OR LicenseRef-Educational
+#
+# The SonarCloud analysis of the headers, with the coverage of the suites.
+#
+# The scanner analyzes C only with the command that compiled each translation unit. The build wrapper records each
+# command while the build runs, and the scanner reads that record. With no record, the scan analyzes no C file.
+#
+# Coverage comes from gcov. test/harness.py coverage builds build-cov with --coverage, runs the suites, and writes
+# build-cov/coverage.xml with gcovr. The counters exist only after the suites run, so the scan comes after them.
+# The flag --gaps names each line and each branch of include/ that no suite reached, and a gap fails the job.
+#
+# The scan needs the SONAR_TOKEN secret, and the automatic analysis of SonarCloud off for this project.
+
+name: SonarQube
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # A shallow clone has no blame, and the scan then cannot tell which findings are new
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # requirements-coverage.txt locks gcovr and the hash of each file under it. pip installs wheels alone, so no
+      # setup script of a package runs.
+      - name: Install gcovr
+        run: python -m pip install --require-hashes --only-binary :all: -r requirements-coverage.txt
+
+      - name: Install the build wrapper
+        uses: SonarSource/sonarqube-scan-action/install-build-wrapper@e805d875275f728fac1885b413934be6d7c63f65 # v8
+
+      # The suites are a gate too: a suite that fails stops the job before it reports the coverage of a broken build
+      - name: Build, test and report the coverage
+        run: build-wrapper-linux-x86-64 --out-dir bw-output python test/harness.py coverage --gaps --jobs 4
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

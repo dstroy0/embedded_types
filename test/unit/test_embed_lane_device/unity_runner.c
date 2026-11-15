@@ -73,13 +73,13 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/src/cu/includes/embedded_types/test/unit/test_embed_lane_device\\test_embed_lane_device.c");
-  run_test(test_the_device_lane_is_a_threads_eight_registers, "test_the_device_lane_is_a_threads_eight_registers", 72);
-  run_test(test_the_device_copies_a_span_byte_for_byte, "test_the_device_copies_a_span_byte_for_byte", 80);
-  run_test(test_the_device_fills_every_byte_of_a_span, "test_the_device_fills_every_byte_of_a_span", 92);
-  run_test(test_the_device_divides_by_255_exactly_in_every_lane, "test_the_device_divides_by_255_exactly_in_every_lane", 103);
-  run_test(test_the_device_logic_and_arithmetic_match_the_scalar, "test_the_device_logic_and_arithmetic_match_the_scalar", 127);
-  run_test(test_the_device_byte_masks_match_the_byte_loop, "test_the_device_byte_masks_match_the_byte_loop", 160);
+  UnityBegin("test/unit/test_embed_lane_device\\test_embed_lane_device.c");
+  run_test(test_the_device_lane_is_a_threads_eight_registers, "test_the_device_lane_is_a_threads_eight_registers", 73);
+  run_test(test_the_device_copies_a_span_byte_for_byte, "test_the_device_copies_a_span_byte_for_byte", 81);
+  run_test(test_the_device_fills_every_byte_of_a_span, "test_the_device_fills_every_byte_of_a_span", 93);
+  run_test(test_the_device_divides_by_255_exactly_in_every_lane, "test_the_device_divides_by_255_exactly_in_every_lane", 104);
+  run_test(test_the_device_logic_and_arithmetic_match_the_scalar, "test_the_device_logic_and_arithmetic_match_the_scalar", 130);
+  run_test(test_the_device_byte_masks_match_the_byte_loop, "test_the_device_byte_masks_match_the_byte_loop", 164);
 
   return UNITY_END();
 }

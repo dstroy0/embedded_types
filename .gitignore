@@ -25,6 +25,7 @@ theory/papers/*/main.out
 
 .scannerwork/
 bw-output/
+coverage.xml
 
 __pycache__/
 *.py[cod]

@@ -167,7 +167,8 @@ void test_add_sub_and_mul_of_32_bit_lanes_wrap_as_the_scalar_does(void)
         const embed_u32 step = (at + 1u) * 0x01000003u;
         TEST_ASSERT_EQUAL_UINT32_MESSAGE(0xfffffff0u + step, u32_of(embed_lane_add_u32(one, other), at), "add wraps");
         TEST_ASSERT_EQUAL_UINT32_MESSAGE(0xfffffff0u - step, u32_of(embed_lane_sub_u32(one, other), at), "sub wraps");
-        TEST_ASSERT_EQUAL_UINT32_MESSAGE(0xfffffff0u * step, u32_of(embed_lane_mul_u32(one, other), at), "mul retains the low 32 bits");
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(0xfffffff0u * step, u32_of(embed_lane_mul_u32(one, other), at),               \
+                                         "mul retains the low 32 bits");
     }
 }
 
@@ -178,7 +179,8 @@ void test_shifts_move_each_32_bit_lane_alone(void)
     {
         TEST_ASSERT_EQUAL_UINT32_MESSAGE(0x80ff00ffu >> 8u, u32_of(embed_lane_shift_right_u32(lane, 8u), at),
                                          "a right shift stays in its lane");
-        TEST_ASSERT_EQUAL_UINT32_MESSAGE((embed_u32)(0x80ff00ffu << 8u), u32_of(embed_lane_shift_left_u32(lane, 8u), at),
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE((embed_u32)(0x80ff00ffu << 8u),                                               \
+                                         u32_of(embed_lane_shift_left_u32(lane, 8u), at),                              \
                                          "a left shift stays in its lane");
     }
 }
@@ -195,23 +197,27 @@ void test_the_byte_masks_answer_one_bit_a_byte_lowest_first(void)
     const embed_lane_mask equal = embed_lane_bytes_equal(embed_lane_load(s_bytes), embed_lane_load(changed));
     TEST_ASSERT_EQUAL_HEX64_MESSAGE((embed_u64)EMBED_LANE_MASK_ALL & ~(bit_of(0u) | bit_of(3u) | bit_of(last)),
                                     (embed_u64)equal, "the bytes changed are the bits clear");
-    TEST_ASSERT_EQUAL_HEX64_MESSAGE((embed_u64)EMBED_LANE_MASK_ALL,
-                                    (embed_u64)embed_lane_bytes_equal(embed_lane_load(s_bytes), embed_lane_load(s_bytes)),
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE((embed_u64)EMBED_LANE_MASK_ALL,                                                    \
+                                    (embed_u64)embed_lane_bytes_equal(embed_lane_load(s_bytes),                        \
+                                                                      embed_lane_load(s_bytes)),                       \
                                     "equal lanes set every byte");
     embed_u8 zeros[EMBED_LANE_BYTES];
     bytes_set(zeros, sizeof(zeros), 1u);
     zeros[2] = 0u;
     zeros[middle] = 0u;
-    TEST_ASSERT_EQUAL_HEX64_MESSAGE(bit_of(2u) | bit_of(middle), (embed_u64)embed_lane_bytes_zero(embed_lane_load(zeros)),
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(bit_of(2u) | bit_of(middle),                                                       \
+                                    (embed_u64)embed_lane_bytes_zero(embed_lane_load(zeros)),                          \
                                     "the zero bytes are the bits set");
 }
 
 void test_the_first_byte_of_a_mask_is_the_lowest_bit_set(void)
 {
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, embed_lane_mask_first(EMBED_LANE_MASK_ALL), "every byte set starts at the first");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, embed_lane_mask_first(EMBED_LANE_MASK_ALL),                                   \
+                                     "every byte set starts at the first");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(2u, embed_lane_mask_first((embed_lane_mask)(bit_of(2u) | bit_of(3u))),
                                      "the lowest of two bits");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(EMBED_LANE_BYTES - 1u, embed_lane_mask_first((embed_lane_mask)bit_of(EMBED_LANE_BYTES - 1u)),
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(EMBED_LANE_BYTES - 1u,                                                            \
+                                     embed_lane_mask_first((embed_lane_mask)bit_of(EMBED_LANE_BYTES - 1u)),            \
                                      "the last byte alone");
 }
 
@@ -229,10 +235,12 @@ void test_the_exact_divide_by_255_holds_in_every_lane_over_every_product(void)
                 u32_put(products + (4u * at), (a * (b + at)) + 128u);
             }
             const embed_lane x = embed_lane_load(products);
-            const embed_lane divided = embed_lane_shift_right_u32(embed_lane_add_u32(x, embed_lane_shift_right_u32(x, 8u)), 8u);
+            const embed_lane divided =
+                embed_lane_shift_right_u32(embed_lane_add_u32(x, embed_lane_shift_right_u32(x, 8u)), 8u);
             for (unsigned int at = 0u; at < EMBED_LANE_U32S; at += 1u)
             {
-                TEST_ASSERT_EQUAL_UINT32_MESSAGE(((a * (b + at)) + 127u) / 255u, u32_of(divided, at), "the divide is exact");
+                TEST_ASSERT_EQUAL_UINT32_MESSAGE(((a * (b + at)) + 127u) / 255u, u32_of(divided, at),                  \
+                                                 "the divide is exact");
             }
         }
     }

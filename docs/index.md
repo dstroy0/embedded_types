@@ -38,12 +38,14 @@ The word is [`embed_word`](api/embed_types.md#embed_word), the register that eac
 | [`embed_types.h`](api/embed_types.md)                             | the widths, the boolean, the word, the index, the raw word, and their assertions |
 | [`embed_compiler_directives.h`](api/embed_compiler_directives.md) | the compiler directives, feature checks, the static assertion, attribute wrappers and diagnostic pragmas; and the platform directives, the byte order, the unaligned load, the widest vector register and the host and device marker |
 | [`embed_dispatch_layout.h`](api/embed_dispatch_layout.md)         | `EMBED_TABLE_LAYOUT`, `EMBED_CALL`, `EMBED_ENTRY`, and the macros behind them    |
-| [`embed_atomic.h`](api/embed_atomic.md)                           | the atomic types: a 32-bit word and a 64-bit word for host, part and GPU threads, on the arm of the target |
+| [`embed_atomic.h`](api/embed_atomic.md)                           | the atomic types for host, part and GPU threads, on the arm of the target: a 32-bit word on each target, and a 64-bit word where the target has one |
 | [`embed_turnstile.h`](api/embed_turnstile.md)                     | the thread scheduler: turnstiles that readers pass through and that a writer drains, with a backoff and the sleep on the address of a word |
 | [`embed_ticket_ring.h`](api/embed_ticket_ring.md)                 | the ticket ring: a ring of job slots that a ticket indexes, with a push and a pop inside a pass through a turnstile |
 | [`embed_lane.h`](api/embed_lane.md)                               | the lane, its loads, fills, arithmetic and byte masks                            |
 
 No header allocates memory or runs code at startup. The first three include only `stddef.h` and `stdint.h`. Each entry of the atomics and the lane has `EMBED_HOST_DEVICE`, so a kernel calls the same functions that a host walk calls.
+
+[The ABI](abi.md) states the types, the host hooks of the turnstile and the stamp of the ticket ring. It also states each value that follows the width of the word, and each macro that a build can set.
 
 ## A first use
 

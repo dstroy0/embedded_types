@@ -30,7 +30,9 @@
 #define ATOMIC_SLOTS 256u
 
 static embed_atomic_u32 s_count32 = EMBED_ATOMIC_INIT(0u);
+#if EMBED_ATOMIC_HAS_64
 static embed_atomic_u64 s_count64 = EMBED_ATOMIC_INIT(0u);
+#endif
 static embed_atomic_u32 s_next_id = EMBED_ATOMIC_INIT(0u);
 static embed_atomic_u32 s_slots[ATOMIC_SLOTS];
 static embed_atomic_u32 s_claimed[ATOMIC_THREADS];
@@ -51,7 +53,9 @@ static embed_atomic_u32 s_order_both_missed = EMBED_ATOMIC_INIT(0u);
 void setUp(void)
 {
     embed_atomic_u32_store(&s_count32, 0u);
+#if EMBED_ATOMIC_HAS_64
     embed_atomic_u64_store(&s_count64, 0u);
+#endif
     embed_atomic_u32_store(&s_next_id, 0u);
     embed_atomic_u32_store(&s_high, 0u);
     for (embed_u32 at = 0u; at < ATOMIC_SLOTS; at += 1u)
@@ -76,9 +80,38 @@ static void atomic_count_rounds(void)
     for (embed_u32 step = 0u; step < ATOMIC_ROUNDS; step += 1u)
     {
         (void)embed_atomic_u32_fetch_add(&s_count32, 1u);
+#if EMBED_ATOMIC_HAS_64
         (void)embed_atomic_u64_fetch_add(&s_count64, 3u);
+#endif
     }
     (void)embed_atomic_u32_raise(&s_high, id);
+}
+
+/** @brief The raises each thread makes in the raise case. */
+#define ATOMIC_RAISES 100000u
+
+static embed_atomic_u32 s_raised32 = EMBED_ATOMIC_INIT(0u);
+#if EMBED_ATOMIC_HAS_64
+static embed_atomic_u64 s_raised64 = EMBED_ATOMIC_INIT(0u);
+#endif
+
+/**
+ * @brief One thread of the raise case: ATOMIC_RAISES raises on each width, each value above the one before. The
+ *        values of the threads interleave, so a raise often finds that another thread wrote between its load and its
+ *        swap.
+ *        The swap then fails, and the raise tries again over the word it found.
+ */
+static void atomic_raise_rounds(void)
+{
+    const embed_u32 id = embed_atomic_u32_fetch_add(&s_next_id, 1u) + 1u;
+    for (embed_u32 step = 1u; step <= ATOMIC_RAISES; step += 1u)
+    {
+        const embed_u32 value = (step * ATOMIC_THREADS) + id;
+        (void)embed_atomic_u32_raise(&s_raised32, value);
+#if EMBED_ATOMIC_HAS_64
+        (void)embed_atomic_u64_raise(&s_raised64, value);
+#endif
+    }
 }
 
 /** @brief One thread of the claim case: it tries every place once, and a swap from 0 to its id takes a place. */
@@ -100,26 +133,33 @@ static void atomic_claim_slots(void)
 void test_a_word_declared_holds_its_value_and_is_one_word_wide(void)
 {
     embed_atomic_u32 word = EMBED_ATOMIC_INIT(7u);
-    embed_atomic_u64 wide = EMBED_ATOMIC_INIT(9u);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(7u, embed_atomic_u32_load(&word), "a 32-bit word holds what it was declared with");
-    TEST_ASSERT_EQUAL_UINT64_MESSAGE(9u, embed_atomic_u64_load(&wide), "a 64-bit word holds what it was declared with");
     TEST_ASSERT_EQUAL_size_t_MESSAGE(4u, sizeof(embed_atomic_u32), "the 32-bit word is four bytes");
+    TEST_ASSERT_EQUAL_size_t_MESSAGE(sizeof(embed_word), sizeof(embed_atomic_word),                                    \
+                                     "the atomic word is the machine word's width");
+#if EMBED_ATOMIC_HAS_64
+    embed_atomic_u64 wide = EMBED_ATOMIC_INIT(9u);
+    TEST_ASSERT_EQUAL_UINT64_MESSAGE(9u, embed_atomic_u64_load(&wide), "a 64-bit word holds what it was declared with");
     TEST_ASSERT_EQUAL_size_t_MESSAGE(8u, sizeof(embed_atomic_u64), "the 64-bit word is eight bytes");
-    TEST_ASSERT_EQUAL_size_t_MESSAGE(sizeof(embed_word), sizeof(embed_atomic_word), "the atomic word is the machine word's width");
+#endif
 }
 
 void test_store_load_and_exchange_round_trip(void)
 {
     embed_atomic_u32 word = EMBED_ATOMIC_INIT(0u);
-    embed_atomic_u64 wide = EMBED_ATOMIC_INIT(0u);
     embed_atomic_u32_store(&word, 0x1234u);
-    embed_atomic_u64_store(&wide, 0x123456789abcdef0u);
     TEST_ASSERT_EQUAL_HEX32_MESSAGE(0x1234u, embed_atomic_u32_load(&word), "a store is read back");
-    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x123456789abcdef0u, embed_atomic_u64_load(&wide), "a wide store is read back");
-    TEST_ASSERT_EQUAL_HEX32_MESSAGE(0x1234u, embed_atomic_u32_exchange(&word, 0x55u), "an exchange answers the word before");
+    TEST_ASSERT_EQUAL_HEX32_MESSAGE(0x1234u, embed_atomic_u32_exchange(&word, 0x55u),                                  \
+                                    "an exchange answers the word before");
     TEST_ASSERT_EQUAL_HEX32_MESSAGE(0x55u, embed_atomic_u32_load(&word), "and leaves the word given");
-    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x123456789abcdef0u, embed_atomic_u64_exchange(&wide, 0x66u), "a wide exchange answers the word before");
+#if EMBED_ATOMIC_HAS_64
+    embed_atomic_u64 wide = EMBED_ATOMIC_INIT(0u);
+    embed_atomic_u64_store(&wide, 0x123456789abcdef0u);
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x123456789abcdef0u, embed_atomic_u64_load(&wide), "a wide store is read back");
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x123456789abcdef0u, embed_atomic_u64_exchange(&wide, 0x66u),                      \
+                                    "a wide exchange answers the word before");
     TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x66u, embed_atomic_u64_load(&wide), "and leaves the word given");
+#endif
 }
 
 void test_swap_if_takes_the_expected_word_alone(void)
@@ -132,11 +172,14 @@ void test_swap_if_takes_the_expected_word_alone(void)
     TEST_ASSERT_TRUE_MESSAGE(embed_atomic_u32_swap_if(&word, &expected, 9u), "the right expectation swaps");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(5u, expected, "and the expectation is the word that was there");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(9u, embed_atomic_u32_load(&word), "the word is the one given");
+#if EMBED_ATOMIC_HAS_64
     embed_atomic_u64 wide = EMBED_ATOMIC_INIT(5u);
     embed_u64 wide_expected = 5u;
-    TEST_ASSERT_TRUE_MESSAGE(embed_atomic_u64_swap_if(&wide, &wide_expected, 1u), "the wide swap takes the expected word");
+    TEST_ASSERT_TRUE_MESSAGE(embed_atomic_u64_swap_if(&wide, &wide_expected, 1u),                                      \
+                             "the wide swap takes the expected word");
     TEST_ASSERT_FALSE_MESSAGE(embed_atomic_u64_swap_if(&wide, &wide_expected, 2u), "and refuses a stale one");
     TEST_ASSERT_EQUAL_UINT64_MESSAGE(1u, wide_expected, "handing back the word found");
+#endif
 }
 
 void test_the_fetch_operations_answer_the_word_before_and_wrap(void)
@@ -146,27 +189,33 @@ void test_the_fetch_operations_answer_the_word_before_and_wrap(void)
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(15u, embed_atomic_u32_fetch_sub(&word, 15u), "sub answers the word before");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, embed_atomic_u32_fetch_sub(&word, 1u), "sub below zero wraps");
     TEST_ASSERT_EQUAL_HEX32_MESSAGE(0xffffffffu, embed_atomic_u32_load(&word), "to every bit set");
-    TEST_ASSERT_EQUAL_HEX32_MESSAGE(0xffffffffu, embed_atomic_u32_fetch_and(&word, 0xff00u), "and answers the word before");
+    TEST_ASSERT_EQUAL_HEX32_MESSAGE(0xffffffffu, embed_atomic_u32_fetch_and(&word, 0xff00u),                           \
+                                    "and answers the word before");
     TEST_ASSERT_EQUAL_HEX32_MESSAGE(0xff00u, embed_atomic_u32_fetch_or(&word, 0x0fu), "or answers the word before");
     TEST_ASSERT_EQUAL_HEX32_MESSAGE(0xff0fu, embed_atomic_u32_load(&word), "and leaves the bits combined");
+#if EMBED_ATOMIC_HAS_64
     embed_atomic_u64 wide = EMBED_ATOMIC_INIT(0u);
     TEST_ASSERT_EQUAL_UINT64_MESSAGE(0u, embed_atomic_u64_fetch_sub(&wide, 1u), "a wide sub below zero wraps");
     TEST_ASSERT_EQUAL_HEX64_MESSAGE(0xffffffffffffffffu, embed_atomic_u64_fetch_and(&wide, 0xf0u), "to every bit set");
     TEST_ASSERT_EQUAL_HEX64_MESSAGE(0xf0u, embed_atomic_u64_fetch_or(&wide, 0x0fu), "and the mask stays");
     TEST_ASSERT_EQUAL_HEX64_MESSAGE(0xffu, embed_atomic_u64_fetch_add(&wide, 1u), "or combined the bits");
+#endif
 }
 
 void test_raise_moves_the_word_up_and_never_down(void)
 {
     embed_atomic_u32 word = EMBED_ATOMIC_INIT(10u);
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(10u, embed_atomic_u32_raise(&word, 4u), "a lower value answers the word and leaves it");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(10u, embed_atomic_u32_raise(&word, 4u),                                           \
+                                     "a lower value answers the word and leaves it");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(10u, embed_atomic_u32_load(&word), "the word is");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(10u, embed_atomic_u32_raise(&word, 12u), "a higher value answers the word before");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(12u, embed_atomic_u32_load(&word), "and raises it");
+#if EMBED_ATOMIC_HAS_64
     embed_atomic_u64 wide = EMBED_ATOMIC_INIT(3u);
     TEST_ASSERT_EQUAL_UINT64_MESSAGE(3u, embed_atomic_u64_raise(&wide, 3u), "an equal value leaves the word");
     TEST_ASSERT_EQUAL_UINT64_MESSAGE(3u, embed_atomic_u64_raise(&wide, 30u), "a higher one raises it");
     TEST_ASSERT_EQUAL_UINT64_MESSAGE(30u, embed_atomic_u64_load(&wide), "to the value given");
+#endif
 }
 
 /** @brief Arrives at a gate and waits for the other thread to, so that both leave it together. */
@@ -212,9 +261,23 @@ void test_contending_threads_lose_no_add_and_raise_to_the_highest(void)
     TEST_ASSERT_TRUE_MESSAGE(host_threads_run(atomic_count_rounds, ATOMIC_THREADS), "every thread started");
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(ATOMIC_THREADS * ATOMIC_ROUNDS, embed_atomic_u32_load(&s_count32),
                                      "every add to the 32-bit counter is counted");
+#if EMBED_ATOMIC_HAS_64
     TEST_ASSERT_EQUAL_UINT64_MESSAGE((embed_u64)ATOMIC_THREADS * ATOMIC_ROUNDS * 3u, embed_atomic_u64_load(&s_count64),
                                      "every add to the 64-bit counter is counted");
+#endif
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(ATOMIC_THREADS, embed_atomic_u32_load(&s_high), "the raise holds the highest id");
+}
+
+void test_contending_raises_end_at_the_highest_value_of_any_thread(void)
+{
+    TEST_ASSERT_TRUE_MESSAGE(host_threads_run(atomic_raise_rounds, ATOMIC_THREADS), "every thread started");
+    // The highest value is the last raise of the thread with the highest id
+    const embed_u32 highest = (ATOMIC_RAISES * ATOMIC_THREADS) + ATOMIC_THREADS;
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(highest, embed_atomic_u32_load(&s_raised32), "the 32-bit word holds the highest");
+#if EMBED_ATOMIC_HAS_64
+    TEST_ASSERT_EQUAL_UINT64_MESSAGE(highest, embed_atomic_u64_load(&s_raised64), "the 64-bit word holds the highest");
+#endif
 }
 
 void test_contending_threads_claim_each_slot_once(void)

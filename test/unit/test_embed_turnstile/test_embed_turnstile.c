@@ -366,6 +366,61 @@ void test_a_crowd_grows_the_set_to_its_pressure_and_no_lane_stays_busy(void)
     }
 }
 
+static EmbedTurnstiles s_full_set;
+static unsigned int s_full_places[EMBED_TURNSTILE_LANES];
+static embed_atomic_u32 s_full_mark = EMBED_ATOMIC_INIT(0u);
+static embed_atomic_u32 s_late_place = EMBED_ATOMIC_INIT(0u);
+
+/**
+ * @brief Thread 0 takes every lane, and frees lane 0 after thread 1 joins the queue. Thread 1 enters the full set
+ *        from the address of lane 0. It finds no lane to grow to, backs off on lane 0, and takes it after the free.
+ */
+static void full_set_and_late_entry(void)
+{
+    if (thread_id() == 0u)
+    {
+        for (unsigned int lane = 0u; lane < EMBED_TURNSTILE_LANES; lane += 1u)
+        {
+            s_full_places[lane] = embed_turnstile_enter(&s_full_set, address_of_lane(0u));
+        }
+        embed_atomic_u32_store(&s_full_mark, 1u);
+        // The queue holds thread 1 after it found every open lane busy, and its growth then reads the full count
+        if (flag_wait(&s_full_set.queue_length, 1u))
+        {
+            embed_turnstile_leave(&s_full_set, s_full_places[0]);
+            (void)flag_wait(&s_full_set.queue_length, 0u);
+        }
+        for (unsigned int lane = 1u; lane < EMBED_TURNSTILE_LANES; lane += 1u)
+        {
+            embed_turnstile_leave(&s_full_set, s_full_places[lane]);
+        }
+        return;
+    }
+    if (!flag_wait(&s_full_mark, 1u))
+    {
+        return;
+    }
+    const unsigned int place = embed_turnstile_enter(&s_full_set, address_of_lane(0u));
+
+    // Explicit cast converts the place, below EMBED_TURNSTILE_LANES, to the width of the mark, offset by one
+    embed_atomic_u32_store(&s_late_place, (embed_u32)place + 1u);
+    embed_turnstile_leave(&s_full_set, place);
+}
+
+void test_an_entry_on_a_set_with_every_lane_open_and_busy_waits_for_a_lane_to_free(void)
+{
+    TEST_ASSERT_TRUE_MESSAGE(host_threads_run(full_set_and_late_entry, 2u), "both threads started");
+    for (unsigned int lane = 0u; lane < EMBED_TURNSTILE_LANES; lane += 1u)
+    {
+        TEST_ASSERT_EQUAL_UINT(lane, s_full_places[lane]);
+    }
+    // The late entry took lane 0, the lane that the free gave back
+    TEST_ASSERT_EQUAL_UINT32(1u, embed_atomic_u32_load(&s_late_place));
+    TEST_ASSERT_EQUAL_UINT32(0u, embed_atomic_u32_load(&s_full_set.queue_length));
+    TEST_ASSERT_EQUAL_UINT(1u, embed_turnstile_open_lane_count(&s_full_set));
+    TEST_ASSERT_EQUAL_UINT64(0u, lane_word(&s_full_set, 0u) & EMBED_TURNSTILE_BUSY_BIT);
+}
+
 /** @brief A record a writer publishes: 1 while published or a pass may still read it, 0 once the writer released it. */
 typedef struct
 {

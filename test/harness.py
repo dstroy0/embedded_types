@@ -8,6 +8,7 @@
 
   harness.py build [--tree T]                 configure if needed, then build
   harness.py test [--tree T] [--filter RE]    build, then run the suites
+  harness.py coverage [--gaps]                build-cov, its suites, and what of include/ they reached
   harness.py suites [--strict]                every suite, its cases, and what will never run
   harness.py cases <dir>...                   what Unity will register, and what it will walk past
   harness.py runners gen <dir>... --unity <rb>   write <dir>/unity_runner.c
@@ -15,13 +16,14 @@
   harness.py prove [--client C] [--model M]   each GenMC client under test/prove, under each memory model
   harness.py site [--serve]                   the site built into build/site, as the docs workflow builds it
 
-There are four build trees. Each carries its own flags here, and a run of one takes no remembered
+There are five build trees. Each carries its own flags here, and a run of one takes no remembered
 shell invocation:
 
   build          the library, as it ships
   build-werror   the same, with EMBEDDED_TYPES_WERROR on
   build-tsan     the same, under the thread sanitizer, with GCC or Clang
   build-asan     the same, under the address and undefined behavior sanitizers, with GCC or Clang
+  build-cov      the same, instrumented for gcov, with GCC, which `coverage` builds and reports on
 
 The second one matters because this library is headers that a consumer compiles inside its own
 translation unit. A warning from the headers appears in the build of the consumer, against the file
@@ -51,6 +53,7 @@ The mechanisms here are generic. The paths and the two build trees are this proj
 
 import argparse
 import glob
+import json
 import os
 import re
 import shlex
@@ -257,6 +260,16 @@ TREES = {
         "args": ["-DCMAKE_C_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g",
                  "-DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined"],
     },
+    "build-cov": {
+        "what": "instrumented for gcov, with always_inline off",
+        # --coverage on the compile and the link. The atomic update retains each count exact under the threads
+        # of the suites. test/support/coverage_inline.h gives each header function one body in each unit.
+        "args": [
+            "-DCMAKE_C_FLAGS=--coverage -fprofile-update=atomic -O0 -g -include "
+            + os.path.join(ROOT, "test", "support", "coverage_inline.h"),
+            "-DCMAKE_EXE_LINKER_FLAGS=--coverage",
+        ],
+    },
 }
 
 
@@ -392,6 +405,124 @@ def cmd_test(parsed):
     return 1 if ctest(parsed.tree, parsed.filter) != 0 else 0
 
 
+def cmd_coverage(parsed):
+    """Build build-cov, run its suites, and report what of include/ they reached.
+
+    The counters carry a stamp from the notes file beside them at build time. The counters of the last run go after
+    the build and before the run, so a report always describes the binaries that produced it. gcovr reads the
+    counters, and --sonarqube writes the report that the scan reads, coverage.xml in the tree.
+    """
+    tree = "build-cov"
+    if not parsed.no_build and build(tree, parsed.jobs) != 0:
+        return 1
+    if not parsed.no_run and coverage_run(tree) != 0:
+        return 1
+    report_json = os.path.join(tree_path(tree), "coverage.json")
+    # No --exclude-unreachable-branches. That option drops the branches that gcovr reads as unreachable from the
+    # source. Each branch of the compiler's records stays in the count, and a reader rules on each one.
+    completed = run([
+        sys.executable, "-m", "gcovr", "--root", ".", "--filter", "include/",
+        "--print-summary", "--sonarqube", os.path.join(tree_path(tree), "coverage.xml"), "--json", report_json,
+        tree_path(tree),
+    ])
+    if completed.returncode != 0:
+        sys.stderr.write(completed.stderr[-4000:])
+        print("gcovr failed")
+        return 1
+    for line in (completed.stdout + completed.stderr).splitlines():
+        if line.startswith(("lines:", "functions:", "branches:")):
+            print("  " + line)
+    return report_gaps(report_json) if parsed.gaps else 0
+
+
+def coverage_run(tree):
+    """The counters of the last run of @p tree removed, then its suites run. Returns the result of ctest."""
+    stale = []
+    for base, _dirs, files in os.walk(tree_path(tree)):
+        stale += [os.path.join(base, name) for name in files if name.endswith(".gcda")]
+    for name in stale:
+        os.unlink(name)
+    print("cleared %d counter files" % len(stale))
+    return ctest(tree, None)
+
+
+def line_runs(numbers):
+    """The sorted line numbers as (first, last) runs, so a function that no case calls prints as one range."""
+    runs = []
+    for number in numbers:
+        if runs and number == runs[-1][1] + 1:
+            runs[-1] = (runs[-1][0], number)
+        else:
+            runs.append((number, number))
+    return runs
+
+
+def source_line(path, number):
+    """Line @p number of @p path, for a report that names a gap and shows it."""
+    try:
+        with open(os.path.join(ROOT, path), encoding="utf-8", errors="replace") as fh:
+            for index, line in enumerate(fh, 1):
+                if index == number:
+                    return line.strip()
+    except OSError:
+        pass
+    return "<unavailable>"
+
+
+def report_gaps(report_json):
+    """Name each line and each branch of include/ that no suite reached, with its source.
+
+    The JSON of gcovr has one entry for each line in each translation unit that compiled it. Each suite compiles
+    the headers, so one line arrives once for each suite. The entries combine before any count: a line has
+    coverage where any suite reached it, and a branch where any suite took it. Returns 1 where a gap remains.
+    """
+    with open(report_json, encoding="utf-8") as fh:
+        document = json.load(fh)
+    files = []
+    for entry in document["files"]:
+        path = entry["file"].replace("\\", "/")
+        lines, branches = merged_counts(entry)
+        reached_lines = sum(1 for count in lines.values() if count > 0)
+        reached_branches = sum(1 for count in branches.values() if count > 0)
+        print("%s  %d/%d lines, %d/%d branches" % (path, reached_lines, len(lines), reached_branches, len(branches)))
+        missed_lines = sorted(number for number, count in lines.items() if count == 0)
+        missed_branches = sorted({number for (number, _index), count in branches.items() if count == 0})
+        if missed_lines or missed_branches:
+            files.append((path, branches, missed_lines, missed_branches))
+    for path, branches, missed_lines, missed_branches in files:
+        print_gaps(path, branches, missed_lines, missed_branches)
+    missed = sum(len(row[2]) + len(row[3]) for row in files)
+    print("\n%d files with gaps, %d lines and branch lines unreached" % (len(files), missed))
+    return 1 if files else 0
+
+
+def merged_counts(entry):
+    """The count of each line and of each branch of one file of the gcovr JSON, summed over its entries."""
+    lines, branches = {}, {}
+    for line in entry["lines"]:
+        if line.get("gcovr/noncode"):
+            continue
+        number = line["line_number"]
+        lines[number] = lines.get(number, 0) + line["count"]
+        for index, branch in enumerate(line.get("branches", [])):
+            branches[(number, index)] = branches.get((number, index), 0) + branch["count"]
+    return lines, branches
+
+
+def print_gaps(path, branches, missed_lines, missed_branches):
+    """Each unreached line of @p path as a range, and each line with an untaken branch, with its source."""
+    print("\n=== %s" % path)
+    for first, last in line_runs(missed_lines):
+        span = "%d-%d" % (first, last)
+        if first == last:
+            span = "%d" % first
+        print("  line   %s:%s | %s" % (path, span, source_line(path, first)))
+    for number in missed_branches:
+        counts = [count for (line, _index), count in branches.items() if line == number]
+        taken = sum(1 for count in counts if count > 0)
+        print("  branch %s:%d %d/%d | %s" % (path, number, taken, len(counts), source_line(path, number)))
+
+
 def cmd_suites(parsed):
     unregistered = []
     conditional = []
@@ -518,6 +649,13 @@ def main():
     parser.add_argument("--filter", help="only suites matching this regex")
     parser.add_argument("--jobs", type=int, default=2, help="build parallelism")
     parser.set_defaults(fn=cmd_test)
+
+    parser = sub.add_parser("coverage", help="what of include/ the suites reached, and coverage.xml for the scan")
+    parser.add_argument("--gaps", action="store_true", help="name each line and branch that no suite reached")
+    parser.add_argument("--no-build", action="store_true", help="report on what is already built")
+    parser.add_argument("--no-run", action="store_true", help="report on the counters already there")
+    parser.add_argument("--jobs", type=int, default=2, help="build parallelism")
+    parser.set_defaults(fn=cmd_coverage)
 
     parser = sub.add_parser("suites", help="every suite, its cases, and what will never run")
     parser.add_argument("--strict", action="store_true", help="exit non-zero on a finding, for a CI gate")

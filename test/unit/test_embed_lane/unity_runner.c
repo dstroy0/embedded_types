@@ -77,17 +77,17 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("D:/git_project/repos/owned/public/embedded_types/test/unit/test_embed_lane\\test_embed_lane.c");
+  UnityBegin("test/unit/test_embed_lane\\test_embed_lane.c");
   run_test(test_the_lane_is_whole_32_bit_lanes_of_the_derived_width_on_one_arm, "test_the_lane_is_whole_32_bit_lanes_of_the_derived_width_on_one_arm", 90);
   run_test(test_a_lane_loaded_at_an_odd_address_puts_back_the_same_bytes, "test_a_lane_loaded_at_an_odd_address_puts_back_the_same_bytes", 107);
   run_test(test_a_lane_loaded_aligned_puts_back_aligned, "test_a_lane_loaded_aligned_puts_back_aligned", 118);
   run_test(test_a_fill_by_byte_sets_every_byte_and_by_u32_every_lane, "test_a_fill_by_byte_sets_every_byte_and_by_u32_every_lane", 127);
   run_test(test_and_or_and_xor_run_in_every_bit, "test_and_or_and_xor_run_in_every_bit", 142);
   run_test(test_add_sub_and_mul_of_32_bit_lanes_wrap_as_the_scalar_does, "test_add_sub_and_mul_of_32_bit_lanes_wrap_as_the_scalar_does", 156);
-  run_test(test_shifts_move_each_32_bit_lane_alone, "test_shifts_move_each_32_bit_lane_alone", 174);
-  run_test(test_the_byte_masks_answer_one_bit_a_byte_lowest_first, "test_the_byte_masks_answer_one_bit_a_byte_lowest_first", 186);
-  run_test(test_the_first_byte_of_a_mask_is_the_lowest_bit_set, "test_the_first_byte_of_a_mask_is_the_lowest_bit_set", 209);
-  run_test(test_the_exact_divide_by_255_holds_in_every_lane_over_every_product, "test_the_exact_divide_by_255_holds_in_every_lane_over_every_product", 218);
+  run_test(test_shifts_move_each_32_bit_lane_alone, "test_shifts_move_each_32_bit_lane_alone", 175);
+  run_test(test_the_byte_masks_answer_one_bit_a_byte_lowest_first, "test_the_byte_masks_answer_one_bit_a_byte_lowest_first", 188);
+  run_test(test_the_first_byte_of_a_mask_is_the_lowest_bit_set, "test_the_first_byte_of_a_mask_is_the_lowest_bit_set", 213);
+  run_test(test_the_exact_divide_by_255_holds_in_every_lane_over_every_product, "test_the_exact_divide_by_255_holds_in_every_lane_over_every_product", 224);
 
   return UNITY_END();
 }

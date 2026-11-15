@@ -104,7 +104,8 @@ void test_the_device_fills_every_byte_of_a_span(void)
 void test_the_device_divides_by_255_exactly_in_every_lane(void)
 {
     PART_OR_IGNORED();
-    // The identity of the blend over sampled products, with x as a * b + 128: (x + (x >> 8)) >> 8 is (a * b + 127) / 255.
+    // The identity of the blend over sampled products, with x as a * b + 128: (x + (x >> 8)) >> 8 is
+    // (a * b + 127) / 255.
     embed_u8 products[SPAN_BYTES];
     embed_u8 divided[SPAN_BYTES];
     for (unsigned int a = 0u; a < 256u; a += 5u)
@@ -120,7 +121,8 @@ void test_the_device_divides_by_255_exactly_in_every_lane(void)
         for (unsigned int at = 0u; at < SPAN_U32S; at += 1u)
         {
             const unsigned int b = (at * 4u) % 256u;
-            TEST_ASSERT_EQUAL_UINT32_MESSAGE(((a * b) + 127u) / 255u, u32_at(divided + (4u * at)), "the divide is exact");
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(((a * b) + 127u) / 255u, u32_at(divided + (4u * at)),                     \
+                                             "the divide is exact");
         }
     }
 }
@@ -136,12 +138,13 @@ void test_the_device_logic_and_arithmetic_match_the_scalar(void)
     embed_u8 out_mul[SPAN_BYTES];
     embed_u8 out_left[SPAN_BYTES];
     embed_u8 out_right[SPAN_BYTES];
-    TEST_ASSERT_EQUAL_INT_MESSAGE(
-        0,
-        embed_lane_device_arithmetic((const embed_u32 *)(const void *)s_one, (const embed_u32 *)(const void *)s_other, 7u,
-                                     (embed_u32 *)(void *)out_and, (embed_u32 *)(void *)out_or, (embed_u32 *)(void *)out_xor,
-                                     (embed_u32 *)(void *)out_add, (embed_u32 *)(void *)out_sub, (embed_u32 *)(void *)out_mul,
-                                     (embed_u32 *)(void *)out_left, (embed_u32 *)(void *)out_right, SPAN_BYTES),
+    TEST_ASSERT_EQUAL_INT_MESSAGE(                                                                                     \
+        0,                                                                                                             \
+        embed_lane_device_arithmetic((const embed_u32 *)(const void *)s_one, (const embed_u32 *)(const void *)s_other, \
+                                     7u, (embed_u32 *)(void *)out_and, (embed_u32 *)(void *)out_or,                    \
+                                     (embed_u32 *)(void *)out_xor, (embed_u32 *)(void *)out_add,                       \
+                                     (embed_u32 *)(void *)out_sub, (embed_u32 *)(void *)out_mul,                       \
+                                     (embed_u32 *)(void *)out_left, (embed_u32 *)(void *)out_right, SPAN_BYTES),       \
         "the kernel ran");
     for (unsigned int at = 0u; at < SPAN_U32S; at += 1u)
     {

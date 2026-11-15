@@ -15,6 +15,11 @@ and `decide` checks each theorem on every arm of the chain.
 - `lane_fields`, `generation_widths` and `lanes_fit`. The lane word is an `embed_atomic_word`, 64 bits on a word of
   64 bits and 32 bits below it. At each word width, the busy, closed and sleeper bits of the lane word and its
   generation fill that atomic word. The generation is 61 bits wide at 64, and 29 at 32 and 16. The open count fits.
+
+- `derived_builds` and `wide_without_stops`. `EMBED_ATOMIC_HAS_64` is 0 on MSVC below a pointer of 64 bits. There,
+  the word, the size and the pointer that the header derives are 32 bits, and each gets the 32-bit atomic word. A
+  width of 64 on that target stops the build.
+
 - `narg_counts`: `EMBED_NARG` gives n for each n from 1 to 24.
 -/
 
@@ -75,6 +80,24 @@ def generationBits (w : Nat) : Nat := atomicBits w - 3
 theorem lane_fields : ∀ w ∈ [64, 32, 16], 3 + generationBits w = atomicBits w ∧ 0 < generationBits w := by decide
 
 theorem generation_widths : generationBits 64 = 61 ∧ generationBits 32 = 29 ∧ generationBits 16 = 29 := by decide
+
+/-- `EMBED_ATOMIC_HAS_64`: 0 on the MSVC arm on a target whose pointer is below 64 bits, and 1 on every other arm
+and target. -/
+def has64 (msvc : Bool) (pointerBits : Nat) : Bool := !msvc || pointerBits = 64
+
+/-- The atomic word that `embed_atomic.h` gives a width: the 64-bit word at 64, where the arm has one, and the
+32-bit word below. None is the `#error` of a width of 64 on an arm with no 64-bit word. -/
+def atomicFor (has : Bool) (bits : Nat) : Option Nat :=
+  if bits = 64 then (if has then some 64 else none) else some 32
+
+/-- Take each arm and each pointer width. The word that the header derives from the pointer, the size and the pointer
+each get an atomic word. So no derived build stops at the `#error`. On MSVC, `size_t` is as wide as the pointer. -/
+theorem derived_builds : ∀ msvc ∈ [true, false], ∀ p ∈ [16, 32, 64],
+    ((wordBits (2 ^ p - 1)).bind (atomicFor (has64 msvc p))).isSome ∧ (atomicFor (has64 msvc p) p).isSome := by
+  decide
+
+/-- A width of 64 on an arm with no 64-bit word stops the build. -/
+theorem wide_without_stops : atomicFor (has64 true 32) 64 = none := by decide
 
 /-- `EMBED_TURNSTILE_LANES` is from 1 to 64, and the open count less one fits each word width. -/
 theorem lanes_fit : ∀ w ∈ [64, 32, 16], 64 - 1 < 2 ^ w := by decide

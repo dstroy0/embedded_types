@@ -15,7 +15,7 @@ Doxygen comments in the headers. The Doxygen block on a declaration is the contr
 | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`include/embed_turnstile.h`](include/embed_turnstile.h)                     | the thread scheduler: turnstiles that readers pass through and that a writer drains, a backoff in nanoseconds, and the sleep on the address of a word               |
 | [`include/embed_ticket_ring.h`](include/embed_ticket_ring.h)                 | the ticket ring: a ring of job slots that a ticket indexes, with a state machine per slot in the flag bits of its stamp, each transition one compare-and-swap inside a pass |
-| [`include/embed_atomic.h`](include/embed_atomic.h)                           | the atomic types: a 32-bit word and a 64-bit word, each with load, store, exchange, compare-and-swap, add, subtract, or, and, and raise, on the arm of the target |
+| [`include/embed_atomic.h`](include/embed_atomic.h)                           | the atomic types: a 32-bit word on each target and a 64-bit word where the target has one, each with load, store, exchange, compare-and-swap, add, subtract, or, and, and raise, on the arm of the target |
 | [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | the compiler directives, feature checks, the static assertion, attribute wrappers, diagnostic pragmas and an argument count; and the platform directives, the byte order, the unaligned load, the widest vector register and the host and device marker |
 | [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | the dispatch table: assertions that pin each function pointer of a struct to its slot, and the macros that call and define an entry point                            |
 | [`include/embed_types.h`](include/embed_types.h)                             | the widths: the fixed-width integers, the boolean, the word, the index, the raw word, and the assertions that pin each one                                           |
@@ -32,10 +32,20 @@ A writer swaps a published pointer, then drains: it waits until each pass that h
 drain ends. Each step is one atomic operation on one word, and no step holds a lock.
 
 A reader that must wait backs off. Inside the first unit of time, a step is a pause. After it, a
-step sleeps on the address of the lane word, for a time that doubles at each step. The host supplies
-the sleep, the wake and the clock. On Linux that is the futex, on Windows WaitOnAddress, and on
-macOS `__ulock_wait`. A build that supplies none of the three fails at the link, and the error names
-them.
+step sleeps on the address of the lane word, for a time that doubles at each step. The time is in
+nanoseconds in a machine word, and the clock rolls at the width of the word. The backoff takes the
+difference of two reads of the clock, and that difference holds across the roll.
+
+The host supplies the sleep, the wake and the clock:
+
+```c
+int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value old_value, embed_word nanoseconds);
+void embed_word_wake(embed_atomic_word *word);
+embed_word embed_clock_ns(void);
+```
+
+On Linux that is the futex, on Windows WaitOnAddress, and on macOS `__ulock_wait`. A build that
+supplies none of the three fails at the link, and the error names them.
 
 The Lean proofs under [`theory/`](theory) hold the lane word, the backoff, the open count, the
 queue, the drain and the sleeps. The GenMC clients under [`test/prove/`](test/prove) run the drain
@@ -43,8 +53,14 @@ and the resize under five memory models.
 
 The ticket ring is the job queue of the scheduler. It has 2^shift slots, and a slot holds a stamp
 and a job pointer. The stamp is one atomic machine word: the epoch in the high bits, 16 flag bits,
-and the ticket in the low bits. A word of 64 bits has a 16-bit epoch and a 32-bit ticket. A word of
-32 bits has a 4-bit epoch and a 12-bit ticket. The low shift bits of the ticket select the slot.
+and the ticket in the low bits. The low shift bits of the ticket select the slot.
+
+| word    | ticket          | flags          | epoch          |
+| ------- | --------------- | -------------- | -------------- |
+| 64 bits | bits 0 to 31    | bits 32 to 47  | bits 48 to 63  |
+| 32 bits | bits 0 to 11    | bits 12 to 27  | bits 28 to 31  |
+
+A word of 16 bits has no room for the three fields, and the header stops the build there.
 
 The flag bits are the state machine of the slot: granted, pushed, popped, replayed, released. Each
 transition is one compare-and-swap inside a pass through a turnstile. It expects the word with the
@@ -64,6 +80,11 @@ ordering, a store has release ordering, and each read-modify-write has both. The
 of four arms, one time. The arms are the device atomics of CUDA in a device pass, C11 atomics, the
 GCC and clang builtins, and the interlocked intrinsics of MSVC. A target with none of the four fails
 the build at an `#error`. There is no plain fallback.
+
+The 32-bit word is on each arm. The 64-bit word is on each arm but MSVC on a 32-bit target, where
+`EMBED_ATOMIC_HAS_64` is 0. There, each use of `embed_atomic_u64` stops the compile of its file,
+and the error names the cause. `embed_atomic_word` is 64 bits on a word of 64 bits, and 32 bits
+below it.
 
 ### The directives
 
@@ -100,7 +121,8 @@ Define `EMBED_WORD_BITS`, `EMBED_INDEX_BITS` or `EMBED_LANE_BITS` on the command
 width yourself. Set the word where the register width differs from the pointer width, as on the x32
 ABI. Assertions hold each width to the values that the header supports.
 [The word and the lane](docs/word.md) tells how each width comes from the target, and how the lane
-picks its arm.
+picks its arm. [The ABI](docs/abi.md) states the types, the host hooks and the stamp. It also
+states each value that follows the width of the word, and each macro that a build can set.
 
 ## A first use
 
@@ -160,6 +182,7 @@ python test/harness.py test                     # the library as it ships
 python test/harness.py test --tree build-werror # the same, with each warning an error
 python test/harness.py test --tree build-tsan   # the same, under the thread sanitizer
 python test/harness.py test --tree build-asan   # the same, under the address and undefined behavior sanitizers
+python test/harness.py coverage --gaps          # the coverage of include/, and each line and branch that no suite reached
 python test/harness.py suites --strict          # each case registered, none behind a conditional
 python test/harness.py prove                    # each GenMC client under each memory model
 python test/harness.py ste                      # each document held to ASD-STE100
@@ -173,8 +196,15 @@ top-level project.
 
 Eight suites run, one for each header and one for the device arm of the lane. Where the configure
 step finds a CUDA compiler, the device suite compiles its kernels and runs them on the part that the
-host has. Where it finds none, the build leaves that suite out and says so. Three workflows run on
-each push: the suites on GCC, Clang and MSVC, the Lean and GenMC proofs, and the site.
+host has. Where it finds none, the build leaves that suite out and says so.
+
+`coverage` builds `build-cov` with GCC and gcov, runs the suites, and writes
+`build-cov/coverage.xml` with gcovr. On Windows, run it under WSL. The suites reach each line and
+each branch of `include/` that the build compiles.
+
+Four workflows run on each push. They run the suites on GCC, Clang and MSVC, the Lean and GenMC
+proofs, the site, and the SonarCloud analysis with the coverage. A line or a branch that no suite
+reaches fails the analysis job.
 
 ## The documents
 
@@ -195,9 +225,9 @@ git config core.hooksPath .githooks
 | [`include/`](include)                                | the seven headers                                                                    |
 | [`cmake/`](cmake)                                    | `embedded_types_add_suite()` and `embedded_types_add_device_suite()`                 |
 | [`test/unit/`](test/unit)                            | one Unity suite for each header, and one for the device arm of the lane              |
-| [`test/support/`](test/support)                      | host threads for the contention cases, and the host's sleep on the address of a word |
+| [`test/support/`](test/support)                      | host threads for the contention cases, the host's sleep on the address of a word, and the inline policy of the coverage build |
 | [`test/prove/`](test/prove)                          | the GenMC clients of the turnstile, and the host that they run on                    |
-| [`test/harness.py`](test/harness.py)                 | suite discovery, Unity runner generation, the build trees, the proofs, and the site  |
+| [`test/harness.py`](test/harness.py)                 | suite discovery, Unity runner generation, the build trees, the coverage, the proofs, and the site |
 | [`theory/`](theory)                                  | the Lean proofs: the widths, the atomics, the lane, the manifold of the turnstile, the ticket ring, the flag matrix, the claim of a slot, the device arm and the integrated algorithm; and the research paper on the two |
 | [`docs/`](docs)                                      | the site: the hand-written pages, and the API pages from the headers                 |
 | [`tools/api_pages.py`](tools/api_pages.py)           | the tool that writes the API pages                                                   |

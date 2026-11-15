@@ -24,7 +24,8 @@
  *       release ordering, and each read-modify-write both.
  * @note There are two widths. Each arm has the 32-bit word, the CUDA atomics among them. The counters
  *       and packed boundaries of a host need the 64-bit word. CUDA, C11, the builtins and MSVC on a
- *       64-bit host all have it. embed_atomic_word matches the machine word.
+ *       64-bit host all have it. MSVC on a 32-bit host does not, and EMBED_ATOMIC_HAS_64 is then 0.
+ *       embed_atomic_word matches the machine word.
  * @note Every entry carries EMBED_HOST_DEVICE. Under nvcc one definition compiles into the host pass
  *       and the device pass, each on its own arm, over the same word in memory.
  * @warning A target with none of the four fails the build at the #error below. There is no plain
@@ -56,6 +57,19 @@
 #error "embed_atomic.h: this target has no atomics the header knows"
 #endif
 
+/**
+ * @brief 1 where the arm has a 64-bit atomic word, and 0 where it has none. The MSVC arm has none on a 32-bit
+ *        target, because MSVC gives the 64-bit interlocked intrinsics only to its 64-bit targets.
+ *
+ * @note Always defined. Test it with #if. Where it is 0, the header defines no 64-bit word and no operation on one,
+ *       as it defines no 16-bit word. The word, the size and the pointer of such a target are 32 bits.
+ */
+#if (EMBED_ATOMIC_ARM == 4) && !defined(_M_X64) && !defined(_M_ARM64)
+#define EMBED_ATOMIC_HAS_64 0
+#else
+#define EMBED_ATOMIC_HAS_64 1
+#endif
+
 EMBED_BEGIN_DECLS
 
 /**
@@ -73,9 +87,11 @@ typedef struct
     volatile embed_u32 value; /**< The word. */
 #endif
 } embed_atomic_u32;
+EMBED_STATIC_ASSERT(sizeof(embed_atomic_u32) == 4u, "embed_atomic_u32 must be one 32-bit word on every arm");
 
+#if EMBED_ATOMIC_HAS_64
 /**
- * @brief A 64-bit word every access to which is one indivisible step.
+ * @brief A 64-bit word every access to which is one indivisible step, where EMBED_ATOMIC_HAS_64 is 1.
  */
 typedef struct
 {
@@ -85,9 +101,14 @@ typedef struct
     volatile embed_u64 value; /**< The word. */
 #endif
 } embed_atomic_u64;
-
-EMBED_STATIC_ASSERT(sizeof(embed_atomic_u32) == 4u, "embed_atomic_u32 must be one 32-bit word on every arm");
 EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be one 64-bit word on every arm");
+#else
+/**
+ * @brief The 64-bit word on a target whose arm has none. Each use of the type stops the compile of that file, and
+ *        the error names the cause.
+ */
+#define embed_atomic_u64 embed_atomic_u64_needs_a_target_with_64_bit_atomics
+#endif
 
 /**
  * @brief An atomic word that holds value_, for the declaration that makes one.
@@ -153,8 +174,9 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 
 /**
  * @brief MSVC's intrinsics take a long for 32 bits and an __int64 for 64; the casts read the same
- *        bits as the unsigned words they are. A plain volatile read and write are one step each on
- *        the targets MSVC compiles for, and the fences give them their ordering.
+ *        bits as the unsigned words they are. A plain volatile read and write of a 32-bit word are one
+ *        step each on every target of MSVC. Those of a 64-bit word are one step on its 64-bit targets.
+ *        The fences give them their ordering.
  */
 #define EMBED_ATOMIC_LOAD(atom_) ((atom_)->value)
 #define EMBED_ATOMIC_FENCE() _ReadWriteBarrier()
@@ -167,24 +189,26 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 #define EMBED_ATOMIC_STORE(atom_, value_) ((atom_)->value = (value_))
 #define EMBED_ATOMIC_EXCHANGE_32(atom_, value_)                                                                        \
     ((embed_u32)_InterlockedExchange((volatile long *)&(atom_)->value, (long)(value_)))
-#define EMBED_ATOMIC_EXCHANGE_64(atom_, value_)                                                                        \
-    ((embed_u64)_InterlockedExchange64((volatile __int64 *)&(atom_)->value, (__int64)(value_)))
 #define EMBED_ATOMIC_SWAP_IF_32(atom_, expected_, value_)                                                              \
     ((embed_u32)_InterlockedCompareExchange((volatile long *)&(atom_)->value, (long)(value_), (long)(expected_)))
+#define EMBED_ATOMIC_ADD_32(atom_, value_)                                                                             \
+    ((embed_u32)_InterlockedExchangeAdd((volatile long *)&(atom_)->value, (long)(value_)))
+#define EMBED_ATOMIC_OR_32(atom_, value_) ((embed_u32)_InterlockedOr((volatile long *)&(atom_)->value, (long)(value_)))
+#define EMBED_ATOMIC_AND_32(atom_, value_)                                                                             \
+    ((embed_u32)_InterlockedAnd((volatile long *)&(atom_)->value, (long)(value_)))
+#if EMBED_ATOMIC_HAS_64
+#define EMBED_ATOMIC_EXCHANGE_64(atom_, value_)                                                                        \
+    ((embed_u64)_InterlockedExchange64((volatile __int64 *)&(atom_)->value, (__int64)(value_)))
 #define EMBED_ATOMIC_SWAP_IF_64(atom_, expected_, value_)                                                              \
     ((embed_u64)_InterlockedCompareExchange64((volatile __int64 *)&(atom_)->value, (__int64)(value_),                  \
                                               (__int64)(expected_)))
-#define EMBED_ATOMIC_ADD_32(atom_, value_)                                                                             \
-    ((embed_u32)_InterlockedExchangeAdd((volatile long *)&(atom_)->value, (long)(value_)))
 #define EMBED_ATOMIC_ADD_64(atom_, value_)                                                                             \
     ((embed_u64)_InterlockedExchangeAdd64((volatile __int64 *)&(atom_)->value, (__int64)(value_)))
-#define EMBED_ATOMIC_OR_32(atom_, value_) ((embed_u32)_InterlockedOr((volatile long *)&(atom_)->value, (long)(value_)))
 #define EMBED_ATOMIC_OR_64(atom_, value_)                                                                              \
     ((embed_u64)_InterlockedOr64((volatile __int64 *)&(atom_)->value, (__int64)(value_)))
-#define EMBED_ATOMIC_AND_32(atom_, value_)                                                                             \
-    ((embed_u32)_InterlockedAnd((volatile long *)&(atom_)->value, (long)(value_)))
 #define EMBED_ATOMIC_AND_64(atom_, value_)                                                                             \
     ((embed_u64)_InterlockedAnd64((volatile __int64 *)&(atom_)->value, (__int64)(value_)))
+#endif
 
 #endif
 
@@ -277,9 +301,9 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
  * primitive found.
  */
 #define EMBED_ATOMIC_CAS_32(atom_, expected_, value_) embed_atomic_cas_u32(atom_, expected_, value_)
-#define EMBED_ATOMIC_CAS_64(atom_, expected_, value_) embed_atomic_cas_u64(atom_, expected_, value_)
 
-EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u32(embed_atomic_u32 *atom, embed_u32 *expected, embed_u32 value)
+EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u32(embed_atomic_u32 *atom, embed_u32 *expected,
+                                                               embed_u32 value)
 {
     const embed_u32 found = EMBED_ATOMIC_SWAP_IF_32(atom, *expected, value);
     const embed_bool swapped = (embed_bool)(found == *expected);
@@ -287,13 +311,18 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u32(embed_atomic_u32 
     return swapped;
 }
 
-EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u64(embed_atomic_u64 *atom, embed_u64 *expected, embed_u64 value)
+#if EMBED_ATOMIC_HAS_64
+#define EMBED_ATOMIC_CAS_64(atom_, expected_, value_) embed_atomic_cas_u64(atom_, expected_, value_)
+
+EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u64(embed_atomic_u64 *atom, embed_u64 *expected,
+                                                               embed_u64 value)
 {
     const embed_u64 found = EMBED_ATOMIC_SWAP_IF_64(atom, *expected, value);
     const embed_bool swapped = (embed_bool)(found == *expected);
     *expected = found;
     return swapped;
 }
+#endif
 
 #elif EMBED_ATOMIC_ARM == 2
 
@@ -313,8 +342,10 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u64(embed_atomic_u64 
 
 EMBED_ATOMIC_OPERATIONS(u32, embed_u32, EMBED_ATOMIC_EXCHANGE_32, EMBED_ATOMIC_CAS_32, EMBED_ATOMIC_ADD_32,
                         EMBED_ATOMIC_OR_32, EMBED_ATOMIC_AND_32)
+#if EMBED_ATOMIC_HAS_64
 EMBED_ATOMIC_OPERATIONS(u64, embed_u64, EMBED_ATOMIC_EXCHANGE_64, EMBED_ATOMIC_CAS_64, EMBED_ATOMIC_ADD_64,
                         EMBED_ATOMIC_OR_64, EMBED_ATOMIC_AND_64)
+#endif
 
 /**
  * @brief Orders this context's earlier writes ahead of its later reads, on every arm.
@@ -337,6 +368,9 @@ EMBED_HOST_DEVICE EMBED_INLINE void embed_atomic_ordered(void)
  *       its name, with no width in the name.
  */
 #if EMBED_WORD_BITS == 64
+#if !EMBED_ATOMIC_HAS_64
+#error "embed_atomic.h: EMBED_WORD_BITS is 64, and the atomics of this target have no 64-bit word"
+#endif
 typedef embed_atomic_u64 embed_atomic_word;
 
 /** @brief The plain integer embed_atomic_word holds and its operations take and answer. */
@@ -374,6 +408,9 @@ typedef embed_u32 embed_atomic_word_value;
  *       sizes that it counts, and a count must still fit whole.
  */
 #if SIZE_MAX == 0xFFFFFFFFFFFFFFFFu
+#if !EMBED_ATOMIC_HAS_64
+#error "embed_atomic.h: size_t is 64 bits, and the atomics of this target have no 64-bit word"
+#endif
 typedef embed_atomic_u64 embed_atomic_usize;
 
 /** @brief The plain integer embed_atomic_usize holds and its operations take and answer. */
@@ -411,6 +448,9 @@ typedef embed_u32 embed_atomic_usize_value;
  *       the pointer and an address must still fit whole.
  */
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
+#if !EMBED_ATOMIC_HAS_64
+#error "embed_atomic.h: uintptr_t is 64 bits, and the atomics of this target have no 64-bit word"
+#endif
 typedef embed_atomic_u64 embed_atomic_uptr;
 
 /** @brief The plain integer embed_atomic_uptr holds and its operations take and answer. */

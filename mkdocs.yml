@@ -91,6 +91,7 @@ extra:
 nav:
   - Home: index.md
   - The word and the lane: word.md
+  - The ABI: abi.md
   - Build and use: build.md
   - API:
       - embed_types.h: api/embed_types.md

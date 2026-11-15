@@ -25,6 +25,7 @@ extern void test_an_entry_on_a_busy_lane_spills_to_the_next_open_lane(void);
 extern void test_a_drain_with_no_pass_under_way_returns_at_once(void);
 extern void test_a_drain_waits_out_a_pass_begun_before_it(void);
 extern void test_a_crowd_grows_the_set_to_its_pressure_and_no_lane_stays_busy(void);
+extern void test_an_entry_on_a_set_with_every_lane_open_and_busy_waits_for_a_lane_to_free(void);
 extern void test_workers_never_read_a_record_the_writer_released_after_its_drain(void);
 
 
@@ -86,7 +87,7 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("D:/git_project/repos/owned/public/embedded_types/test/unit/test_embed_turnstile\\test_embed_turnstile.c");
+  UnityBegin("test/unit/test_embed_turnstile\\test_embed_turnstile.c");
   run_test(test_a_sleep_on_a_word_that_moved_ends_at_once_reporting_the_move, "test_a_sleep_on_a_word_that_moved_ends_at_once_reporting_the_move", 88);
   run_test(test_a_sleep_on_a_still_word_ends_with_its_time_and_reports_no_move, "test_a_sleep_on_a_still_word_ends_with_its_time_and_reports_no_move", 97);
   run_test(test_a_sleep_of_no_time_answers_at_once, "test_a_sleep_of_no_time_answers_at_once", 104);
@@ -103,7 +104,8 @@ int main(void)
   run_test(test_a_drain_with_no_pass_under_way_returns_at_once, "test_a_drain_with_no_pass_under_way_returns_at_once", 288);
   run_test(test_a_drain_waits_out_a_pass_begun_before_it, "test_a_drain_waits_out_a_pass_begun_before_it", 326);
   run_test(test_a_crowd_grows_the_set_to_its_pressure_and_no_lane_stays_busy, "test_a_crowd_grows_the_set_to_its_pressure_and_no_lane_stays_busy", 353);
-  run_test(test_workers_never_read_a_record_the_writer_released_after_its_drain, "test_workers_never_read_a_record_the_writer_released_after_its_drain", 435);
+  run_test(test_an_entry_on_a_set_with_every_lane_open_and_busy_waits_for_a_lane_to_free, "test_an_entry_on_a_set_with_every_lane_open_and_busy_waits_for_a_lane_to_free", 410);
+  run_test(test_workers_never_read_a_record_the_writer_released_after_its_drain, "test_workers_never_read_a_record_the_writer_released_after_its_drain", 490);
 
   return UNITY_END();
 }
