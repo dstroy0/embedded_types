@@ -21,6 +21,7 @@ include(EmbeddedTypesSuite)
 set_property(GLOBAL PROPERTY EMBEDDED_TYPES_SUITES_BUILT "")
 
 add_subdirectory(unit)
+add_subdirectory(headers)
 
 # Every technical document checked against ASD-STE100 with test/ste_ratchet.tsv, in every suite run as in the hook
 add_test(NAME ste COMMAND "${Python3_EXECUTABLE}" "${EMBEDDED_TYPES_HARNESS}" ste WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")

@@ -225,6 +225,7 @@ git config core.hooksPath .githooks
 | [`include/`](include)                                | the seven headers                                                                    |
 | [`cmake/`](cmake)                                    | `embedded_types_add_suite()` and `embedded_types_add_device_suite()`                 |
 | [`test/unit/`](test/unit)                            | one Unity suite for each header, and one for the device arm of the lane              |
+| [`test/headers/`](test/headers)                      | one translation unit for each header alone, which the build compiles and the SonarCloud scan reads the headers through |
 | [`test/support/`](test/support)                      | host threads for the contention cases, the host's sleep on the address of a word, and the inline policy of the coverage build |
 | [`test/prove/`](test/prove)                          | the GenMC clients of the turnstile, and the host that they run on                    |
 | [`test/harness.py`](test/harness.py)                 | suite discovery, Unity runner generation, the build trees, the coverage, the proofs, and the site |
