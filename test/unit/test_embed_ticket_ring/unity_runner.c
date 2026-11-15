@@ -87,7 +87,7 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("D:/git_project/repos/owned/public/embedded_types/test/unit/test_embed_ticket_ring\\test_embed_ticket_ring.c");
+  UnityBegin("test/unit/test_embed_ticket_ring\\test_embed_ticket_ring.c");
   run_test(test_the_stamp_gives_its_epoch_and_ticket_back, "test_the_stamp_gives_its_epoch_and_ticket_back", 76);
   run_test(test_a_wide_field_keeps_only_its_own_bits, "test_a_wide_field_keeps_only_its_own_bits", 89);
   run_test(test_the_flags_sit_between_the_ticket_and_the_epoch, "test_the_flags_sit_between_the_ticket_and_the_epoch", 98);
@@ -104,8 +104,8 @@ int main(void)
   run_test(test_the_push_records_the_check_of_the_job_pointer, "test_the_push_records_the_check_of_the_job_pointer", 255);
   run_test(test_a_single_bit_error_in_the_job_pointer_fails_the_pop_and_the_replay, "test_a_single_bit_error_in_the_job_pointer_fails_the_pop_and_the_replay", 286);
   run_test(test_a_double_bit_error_fails_the_pop_unless_seven_apart, "test_a_double_bit_error_fails_the_pop_unless_seven_apart", 320);
-  run_test(test_lives_inside_passes_each_pop_whole_after_the_drain, "test_lives_inside_passes_each_pop_whole_after_the_drain", 369);
-  run_test(test_two_pops_of_one_stamp_land_once, "test_two_pops_of_one_stamp_land_once", 408);
+  run_test(test_lives_inside_passes_each_pop_whole_after_the_drain, "test_lives_inside_passes_each_pop_whole_after_the_drain", 371);
+  run_test(test_two_pops_of_one_stamp_land_once, "test_two_pops_of_one_stamp_land_once", 410);
 
   return UNITY_END();
 }

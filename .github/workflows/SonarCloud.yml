@@ -46,7 +46,7 @@ jobs:
       # requirements-coverage.txt locks gcovr and the hash of each file under it. pip installs wheels alone, so no
       # setup script of a package runs.
       - name: Install gcovr
-        run: python -m pip install --require-hashes --only-binary :all: -r requirements-coverage.txt
+        run: "python -m pip install --require-hashes --only-binary :all: -r requirements-coverage.txt"
 
       - name: Install the build wrapper
         uses: SonarSource/sonarqube-scan-action/install-build-wrapper@e805d875275f728fac1885b413934be6d7c63f65 # v8
