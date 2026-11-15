@@ -107,7 +107,8 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 #define EMBED_ATOMIC_STORE(atom_, value_) ((atom_)->value = (value_))
 #define EMBED_ATOMIC_EXCHANGE_32(atom_, value_) atomicExch((unsigned int *)&(atom_)->value, (value_))
 #define EMBED_ATOMIC_EXCHANGE_64(atom_, value_) atomicExch((unsigned long long *)&(atom_)->value, (value_))
-#define EMBED_ATOMIC_SWAP_IF_32(atom_, expected_, value_) atomicCAS((unsigned int *)&(atom_)->value, (expected_), (value_))
+#define EMBED_ATOMIC_SWAP_IF_32(atom_, expected_, value_)                                                              \
+    atomicCAS((unsigned int *)&(atom_)->value, (expected_), (value_))
 #define EMBED_ATOMIC_SWAP_IF_64(atom_, expected_, value_)                                                              \
     atomicCAS((unsigned long long *)&(atom_)->value, (expected_), (value_))
 #define EMBED_ATOMIC_ADD_32(atom_, value_) atomicAdd((unsigned int *)&(atom_)->value, (value_))
@@ -123,7 +124,8 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 #define EMBED_ATOMIC_FENCE() ((void)0)
 #define EMBED_ATOMIC_ORDERED() atomic_thread_fence(memory_order_seq_cst)
 #define EMBED_ATOMIC_STORE(atom_, value_) atomic_store_explicit(&(atom_)->value, (value_), memory_order_release)
-#define EMBED_ATOMIC_EXCHANGE_32(atom_, value_) atomic_exchange_explicit(&(atom_)->value, (value_), memory_order_acq_rel)
+#define EMBED_ATOMIC_EXCHANGE_32(atom_, value_)                                                                        \
+    atomic_exchange_explicit(&(atom_)->value, (value_), memory_order_acq_rel)
 #define EMBED_ATOMIC_EXCHANGE_64(atom_, value_) EMBED_ATOMIC_EXCHANGE_32(atom_, value_)
 #define EMBED_ATOMIC_ADD_32(atom_, value_) atomic_fetch_add_explicit(&(atom_)->value, (value_), memory_order_acq_rel)
 #define EMBED_ATOMIC_ADD_64(atom_, value_) EMBED_ATOMIC_ADD_32(atom_, value_)
@@ -208,7 +210,7 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
         EMBED_ATOMIC_FENCE();                                                                                          \
         EMBED_ATOMIC_STORE(atom, value);                                                                               \
     }                                                                                                                  \
-    /** @brief The word set to value, and the word before. */                                                         \
+    /** @brief The word set to value, and the word before. */                                                          \
     EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_exchange(embed_atomic_##name_ *atom, type_ value)      \
     {                                                                                                                  \
         EMBED_ATOMIC_FENCE();                                                                                          \
@@ -218,7 +220,7 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
     }                                                                                                                  \
     /** @brief The word set to value where it holds *expected, else *expected set to what it holds. */                 \
     EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_##name_##_swap_if(embed_atomic_##name_ *atom,               \
-                                                                           type_ *expected, type_ value)              \
+                                                                             type_ *expected, type_ value)             \
     {                                                                                                                  \
         EMBED_ATOMIC_FENCE();                                                                                          \
         const embed_bool swapped = swap_if_(atom, expected, value);                                                    \

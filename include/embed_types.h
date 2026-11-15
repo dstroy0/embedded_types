@@ -153,16 +153,23 @@ typedef _Bool embed_bool;
 #endif
 #endif
 
+#if (EMBED_WORD_BITS != 16) && (EMBED_WORD_BITS != 32) && (EMBED_WORD_BITS != 64)
+#error "EMBED_WORD_BITS must be 16, 32 or 64"
+#endif
+#if (EMBED_INDEX_BITS != 16) && (EMBED_INDEX_BITS != 32)
+#error "EMBED_INDEX_BITS must be 16 or 32"
+#endif
+
 /**
- * @brief The unsigned word that every lane operation runs in, EMBED_WORD_BITS wide.
+ * @brief The unsigned word that every lane operation runs in, EMBED_WORD_BITS wide: the exact-width
+ *        type above whose name ends in that width.
  *
  * @note A consumer reasons in this register. A lane mask, a zero test and a byte count all have this
  *       width, so a change to EMBED_WORD_BITS changes what one operation covers.
- * @note All three arms below declare this type. The 64-bit arm carries this block because the
- *       compiler reaches it first.
+ * @note EMBED_CAT pastes the width onto the stem of the name, so one line serves each width. A build
+ *       that defines EMBED_WORD_BITS gives a plain decimal, as 32, and not 32u.
  */
-#if EMBED_WORD_BITS == 64
-typedef embed_u64 embed_word;
+typedef EMBED_CAT(embed_u, EMBED_WORD_BITS) embed_word;
 
 /**
  * @brief The signed word, the same register as embed_word.
@@ -170,16 +177,7 @@ typedef embed_u64 embed_word;
  * @note This type holds a result that goes below zero. An unsigned word would wrap it. The
  *       assertion below holds this type to the size of embed_word.
  */
-typedef embed_i64 embed_iword;
-#elif EMBED_WORD_BITS == 32
-typedef embed_u32 embed_word;
-typedef embed_i32 embed_iword;
-#elif EMBED_WORD_BITS == 16
-typedef embed_u16 embed_word;
-typedef embed_i16 embed_iword;
-#else
-#error "EMBED_WORD_BITS must be 16, 32 or 64"
-#endif
+typedef EMBED_CAT(embed_i, EMBED_WORD_BITS) embed_iword;
 
 /**
  * @brief The index type, EMBED_INDEX_BITS wide, for every offset and length.
@@ -187,16 +185,9 @@ typedef embed_i16 embed_iword;
  * @note This type is not size_t. size_t is as wide as the target's pointer. Then one expression
  *       would be 32-bit index arithmetic on a device and 64-bit on the host that tests it. One
  *       source would then emit different code on the two.
- * @note Both arms below declare this type. The 32-bit arm carries this block because the compiler
- *       reaches it first.
+ * @note EMBED_CAT pastes the width onto the stem of the name, as for embed_word.
  */
-#if EMBED_INDEX_BITS == 32
-typedef embed_u32 embed_index;
-#elif EMBED_INDEX_BITS == 16
-typedef embed_u16 embed_index;
-#else
-#error "EMBED_INDEX_BITS must be 16 or 32"
-#endif
+typedef EMBED_CAT(embed_u, EMBED_INDEX_BITS) embed_index;
 
 /**
  * @brief The word again, readable from an address that is not a multiple of its width.

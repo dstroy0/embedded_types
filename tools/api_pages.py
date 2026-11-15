@@ -39,8 +39,10 @@ HEADERS = (
 )
 
 SECTIONS = (("type", "Types"), ("macro", "Macros"), ("function", "Functions"), ("assert", "Assertions"))
-TAG = re.compile(r"^@(brief|note|warning|return|param(?:\[(in|out|in,\s*out)\])?|file|author|date)\b\s*(.*)$")
+# The text of a tag starts at its first character that is not white space, so no two parts match one character
+TAG = re.compile(r"^@(brief|note|warning|return|param(?:\[(in|out|in,\s*out)\])?|file|author|date)\b\s*(\S.*|)$")
 IDENT = re.compile(r"[A-Za-z_]\w*")
+ENDIF = "#endif"
 
 sys.path.insert(0, os.path.join(ROOT, "test"))
 import ste_check  # noqa: E402
@@ -62,6 +64,43 @@ class Block:
         self.params = []
         self.returns = ""
         self.notes = []
+
+    def tag(self, name, direction, rest):
+        """Take one tag line. Answer the part that the next line continues, or None for no part."""
+        if name == "file":
+            self.file = True
+            return None
+        if name in ("author", "date"):
+            return None
+        if name == "brief":
+            self.brief = rest
+            return ("brief",)
+        if name in ("note", "warning"):
+            self.notes.append([name, rest])
+            return ("note", len(self.notes) - 1)
+        if name == "return":
+            self.returns = rest
+            return ("return",)
+        pname, _, ptext = rest.partition(" ")
+        self.params.append([pname, (direction or "").replace(" ", ""), ptext.strip()])
+        return ("param", len(self.params) - 1)
+
+    def extend(self, current, text):
+        """Join a line to the part that it continues, or open a paragraph with it. Answer the part."""
+        if current is None:
+            self.paragraphs.append(text)
+            return ("paragraph", len(self.paragraphs) - 1)
+        if current[0] == "brief":
+            self.brief += " " + text
+        elif current[0] == "note":
+            self.notes[current[1]][1] += " " + text
+        elif current[0] == "return":
+            self.returns += " " + text
+        elif current[0] == "param":
+            self.params[current[1]][2] += " " + text
+        else:
+            self.paragraphs[current[1]] += " " + text
+        return current
 
 
 class Decl:
@@ -106,39 +145,9 @@ def parse_block(lines, line, depth):
             continue
         tag = TAG.match(text)
         if tag:
-            name, direction, rest = tag.group(1), tag.group(2), tag.group(3)
-            if name == "file":
-                block.file = True
-                current = None
-            elif name in ("author", "date"):
-                current = None
-            elif name == "brief":
-                block.brief = rest
-                current = ("brief",)
-            elif name in ("note", "warning"):
-                block.notes.append([name, rest])
-                current = ("note", len(block.notes) - 1)
-            elif name == "return":
-                block.returns = rest
-                current = ("return",)
-            else:
-                pname, _, ptext = rest.partition(" ")
-                block.params.append([pname, (direction or "").replace(" ", ""), ptext.strip()])
-                current = ("param", len(block.params) - 1)
-            continue
-        if current is None:
-            block.paragraphs.append(text)
-            current = ("paragraph", len(block.paragraphs) - 1)
-        elif current[0] == "brief":
-            block.brief += " " + text
-        elif current[0] == "note":
-            block.notes[current[1]][1] += " " + text
-        elif current[0] == "return":
-            block.returns += " " + text
-        elif current[0] == "param":
-            block.params[current[1]][2] += " " + text
+            current = block.tag(tag.group(1), tag.group(2), tag.group(3))
         else:
-            block.paragraphs[current[1]] += " " + text
+            current = block.extend(current, text)
     return block
 
 
@@ -158,9 +167,62 @@ def macro_lines(lines, at):
     return out, at
 
 
+def without_continuation(line):
+    """The line with the continuation backslash at its end, and the white space on each side of it, cut off.
+
+    A line with no backslash at its end comes back as it is.
+    """
+    trimmed = line.rstrip()
+    if not trimmed.endswith("\\"):
+        return line
+    return trimmed[:-1].rstrip()
+
+
+def tidy_line(line):
+    """One line of a directive with its end white space cut, and one space before a continuation backslash."""
+    trimmed = line.rstrip()
+    if not trimmed.endswith("\\"):
+        return trimmed
+    return without_continuation(trimmed) + " \\"
+
+
 def tidy_macro(lines):
     """A directive's lines with the padding before each continuation backslash cut to one space."""
-    return "\n".join(re.sub(r"\s*\\\s*$", lambda hit: " \\", line.rstrip()) for line in lines)
+    return "\n".join(tidy_line(line) for line in lines)
+
+
+def called_name(text):
+    """The name before the first parenthesis that follows a name, with or without white space between, or None."""
+    at = text.find("(")
+    while at >= 0:
+        end = len(text[:at].rstrip())
+        start = end
+        while start > 0 and (text[start - 1].isalnum() or text[start - 1] == "_"):
+            start -= 1
+        if start < end:
+            return text[start:end]
+        at = text.find("(", at + 1)
+    return None
+
+
+ATTRIBUTE = re.compile(r"[A-Z][A-Z0-9_]*")
+
+
+def without_attribute(flat):
+    """The text with its last word cut where that word is an attribute: a capital name, with or without arguments.
+
+    The words of the text have one space between each two. Arguments are in parentheses and hold no parenthesis.
+    """
+    head = flat
+    if flat.endswith(")"):
+        opening = flat.rfind("(")
+        if opening < 0 or ")" in flat[opening + 1 : -1]:
+            return flat
+        head = flat[:opening]
+    before, space, word = head.rpartition(" ")
+    if not space or not ATTRIBUTE.fullmatch(word):
+        return flat
+    return before
 
 
 def typedef_name(text):
@@ -170,7 +232,7 @@ def typedef_name(text):
     if pointer:
         return pointer.group(1)
     while True:
-        cut = re.sub(r"\s+[A-Z][A-Z0-9_]*(\([^()]*\))?$", "", flat)
+        cut = without_attribute(flat)
         if cut == flat:
             break
         flat = cut
@@ -189,13 +251,14 @@ def member_of(code, comment):
 def members_in(lines):
     """Each /**< member comment in the lines, once a name."""
     found = []
-    seen = set()
+    found_names = set()
     for line in lines:
-        hit = re.search(r"/\*\*<\s*(.*?)\s*\*/", line)
-        if hit:
-            name, comment = member_of(line[: hit.start()], hit.group(1))
-            if name not in seen:
-                seen.add(name)
+        opening = line.find("/**<")
+        closing = line.find("*/", opening + 4) if opening >= 0 else -1
+        if closing >= 0:
+            name, comment = member_of(line[:opening], line[opening + 4 : closing].strip())
+            if name not in found_names:
+                found_names.add(name)
                 found.append((name, comment))
     return found
 
@@ -203,8 +266,12 @@ def members_in(lines):
 def substitute(text, params, args):
     """The macro text with each parameter replaced by its argument and each ## paste closed up."""
     table = dict(zip(params, args))
-    text = IDENT.sub(lambda hit: table.get(hit.group(0), hit.group(0)), text)
-    return re.sub(r"\s*##\s*", "", text)
+    parts = IDENT.sub(lambda hit: table.get(hit.group(0), hit.group(0)), text).split("##")
+    # Each paste closes up with the white space on each side of it
+    for index in range(len(parts) - 1):
+        parts[index] = parts[index].rstrip()
+        parts[index + 1] = parts[index + 1].lstrip()
+    return "".join(parts)
 
 
 def split_args(text):
@@ -263,104 +330,110 @@ class Header:
         self.by_name.setdefault(decl.name, entry)
 
     def read(self):
-        lines = self.lines
-        stack = []
-        guard = None
-        guard_name = None
-        pending = None
-        owner = None
-        owner_depth = 0
-        orphans = []
+        """Read every line of the header into the file block and the entries."""
+        self.stack = []
+        self.guard = None
+        self.guard_name = None
+        self.pending = None
+        self.owner = None
+        self.owner_depth = 0
+        self.orphans = []
         at = 0
-        while at < len(lines):
-            line = lines[at]
-            text = line.strip()
-            depth = len(stack)
+        while at < len(self.lines):
+            at = self.read_line(at)
+        self.finish()
 
-            if not text:
-                if owner is not None and depth <= owner_depth:
-                    owner = None
+    def read_line(self, at):
+        """Read the line at `at` and the lines that it opens. Answer the line after them."""
+        text = self.lines[at].strip()
+        depth = len(self.stack)
+        if not text:
+            if self.owner is not None and depth <= self.owner_depth:
+                self.owner = None
+            return at + 1
+        if text.startswith("/**") and not text.startswith("/**<"):
+            return self.read_block(at, text, depth)
+        if text.startswith("/*"):
+            while "*/" not in self.lines[at]:
                 at += 1
-                continue
+            return at + 1
+        if text.startswith("//") or text in ("EMBED_BEGIN_DECLS", "EMBED_END_DECLS"):
+            return at + 1
+        if text.startswith("#"):
+            return self.read_directive(at)
+        decl, at = self.statement(at, self.stack, self.guard)
+        if decl is not None:
+            self.attach(decl)
+        return at
 
-            if text.startswith("/**") and not text.startswith("/**<"):
-                start = at
-                body = [text[3:]]
-                while "*/" not in body[-1]:
-                    at += 1
-                    body.append(lines[at])
-                body[-1] = body[-1][: body[-1].index("*/")]
-                block = parse_block(body, start, depth)
-                if block.file:
-                    self.file_block = block
-                else:
-                    if pending is not None:
-                        self.fail(pending.line, "a Doxygen block with no declaration under it")
-                    pending = block
-                at += 1
-                continue
+    def read_block(self, at, text, depth):
+        """Read the Doxygen block that opens at `at`. Answer the line after it."""
+        start = at
+        body = [text[3:]]
+        while "*/" not in body[-1]:
+            at += 1
+            body.append(self.lines[at])
+        body[-1] = body[-1][: body[-1].index("*/")]
+        block = parse_block(body, start, depth)
+        if block.file:
+            self.file_block = block
+        else:
+            if self.pending is not None:
+                self.fail(self.pending.line, "a Doxygen block with no declaration under it")
+            self.pending = block
+        return at + 1
 
-            if text.startswith("/*"):
-                while "*/" not in lines[at]:
-                    at += 1
-                at += 1
-                continue
+    def read_directive(self, at):
+        """Read the directive that starts at `at`. Answer the line after it."""
+        directive, last = macro_lines(self.lines, at)
+        joined = " ".join(part.strip().rstrip("\\").strip() for part in directive)
+        word = re.match(r"#\s*(\w+)", joined).group(1)
+        if word in ("if", "ifdef", "ifndef"):
+            self.open_group(joined)
+        elif word in ("elif", "else"):
+            gid = self.stack[-1][0]
+            self.groups[gid].append(joined)
+            self.stack[-1] = (gid, len(self.groups[gid]) - 1)
+        elif word == "endif":
+            self.stack.pop()
+            if self.owner is not None and len(self.stack) < self.owner_depth:
+                self.owner = None
+        elif word == "define":
+            self.define(at, directive, joined)
+        elif word not in ("include", "error", "pragma", "undef"):
+            self.fail(at, "a directive the reader does not know: " + joined)
+        return last + 1
 
-            if text.startswith("//"):
-                at += 1
-                continue
+    def open_group(self, joined):
+        """Open the #if group of a directive. The first #ifndef of a name that ends in _H is the include guard."""
+        gid = len(self.groups)
+        self.groups[gid] = [joined]
+        named = re.match(r"#\s*ifndef\s+(\w+)$", joined)
+        if self.guard is None and named and named.group(1).endswith("_H"):
+            self.guard = gid
+            self.guard_name = named.group(1)
+        elif self.pending is not None and named:
+            # A block above a #ifndef of a name documents that name in every arm below it
+            self.new_entry(self.pending, name=named.group(1), type="macro")
+            self.pending = None
+            self.owner = None
+        self.stack.append((gid, 0))
 
-            if text.startswith("#"):
-                directive, last = macro_lines(lines, at)
-                joined = " ".join(part.strip().rstrip("\\").strip() for part in directive)
-                word = re.match(r"#\s*(\w+)", joined).group(1)
-                if word in ("if", "ifdef", "ifndef"):
-                    gid = len(self.groups)
-                    self.groups[gid] = [joined]
-                    named = re.match(r"#\s*ifndef\s+(\w+)$", joined)
-                    if guard is None and named and named.group(1).endswith("_H"):
-                        guard = gid
-                        guard_name = named.group(1)
-                    elif pending is not None and named:
-                        # A block above a #ifndef of a name documents that name in every arm below it
-                        self.new_entry(pending, name=named.group(1), type="macro")
-                        pending = None
-                        owner = None
-                    stack.append((gid, 0))
-                elif word in ("elif", "else"):
-                    gid = stack[-1][0]
-                    self.groups[gid].append(joined)
-                    stack[-1] = (gid, len(self.groups[gid]) - 1)
-                elif word == "endif":
-                    stack.pop()
-                    if owner is not None and len(stack) < owner_depth:
-                        owner = None
-                elif word == "define":
-                    name = re.match(r"#\s*define\s+(\w+)", joined).group(1)
-                    if name == guard_name:
-                        at = last + 1
-                        continue
-                    decl = Decl("macro", name, tidy_macro(directive), at, self.arms(stack, guard))
-                    if any("/**" in part for part in directive):
-                        self.template(name, directive)
-                    pending, owner, owner_depth = self.attach(decl, pending, owner, owner_depth, depth, orphans)
-                elif word not in ("include", "error", "pragma", "undef"):
-                    self.fail(at, "a directive the reader does not know: " + joined)
-                at = last + 1
-                continue
+    def define(self, at, directive, joined):
+        """Read a #define, but the define of the include guard."""
+        name = re.match(r"#\s*define\s+(\w+)", joined).group(1)
+        if name == self.guard_name:
+            return
+        decl = Decl("macro", name, tidy_macro(directive), at, self.arms(self.stack, self.guard))
+        if any("/**" in part for part in directive):
+            self.template(name, directive)
+        self.attach(decl)
 
-            if text in ("EMBED_BEGIN_DECLS", "EMBED_END_DECLS"):
-                at += 1
-                continue
-
-            decl, at = self.statement(at, stack, guard)
-            if decl is None:
-                continue
-            pending, owner, owner_depth = self.attach(decl, pending, owner, owner_depth, depth, orphans)
-
-        if pending is not None:
-            self.fail(pending.line, "a Doxygen block with no declaration under it")
-        for decl in orphans:
+    def finish(self):
+        """Give each declaration with no entry yet to the entry of its name, and test that each entry has one."""
+        if self.pending is not None:
+            self.fail(self.pending.line, "a Doxygen block with no declaration under it")
+        for decl in self.orphans:
             if decl.name in self.by_name:
                 self.place(decl, self.by_name[decl.name])
         for entry in self.entries:
@@ -371,96 +444,119 @@ class Header:
     def arms(self, stack, guard):
         return [arm for arm in stack if arm[0] != guard]
 
-    def attach(self, decl, pending, owner, owner_depth, depth, orphans):
-        """Give the declaration to its entry; answer the block that waits, the owner and the depth of the owner."""
+    def attach(self, decl):
+        """Give the declaration to its entry, and move on the block that waits and the owner."""
         if decl.type == "invocation":
             self.expand(decl)
-            return pending, owner, owner_depth
-        if pending is not None:
-            entry = self.new_entry(pending, decl=decl, name=decl.name, type=decl.type)
-            return None, entry, pending.depth
+            return
+        if self.pending is not None:
+            self.owner = self.new_entry(self.pending, decl=decl, name=decl.name, type=decl.type)
+            self.owner_depth = self.pending.depth
+            self.pending = None
+            return
         if decl.name in self.by_name:
             self.place(decl, self.by_name[decl.name])
-        elif owner is not None:
-            self.place(decl, owner)
+        elif self.owner is not None:
+            self.place(decl, self.owner)
         else:
-            orphans.append(decl)
-        return None, owner, owner_depth
+            self.orphans.append(decl)
 
     def statement(self, at, stack, guard):
         """The declaration that starts at line at, and the line after it."""
-        lines = self.lines
-        text = lines[at].strip()
-        start = at
+        text = self.lines[at].strip()
         arms = self.arms(stack, guard)
-
         if re.match(r"typedef\s+(struct|enum|union)\b", text) and not text.rstrip().endswith(";"):
-            depth = 0
-            body = []
-            while True:
-                body.append(lines[at])
-                depth += code_only(lines[at]).count("{") - code_only(lines[at]).count("}")
-                if depth == 0 and "}" in lines[at] and ";" in lines[at]:
-                    break
-                at += 1
-            name = IDENT.findall(code_only(body[-1]).split("}")[-1])[-1]
-            return Decl("type", name, "\n".join(body), start, arms, members_in(body)), at + 1
-
+            return self.record(at, arms)
         if text.startswith("typedef"):
-            body = [lines[at]]
-            while not code_only(body[-1]).rstrip().endswith(";"):
-                at += 1
-                body.append(lines[at])
-            joined = "\n".join(part.rstrip() for part in body)
-            return Decl("type", typedef_name(joined), joined, start, arms), at + 1
-
+            return self.typedef(at, arms)
         head = re.match(r"([A-Z][A-Z0-9_]*)\s*\(", text)
-        body = [lines[at]]
-        depth = code_only(lines[at]).count("(") - code_only(lines[at]).count(")")
+        body, end = self.parenthesized(at)
+        joined = "\n".join(part.rstrip() for part in body)
+        if head:
+            return self.invocation(head.group(1), at, end, body, joined, arms)
+        if "(" in text:
+            return self.function(at, end, joined, arms)
+        self.fail(at, "a line the reader cannot place: " + text)
+        return None, end + 1
+
+    def record(self, at, arms):
+        """The struct, enum or union typedef that starts at `at`, and the line after it."""
+        start = at
+        depth = 0
+        body = []
+        while True:
+            body.append(self.lines[at])
+            depth += code_only(self.lines[at]).count("{") - code_only(self.lines[at]).count("}")
+            if depth == 0 and "}" in self.lines[at] and ";" in self.lines[at]:
+                break
+            at += 1
+        name = IDENT.findall(code_only(body[-1]).split("}")[-1])[-1]
+        return Decl("type", name, "\n".join(body), start, arms, members_in(body)), at + 1
+
+    def typedef(self, at, arms):
+        """The typedef of no body that starts at `at`, and the line after it."""
+        start = at
+        body = [self.lines[at]]
+        while not code_only(body[-1]).rstrip().endswith(";"):
+            at += 1
+            body.append(self.lines[at])
+        joined = "\n".join(part.rstrip() for part in body)
+        return Decl("type", typedef_name(joined), joined, start, arms), at + 1
+
+    def parenthesized(self, at):
+        """The lines from `at` to the line that closes its parentheses, and the index of that line."""
+        body = [self.lines[at]]
+        depth = code_only(self.lines[at]).count("(") - code_only(self.lines[at]).count(")")
         while depth > 0:
             at += 1
-            body.append(lines[at])
-            depth += code_only(lines[at]).count("(") - code_only(lines[at]).count(")")
-        joined = "\n".join(part.rstrip() for part in body)
+            body.append(self.lines[at])
+            depth += code_only(self.lines[at]).count("(") - code_only(self.lines[at]).count(")")
+        return body, at
 
-        if head:
-            macro = head.group(1)
-            if lines[at].rstrip().endswith(";") is False and at + 1 < len(lines) and lines[at + 1].strip() == ";":
-                at += 1
-            if macro == "EMBED_STATIC_ASSERT":
-                condition = split_args(code_only(joined))[0]
-                return Decl("assert", " ".join(condition.split()), joined, start, arms), at + 1
-            if macro == "EMBED_ENUM_BYTE":
-                name = split_args(code_only(joined))[0]
-                return Decl("type", name, joined, start, arms, members_in(body)), at + 1
-            if macro in self.templates:
-                return Decl("invocation", macro, joined, start, arms), at + 1
-            self.fail(start, "a macro invocation the reader does not know: " + macro)
-
-        if "(" in text:
-            signature = joined
-            if not code_only(body[-1]).rstrip().endswith(";"):
-                if at + 1 >= len(lines) or lines[at + 1].strip() != "{":
-                    self.fail(start, "a function with no body and no semicolon")
-                at += 1
-                depth = 0
-                while True:
-                    depth += code_only(lines[at]).count("{") - code_only(lines[at]).count("}")
-                    if depth == 0:
-                        break
-                    at += 1
-                signature += ";"
-            name = re.search(r"(\w+)\s*\(", code_only(joined)).group(1)
-            return Decl("function", name, signature, start, arms), at + 1
-
-        self.fail(start, "a line the reader cannot place: " + text)
+    def invocation(self, macro, start, at, body, joined, arms):
+        """The declaration that a macro invocation makes, and the line after it."""
+        lines = self.lines
+        if lines[at].rstrip().endswith(";") is False and at + 1 < len(lines) and lines[at + 1].strip() == ";":
+            at += 1
+        if macro == "EMBED_STATIC_ASSERT":
+            condition = split_args(code_only(joined))[0]
+            return Decl("assert", " ".join(condition.split()), joined, start, arms), at + 1
+        if macro == "EMBED_ENUM_BYTE":
+            name = split_args(code_only(joined))[0]
+            return Decl("type", name, joined, start, arms, members_in(body)), at + 1
+        if macro in self.templates:
+            return Decl("invocation", macro, joined, start, arms), at + 1
+        self.fail(start, "a macro invocation the reader does not know: " + macro)
         return None, at + 1
+
+    def function(self, start, at, joined, arms):
+        """The function declaration or definition from `start`, and the line after it. A body is not part of it."""
+        lines = self.lines
+        signature = joined
+        if not code_only(lines[at]).rstrip().endswith(";"):
+            if at + 1 >= len(lines) or lines[at + 1].strip() != "{":
+                self.fail(start, "a function with no body and no semicolon")
+            at = self.body_end(at + 1)
+            signature += ";"
+        name = called_name(code_only(joined))
+        if name is None:
+            self.fail(start, "a function with no name before its parenthesis")
+        return Decl("function", name, signature, start, arms), at + 1
+
+    def body_end(self, at):
+        """The line that closes the braces that open on line `at`."""
+        depth = 0
+        while True:
+            depth += code_only(self.lines[at]).count("{") - code_only(self.lines[at]).count("}")
+            if depth == 0:
+                return at
+            at += 1
 
     def template(self, name, directive):
         """Retain a macro whose body holds Doxygen blocks, for the functions its invocations write."""
         head = re.match(r"\s*#\s*define\s+\w+\(([^)]*)\)", directive[0])
         params = [part.strip() for part in head.group(1).split(",")]
-        body = [re.sub(r"\s*\\\s*$", "", part) for part in directive[1:]]
+        body = [without_continuation(part) for part in directive[1:]]
         self.templates[name] = (params, body)
 
     def expand(self, decl):
@@ -483,7 +579,9 @@ class Header:
                     signature.append(body[at].strip())
                     at += 1
                 text = substitute(" ".join(signature), params, args) + ";"
-                name = re.search(r"(\w+)\s*\(", text).group(1)
+                name = called_name(text)
+                if name is None:
+                    self.fail(decl.line, "a function in %s with no name before its parenthesis" % decl.name)
                 key = (decl.name, index)
                 entry = self.by_name.get(key)
                 if entry is None:
@@ -512,9 +610,43 @@ def known_names(headers):
     return table
 
 
-CODE_TOKEN = re.compile(
-    r"(#\w+|<[\w./]+\.h>|(?<![\w-])(?:-W|--|-m)[\w-]+|\b\w*_\w*\b(?:\(\w*\))?|\b\w+\(\)|\b0x[0-9A-Fa-f]+\w*|\d+\^\w+)"
+# The forms of a code token in prose, in the order that each position tries them. A form with a test is a token
+# only where the test passes. In order: a directive, a header, a compiler option, a name with an underscore and
+# its call, a call, a hex number, and a power.
+CODE_FORMS = (
+    (re.compile(r"#\w+"), None),
+    (re.compile(r"<([\w./]+)>"), lambda hit: len(hit.group(1)) >= 3 and hit.group(1).endswith(".h")),
+    (re.compile(r"(?<![\w-])(?:-W|--|-m)[\w-]+"), None),
+    (re.compile(r"\b(\w+)\b(?:\(\w*\))?"), lambda hit: "_" in hit.group(1)),
+    (re.compile(r"\b\w+\(\)"), None),
+    (re.compile(r"\b0x[0-9A-Fa-f]\w*"), None),
+    (re.compile(r"\d+\^\w+"), None),
 )
+
+
+def code_token_end(part, at):
+    """The end of the code token that starts at `at` in the part, or None where no token starts there."""
+    for form, test in CODE_FORMS:
+        hit = form.match(part, at)
+        if hit and (test is None or test(hit)):
+            return hit.end()
+    return None
+
+
+def code_split(part):
+    """The part split at each code token, the tokens at the odd places, from the left and with no overlap."""
+    pieces = []
+    done = 0
+    at = 0
+    while at < len(part):
+        end = code_token_end(part, at)
+        if end is None:
+            at += 1
+            continue
+        pieces.extend([part[done:at], part[at:end]])
+        done = at = end
+    pieces.append(part[done:])
+    return pieces
 
 
 def prose(text, names, slug):
@@ -525,7 +657,7 @@ def prose(text, names, slug):
             out.append(link(part[1:-1], names, slug))
             continue
         pieces = []
-        for index, piece in enumerate(CODE_TOKEN.split(part)):
+        for index, piece in enumerate(code_split(part)):
             if index % 2 == 1 and piece:
                 pieces.append(link(piece, names, slug))
             else:
@@ -546,33 +678,41 @@ def link(code, names, slug):
     return span
 
 
+def common_arms(current, target):
+    """The count of #if arms at the start of two stacks that are the same."""
+    same = 0
+    while same < len(current) and same < len(target) and current[same] == target[same]:
+        same += 1
+    return same
+
+
+def arm_lines(current, target, groups):
+    """The directives that close the #if arms of current that target leaves, and open the arms that it enters."""
+    out = []
+    same = common_arms(current, target)
+    if same < len(current) and same < len(target) and current[same][0] == target[same][0]:
+        out.extend([ENDIF] * (len(current) - same - 1))
+        gid = target[same][0]
+        out.extend(groups[gid][arm] for arm in range(current[same][1] + 1, target[same][1] + 1))
+        opened = same + 1
+    else:
+        out.extend([ENDIF] * (len(current) - same))
+        opened = same
+    for gid, arm in target[opened:]:
+        out.extend(groups[gid][index] for index in range(0, arm + 1))
+    return out
+
+
 def skeleton(decls, groups):
     """The declarations of one entry in the #if arms they are in, as C."""
     out = []
     current = []
     for decl in decls:
         target = list(decl.stack)
-        same = 0
-        while same < len(current) and same < len(target) and current[same] == target[same]:
-            same += 1
-        if same < len(current) and same < len(target) and current[same][0] == target[same][0]:
-            for _ in range(len(current) - same - 1):
-                out.append("#endif")
-            gid = target[same][0]
-            for arm in range(current[same][1] + 1, target[same][1] + 1):
-                out.append(groups[gid][arm])
-            opened = same + 1
-        else:
-            for _ in range(len(current) - same):
-                out.append("#endif")
-            opened = same
-        for gid, arm in target[opened:]:
-            for index in range(0, arm + 1):
-                out.append(groups[gid][index])
+        out.extend(arm_lines(current, target, groups))
         current = target
         out.append(decl.text)
-    for _ in current:
-        out.append("#endif")
+    out.extend([ENDIF] * len(current))
     return "\n".join(out)
 
 
@@ -632,25 +772,30 @@ class Page:
             self.emit("## %s" % title)
             self.emit()
             for entry in entries:
-                if type == "assert":
-                    self.emit("### `%s`" % entry.names[0].replace("`", ""))
-                else:
-                    self.emit("### `%s` { #%s }" % (entry.names[0], entry.names[0]))
-                self.emit()
-                self.emit("```c")
-                for code in skeleton(entry.decls, header.groups).split("\n"):
-                    self.emit(code)
-                self.emit("```")
-                self.emit()
-                for block in entry.blocks:
-                    self.block(block)
-                members = []
-                for decl in entry.decls:
-                    members.extend(member for member in decl.members if member not in members)
-                if members:
-                    for name, text in members:
-                        self.emit("- `%s`: %s" % (name, prose(text, self.names, header.slug)), entry.blocks[0].line)
-                    self.emit()
+                self.entry(type, entry)
+
+    def entry(self, type, entry):
+        """The heading, the C, the blocks and the members of one entry."""
+        header = self.header
+        if type == "assert":
+            self.emit("### `%s`" % entry.names[0].replace("`", ""))
+        else:
+            self.emit("### `%s` { #%s }" % (entry.names[0], entry.names[0]))
+        self.emit()
+        self.emit("```c")
+        for code in skeleton(entry.decls, header.groups).split("\n"):
+            self.emit(code)
+        self.emit("```")
+        self.emit()
+        for block in entry.blocks:
+            self.block(block)
+        members = []
+        for decl in entry.decls:
+            members.extend(member for member in decl.members if member not in members)
+        if members:
+            for name, text in members:
+                self.emit("- `%s`: %s" % (name, prose(text, self.names, header.slug)), entry.blocks[0].line)
+            self.emit()
 
     def text(self):
         return "\n".join(self.lines).rstrip() + "\n"

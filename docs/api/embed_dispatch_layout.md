@@ -734,7 +734,7 @@ Asserts a table's members sit at consecutive slots and that nothing else is in i
 
 > **Note:** The per-member assertions catch a member left out of the list. The size assertion catches padding, since a padded struct is larger than the count times [`EMBED_FUNCTION_POINTER_BYTES`](#EMBED_FUNCTION_POINTER_BYTES).
 
-> **Note:** [`EMBED_CAT`](#EMBED_CAT) builds the arity line's name from [`EMBED_NARG`](#EMBED_NARG)'s count of the member list. The caller writes each member once.
+> **Note:** [`EMBED_CAT`](embed_compiler_directives.md#EMBED_CAT) builds the arity line's name from [`EMBED_NARG`](#EMBED_NARG)'s count of the member list. The caller writes each member once.
 
 > _**Warning:**_ A member of some other type changes sizeof(`Table_`) and fails the size assertion.
 
@@ -752,38 +752,6 @@ Expands to static const.
 
 > **Note:** This macro does not supply [`EMBED_UNUSED`](embed_compiler_directives.md#EMBED_UNUSED). Write it on the table as well. A translation unit that calls nothing through the table warns without it.
 
-### `EMBED_CAT_` { #EMBED_CAT_ }
-
-```c
-#define EMBED_CAT_(left_, right_) left_##right_
-```
-
-Expands to `left_`#`#right_`.
-
-- `[in]`: `left_` Left operand of ##.
-- `[in]`: `right_` Right operand of ##.
-
-\*\*Returns:\*\* The single token that `left_` and `right_` make together.
-
-> **Note:** [`EMBED_CAT`](#EMBED_CAT) calls this macro. ## does not expand its own operands, and [`EMBED_CAT`](#EMBED_CAT) expands them before it gives them to this macro. Call [`EMBED_CAT`](#EMBED_CAT) when either operand is itself a macro.
-
-### `EMBED_CAT` { #EMBED_CAT }
-
-```c
-#define EMBED_CAT(left_, right_) EMBED_CAT_(left_, right_)
-```
-
-Expands to [`EMBED_CAT_`](#EMBED_CAT_)(`left_`, `right_`).
-
-- `[in]`: `left_` Left operand, forwarded to [`EMBED_CAT_`](#EMBED_CAT_).
-- `[in]`: `right_` Right operand, forwarded to [`EMBED_CAT_`](#EMBED_CAT_).
-
-\*\*Returns:\*\* The single token that `left_` and `right_` make together.
-
-> **Note:** This expands its arguments first, then [`EMBED_CAT_`](#EMBED_CAT_) pastes the results. A macro operand reaches [`EMBED_CAT_`](#EMBED_CAT_) as its value.
-
-> **Note:** [`EMBED_TABLE_LAYOUT`](#EMBED_TABLE_LAYOUT) uses this to build an `EMBED_TABLE_SLOTS_`&lt;n&gt; name from [`EMBED_NARG`](#EMBED_NARG)'s count.
-
 ### `EMBED_NARG` { #EMBED_NARG }
 
 ```c
@@ -797,7 +765,7 @@ Expands to [`EMBED_ARG_N`](#EMBED_ARG_N) with `__VA_ARGS__` followed by the cons
 
 \*\*Returns:\*\* The number of arguments, for one to twenty-four arguments.
 
-> **Note:** A count of the arguments turns an arity into a number that [`EMBED_CAT`](#EMBED_CAT) can paste into a macro name. The preprocessor has no loop.
+> **Note:** A count of the arguments turns an arity into a number that [`EMBED_CAT`](embed_compiler_directives.md#EMBED_CAT) can paste into a macro name. The preprocessor has no loop.
 
 > _**Warning:**_ An empty list gives 1. The preprocessor cannot tell an empty argument from no argument.
 

@@ -66,6 +66,7 @@ void setUp(void)
 
 void tearDown(void)
 {
+    // Each case has nothing to release
 }
 
 /** @brief One thread of the count case: ATOMIC_ROUNDS adds to each counter and a raise to its id. */
@@ -174,6 +175,7 @@ static void order_gate(embed_u32 arrivals)
     (void)embed_atomic_u32_fetch_add(&s_order_arrived, 1u);
     while (embed_atomic_u32_load(&s_order_arrived) < arrivals)
     {
+        // The condition reads the count of arrivals, and the loop has no other step
     }
 }
 

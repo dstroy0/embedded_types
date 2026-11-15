@@ -12,9 +12,9 @@ and `decide` checks each theorem on every arm of the chain.
 - `lane_holds`. On every arm, `EMBED_LANE_BITS` is whole 32-bit lanes, at least one, at max 512, and whole words.
   `EMBED_LANE_U32S` is 1, 2, 4, 8 or 16, the arms of `EMBED_LANE_WORDS`. The byte mask holds a bit for each byte.
 
-- `lane_fields`, `generation_widths` and `lanes_fit`. At each word width, the busy, closed and sleeper bits of the
-  lane word and its generation fill the word. The generation is 61 bits wide at 64, 29 at 32 and 13 at 16. The open
-  count fits.
+- `lane_fields`, `generation_widths` and `lanes_fit`. The lane word is an `embed_atomic_word`, 64 bits on a word of
+  64 bits and 32 bits below it. At each word width, the busy, closed and sleeper bits of the lane word and its
+  generation fill that atomic word. The generation is 61 bits wide at 64, and 29 at 32 and 16. The open count fits.
 - `narg_counts`: `EMBED_NARG` gives n for each n from 1 to 24.
 -/
 
@@ -63,13 +63,18 @@ theorem lane_holds : ∀ cuda ∈ [true, false], ∀ v ∈ vectorArms, ∀ w ∈
       bits / 8 ≤ maskBits (bits / 8) := by
   decide
 
-/-- The lane word at a word width: the busy, closed and sleeper bits, and the generation's bits. -/
-def generationBits (w : Nat) : Nat := w - 3
+/-- The width of `embed_atomic_word` at a word width: 64 bits on a word of 64 bits, and 32 bits below it. No arm
+has an atomic word of 16 bits. -/
+def atomicBits (w : Nat) : Nat := if w = 64 then 64 else 32
 
-/-- The four fields fill the word at each width, and the generation is 61, 29 or 13 bits wide. -/
-theorem lane_fields : ∀ w ∈ [64, 32, 16], 3 + generationBits w = w ∧ 0 < generationBits w := by decide
+/-- The lane word at a word width is an `embed_atomic_word`: the busy, closed and sleeper bits, and the generation's
+bits. -/
+def generationBits (w : Nat) : Nat := atomicBits w - 3
 
-theorem generation_widths : generationBits 64 = 61 ∧ generationBits 32 = 29 ∧ generationBits 16 = 13 := by decide
+/-- The four fields fill the atomic word at each width. The generation is 61 bits wide at 64, and 29 at 32 and 16. -/
+theorem lane_fields : ∀ w ∈ [64, 32, 16], 3 + generationBits w = atomicBits w ∧ 0 < generationBits w := by decide
+
+theorem generation_widths : generationBits 64 = 61 ∧ generationBits 32 = 29 ∧ generationBits 16 = 29 := by decide
 
 /-- `EMBED_TURNSTILE_LANES` is from 1 to 64, and the open count less one fits each word width. -/
 theorem lanes_fit : ∀ w ∈ [64, 32, 16], 64 - 1 < 2 ^ w := by decide

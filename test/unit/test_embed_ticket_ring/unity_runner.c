@@ -10,11 +10,13 @@
 extern void setUp(void);
 extern void tearDown(void);
 extern void test_the_stamp_gives_its_epoch_and_ticket_back(void);
+extern void test_a_wide_field_keeps_only_its_own_bits(void);
 extern void test_the_flags_sit_between_the_ticket_and_the_epoch(void);
+extern void test_the_fields_fill_the_word(void);
 extern void test_the_mask_is_the_count_of_slots_less_one(void);
 extern void test_the_place_is_the_low_bits_of_the_ticket(void);
 extern void test_a_ticket_a_ring_on_lands_at_the_same_place(void);
-extern void test_the_ticket_rolls_at_32_bits_onto_the_next_place(void);
+extern void test_the_ticket_rolls_at_its_width_onto_the_next_place(void);
 extern void test_the_epoch_and_the_flags_do_not_move_the_place(void);
 extern void test_the_life_of_a_slot_lands_each_step_once_in_order(void);
 extern void test_a_release_lands_with_no_replay(void);
@@ -86,22 +88,24 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 int main(void)
 {
   UnityBegin("D:/git_project/repos/owned/public/embedded_types/test/unit/test_embed_ticket_ring\\test_embed_ticket_ring.c");
-  run_test(test_the_stamp_gives_its_epoch_and_ticket_back, "test_the_stamp_gives_its_epoch_and_ticket_back", 72);
-  run_test(test_the_flags_sit_between_the_ticket_and_the_epoch, "test_the_flags_sit_between_the_ticket_and_the_epoch", 83);
-  run_test(test_the_mask_is_the_count_of_slots_less_one, "test_the_mask_is_the_count_of_slots_less_one", 93);
-  run_test(test_the_place_is_the_low_bits_of_the_ticket, "test_the_place_is_the_low_bits_of_the_ticket", 99);
-  run_test(test_a_ticket_a_ring_on_lands_at_the_same_place, "test_a_ticket_a_ring_on_lands_at_the_same_place", 107);
-  run_test(test_the_ticket_rolls_at_32_bits_onto_the_next_place, "test_the_ticket_rolls_at_32_bits_onto_the_next_place", 116);
-  run_test(test_the_epoch_and_the_flags_do_not_move_the_place, "test_the_epoch_and_the_flags_do_not_move_the_place", 122);
-  run_test(test_the_life_of_a_slot_lands_each_step_once_in_order, "test_the_life_of_a_slot_lands_each_step_once_in_order", 128);
-  run_test(test_a_release_lands_with_no_replay, "test_a_release_lands_with_no_replay", 165);
-  run_test(test_the_next_grant_takes_a_released_word_over, "test_the_next_grant_takes_a_released_word_over", 178);
-  run_test(test_a_flipped_stamp_refuses_every_step, "test_a_flipped_stamp_refuses_every_step", 199);
-  run_test(test_the_push_records_the_check_of_the_job_pointer, "test_the_push_records_the_check_of_the_job_pointer", 219);
-  run_test(test_a_single_bit_error_in_the_job_pointer_fails_the_pop_and_the_replay, "test_a_single_bit_error_in_the_job_pointer_fails_the_pop_and_the_replay", 249);
-  run_test(test_a_double_bit_error_fails_the_pop_unless_seven_apart, "test_a_double_bit_error_fails_the_pop_unless_seven_apart", 279);
-  run_test(test_lives_inside_passes_each_pop_whole_after_the_drain, "test_lives_inside_passes_each_pop_whole_after_the_drain", 326);
-  run_test(test_two_pops_of_one_stamp_land_once, "test_two_pops_of_one_stamp_land_once", 363);
+  run_test(test_the_stamp_gives_its_epoch_and_ticket_back, "test_the_stamp_gives_its_epoch_and_ticket_back", 76);
+  run_test(test_a_wide_field_keeps_only_its_own_bits, "test_a_wide_field_keeps_only_its_own_bits", 89);
+  run_test(test_the_flags_sit_between_the_ticket_and_the_epoch, "test_the_flags_sit_between_the_ticket_and_the_epoch", 98);
+  run_test(test_the_fields_fill_the_word, "test_the_fields_fill_the_word", 108);
+  run_test(test_the_mask_is_the_count_of_slots_less_one, "test_the_mask_is_the_count_of_slots_less_one", 116);
+  run_test(test_the_place_is_the_low_bits_of_the_ticket, "test_the_place_is_the_low_bits_of_the_ticket", 122);
+  run_test(test_a_ticket_a_ring_on_lands_at_the_same_place, "test_a_ticket_a_ring_on_lands_at_the_same_place", 130);
+  run_test(test_the_ticket_rolls_at_its_width_onto_the_next_place, "test_the_ticket_rolls_at_its_width_onto_the_next_place", 139);
+  run_test(test_the_epoch_and_the_flags_do_not_move_the_place, "test_the_epoch_and_the_flags_do_not_move_the_place", 146);
+  run_test(test_the_life_of_a_slot_lands_each_step_once_in_order, "test_the_life_of_a_slot_lands_each_step_once_in_order", 153);
+  run_test(test_a_release_lands_with_no_replay, "test_a_release_lands_with_no_replay", 195);
+  run_test(test_the_next_grant_takes_a_released_word_over, "test_the_next_grant_takes_a_released_word_over", 209);
+  run_test(test_a_flipped_stamp_refuses_every_step, "test_a_flipped_stamp_refuses_every_step", 233);
+  run_test(test_the_push_records_the_check_of_the_job_pointer, "test_the_push_records_the_check_of_the_job_pointer", 255);
+  run_test(test_a_single_bit_error_in_the_job_pointer_fails_the_pop_and_the_replay, "test_a_single_bit_error_in_the_job_pointer_fails_the_pop_and_the_replay", 286);
+  run_test(test_a_double_bit_error_fails_the_pop_unless_seven_apart, "test_a_double_bit_error_fails_the_pop_unless_seven_apart", 320);
+  run_test(test_lives_inside_passes_each_pop_whole_after_the_drain, "test_lives_inside_passes_each_pop_whole_after_the_drain", 369);
+  run_test(test_two_pops_of_one_stamp_land_once, "test_two_pops_of_one_stamp_land_once", 408);
 
   return UNITY_END();
 }

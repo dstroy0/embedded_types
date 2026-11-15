@@ -660,30 +660,6 @@
 #define EMBED_TABLE_STORAGE static const
 
 /**
- * @brief Expands to left_##right_.
- *
- * @param[in] left_  Left operand of ##.
- * @param[in] right_ Right operand of ##.
- * @return           The single token that left_ and right_ make together.
- * @note EMBED_CAT calls this macro. ## does not expand its own operands, and EMBED_CAT expands them
- *       before it gives them to this macro. Call EMBED_CAT when either operand is itself a macro.
- */
-#define EMBED_CAT_(left_, right_) left_##right_
-
-/**
- * @brief Expands to EMBED_CAT_(left_, right_).
- *
- * @param[in] left_  Left operand, forwarded to EMBED_CAT_.
- * @param[in] right_ Right operand, forwarded to EMBED_CAT_.
- * @return           The single token that left_ and right_ make together.
- * @note This expands its arguments first, then EMBED_CAT_ pastes the results. A macro operand
- *       reaches EMBED_CAT_ as its value.
- * @note EMBED_TABLE_LAYOUT uses this to build an EMBED_TABLE_SLOTS_<n> name from EMBED_NARG's
- *       count.
- */
-#define EMBED_CAT(left_, right_) EMBED_CAT_(left_, right_)
-
-/**
  * @brief Expands to EMBED_ARG_N with __VA_ARGS__ followed by the constants 24 down to 0.
  *
  * @param[in] ... The list to count.

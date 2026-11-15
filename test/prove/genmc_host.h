@@ -29,7 +29,7 @@
 #include <stdint.h>
 
 // No processor runs the client: a spin's pause is no instruction
-#define EMBED_TURNSTILE_PAUSE() ((void)0)
+#define EMBED_TURNSTILE_SPIN_PAUSE() ((void)0)
 
 #include "embed_turnstile.h"
 
@@ -38,12 +38,12 @@ static embed_atomic_word s_genmc_wakes;
 /** @brief The clock, in nanoseconds. */
 static embed_atomic_word s_genmc_clock;
 
-int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value seen, embed_u64 nanoseconds)
+int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value old_value, embed_word nanoseconds)
 {
-    const embed_atomic_word_value epoch = embed_atomic_word_load(&s_genmc_wakes);
+    const embed_atomic_word_value wake_count = embed_atomic_word_load(&s_genmc_wakes);
 
     // Explicit casts retain the low 32 bits of each value, the bits the futex compares
-    if ((uint32_t)embed_atomic_word_load(word) != (uint32_t)seen)
+    if ((uint32_t)embed_atomic_word_load(word) != (uint32_t)old_value)
     {
         return 1;
     }
@@ -53,8 +53,9 @@ int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value seen, embed
     }
     // A loop that reads only the count of wakes. The spin-assume of GenMC takes it as a wait, and its liveness check
     // reports an execution in which no wake ever ends the wait
-    while (embed_atomic_word_load(&s_genmc_wakes) == epoch)
+    while (embed_atomic_word_load(&s_genmc_wakes) == wake_count)
     {
+        // The condition reads the count of wakes, and the loop has no other step
     }
     return 0;
 }
@@ -65,11 +66,12 @@ void embed_word_wake(embed_atomic_word *word)
     (void)embed_atomic_word_fetch_add(&s_genmc_wakes, 1u);
 }
 
-embed_u64 embed_clock_ns(void)
+embed_word embed_clock_ns(void)
 {
     const embed_atomic_word_value step = (embed_atomic_word_value)1u << EMBED_TURNSTILE_UNIT_SHIFT;
 
-    return embed_atomic_word_fetch_add(&s_genmc_clock, step) + step;
+    // Explicit cast takes the clock modulo the word, which is the contract of the clock
+    return (embed_word)(embed_atomic_word_fetch_add(&s_genmc_clock, step) + step);
 }
 
 #endif

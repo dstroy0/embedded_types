@@ -49,7 +49,7 @@ typedef embed_u8 embed_lane_bytes EMBED_VECTOR(EMBED_LANE_BYTES);
 #endif
 ```
 
-The lane seen as its bytes, which the byte masks compare in.
+The view of the lane as its bytes, which the byte masks compare in.
 
 ### `embed_lane_chars` { #embed_lane_chars }
 
@@ -59,7 +59,7 @@ typedef char embed_lane_chars EMBED_VECTOR(EMBED_LANE_BYTES);
 #endif
 ```
 
-The lane seen as char, the shape the compiler's byte mask builtin reads.
+The view of the lane as char, the shape that the byte mask builtin of the compiler reads.
 
 ### `embed_lane_raw` { #embed_lane_raw }
 

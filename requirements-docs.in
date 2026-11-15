@@ -1,0 +1,6 @@
+# The site tools. requirements-docs.txt locks these and each package under them, with the hash of each file.
+# After a change here, write the lock again:
+#
+#     uv pip compile requirements-docs.in --universal --generate-hashes --python-version 3.13 --no-header -o requirements-docs.txt
+mkdocs==1.6.1
+mkdocs-material==9.8.0

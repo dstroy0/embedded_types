@@ -1,7 +1,7 @@
 /-!
 # embedded_types, the queue of the manifold
 
-`queue` counts the workers that found every open lane busy. A worker adds one before it grows the manifold or
+`queue_length` counts the workers that found every open lane busy. A worker adds one before it grows the manifold or
 waits, and subtracts one in the step that takes its lane. Each subtraction follows the addition of the same worker
 in the modification order of the word. Both are atomic operations of one thread on one word.
 

@@ -331,7 +331,7 @@
 #define EMBED_VECTOR_REGISTER_BITS 512
 #elif defined(__AVX2__)
 #define EMBED_VECTOR_REGISTER_BITS 256
-#elif defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && (_M_IX86_FP >= 2)) || defined(__ARM_NEON) ||       \
+#elif defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && (_M_IX86_FP >= 2)) || defined(__ARM_NEON) ||     \
     defined(__aarch64__) || defined(_M_ARM64)
 #define EMBED_VECTOR_REGISTER_BITS 128
 #else
@@ -473,6 +473,31 @@
  *       copies in the file, and they would drift at the first edit of one.
  */
 #define EMBED_DIAGNOSTIC_STRING(text_) #text_
+
+/**
+ * @brief Expands to left_##right_.
+ *
+ * @param[in] left_  Left operand of ##.
+ * @param[in] right_ Right operand of ##.
+ * @return           The single token that left_ and right_ make together.
+ * @note EMBED_CAT calls this macro. ## does not expand its own operands, and EMBED_CAT expands them
+ *       before it gives them to this macro. Call EMBED_CAT when either operand is itself a macro.
+ */
+#define EMBED_CAT_(left_, right_) left_##right_
+
+/**
+ * @brief Expands to EMBED_CAT_(left_, right_).
+ *
+ * @param[in] left_  Left operand, forwarded to EMBED_CAT_.
+ * @param[in] right_ Right operand, forwarded to EMBED_CAT_.
+ * @return           The single token that left_ and right_ make together.
+ * @note This expands its arguments first, then EMBED_CAT_ pastes the results. A macro operand
+ *       reaches EMBED_CAT_ as its value.
+ * @note The types of each word width paste their width onto a stem, as embed_word does with
+ *       EMBED_WORD_BITS. EMBED_TABLE_LAYOUT builds an EMBED_TABLE_SLOTS_<n> name from the count of
+ *       EMBED_NARG.
+ */
+#define EMBED_CAT(left_, right_) EMBED_CAT_(left_, right_)
 
 #if defined(__clang__)
 /**

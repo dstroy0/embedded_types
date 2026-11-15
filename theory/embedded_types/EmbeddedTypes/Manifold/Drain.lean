@@ -1,14 +1,14 @@
 /-!
 # embedded_types, the drain of the manifold
 
-A writer swaps a published pointer, then drains. The drain reads `open` after its fence, then each open lane. The
-drain skips a lane whose read has busy clear or closed set: no pass holds such a lane. On each other lane it retains
-the generation it read, and waits until busy reads clear or the generation moves.
+A writer swaps a published pointer, then drains. The drain reads the open count after its fence, then each open
+lane. The drain skips a lane whose read has busy clear or closed set: no pass holds such a lane. On each other lane
+it retains the generation it read, and waits until busy reads clear or the generation moves.
 
-`Open.passes_below_open` puts each pass below `open`. This file holds one lane. Its steps are each operation on the
-lane word. Those are an entry, a leave, the claim of a contraction, its close, and its release. Also the claim of a
-grower on a free lane, and its takeover of a closed lane. Also its adoption of the lane as its pass at its swap, its
-give-back, and the sleeper bit set and cleared.
+`Open.passes_below_open` puts each pass below the open count. This file holds one lane. Its steps are each operation
+on the lane word. Those are an entry, a leave, the claim of a contraction, its close, and its release. Also the claim
+of a grower on a free lane, and its takeover of a closed lane. Also its adoption of the lane as its pass at its swap,
+its give-back, and the sleeper bit set and cleared.
 
 A pass has an id, and the lane records it while the pass holds the lane.
 
@@ -56,7 +56,7 @@ inductive Step : State → State → Prop where
   /-- A grower's takeover of a closed lane: busy retained, closed cleared, the generation counted. -/
   | takeover {s : State} (hc : s.closed = true) (h : s.holder = none) :
       Step s { s with closed := false, generation := s.generation + 1 }
-  /-- A grower's swap of `open` lands, and the lane it holds is its pass. The word does not change. -/
+  /-- A grower's swap of the open count lands, and the lane it holds is its pass. The word does not change. -/
   | adopt {s : State} (p : Nat) (hb : s.busy = true) (hc : s.closed = false) (h : s.holder = none)
       (fresh : s.ended p = false) : Step s { s with holder := some p }
   /-- The sleeper bit set or cleared: busy, closed and the generation retained. -/

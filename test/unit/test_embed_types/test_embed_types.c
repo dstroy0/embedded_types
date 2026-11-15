@@ -32,11 +32,13 @@
  */
 void setUp(void)
 {
+    // Each case has nothing to prepare
 }
 
 /** @brief Runs after each case, and has nothing to release. */
 void tearDown(void)
 {
+    // Each case has nothing to release
 }
 
 /**
@@ -154,9 +156,8 @@ void test_a_raw_word_reads_from_an_odd_address(void)
     // EMBED_RAW on embed_raw_word lowers its alignment to one and permits the alias.
     const embed_raw_word *const at_one = (const embed_raw_word *)(const void *)(&bytes[1]);
     embed_word expected = 0u;
-    embed_index at;
 
-    for (at = 0u; at < (embed_index)sizeof(embed_word); at += 1u)
+    for (embed_index at = 0u; at < (embed_index)sizeof(embed_word); at += 1u)
     {
 #if EMBED_BIG_ENDIAN
         expected = (embed_word)((expected << 8u) | (embed_word)bytes[1u + at]);

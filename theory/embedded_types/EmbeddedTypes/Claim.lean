@@ -46,13 +46,14 @@ namespace EmbeddedTypes.Claim
 
 /-! ## The stamp -/
 
-/-- A flip of any nonzero set of bits changes a stamp. -/
-theorem flip_changes (x m : BitVec 64) (h : m ≠ 0) : x ^^^ m ≠ x := by
-  bv_decide
+/-- A flip of any nonzero set of bits changes a stamp, on a word of any width. -/
+theorem flip_changes (x m : BitVec w) (h : m ≠ 0) : x ^^^ m ≠ x :=
+  Flags.corruption_refuses x m h
 
-/-- A flip of one bit, at any place below the width, changes a stamp. -/
-theorem bit_flip_changes (x i : BitVec 64) (hi : i < 64) : x ^^^ ((1 : BitVec 64) <<< i) ≠ x := by
-  bv_decide
+/-- A flip of one bit, at any place below the width, changes a stamp, on the word of each row of the stamp. -/
+theorem bit_flip_changes (w t : Nat) (hr : (w, t) ∈ Flags.rows) (x i : BitVec w) (hi : i < BitVec.ofNat w w) :
+    x ^^^ ((1 : BitVec w) <<< i) ≠ x := by
+  rows_cases hr <;> bv_decide
 
 /-- The ring with the job at one place changed, and nothing else. -/
 def jobChanged (r : TicketRing.Ring) (at_ job : Nat) : TicketRing.Ring :=

@@ -321,9 +321,10 @@ theorem refused_never_runs {s t : State} (st : Step s t) (at_ stamp l : Nat) (ra
 
 /-- A single-bit error in the job pointer fails the check of `Flags.lean`. So the pop of that slot records `ran` as
 false, and by `refused_never_runs` the job never runs. -/
-theorem single_flip_never_runs (job i : BitVec 64) (hi : i < 64) :
-    decide (Flags.check (job ^^^ ((1 : BitVec 64) <<< i)) = Flags.check job) = false :=
-  decide_eq_false (Flags.job_flip_changes_check job i hi)
+theorem single_flip_never_runs (p : Nat) (hp : p ∈ Flags.pointers) (job i : BitVec p)
+    (hi : i < BitVec.ofNat p p) :
+    decide (Flags.check (job ^^^ ((1 : BitVec p) <<< i)) = Flags.check job) = false :=
+  decide_eq_false (Flags.job_flip_changes_check p hp job i hi)
 
 /-- No step changes a popped slot, so a popped slot stays popped and its job ran at max once. -/
 theorem runs_at_max_once {s t : State} (st : Step s t) (at_ stamp l : Nat) (ran : Bool)

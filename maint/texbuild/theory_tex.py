@@ -51,7 +51,10 @@ TABLE_SIZES = (
 TEXT_WIDTH = 430
 
 HEADINGS = {2: "section", 3: "subsection", 4: "subsubsection", 5: "paragraph", 6: "subparagraph"}
-BULLET = re.compile(r"^( *)([-*+]|\d+[.)])\s+(.*)$")
+# The text of an item starts at its first character that is not white space, so no two parts match one character.
+BULLET = re.compile(r"^( *)([-*+]|\d+[.)])\s+(\S.*|)$")
+# The list of chapters that the main.tex of a research paper includes
+ORDER = "order.tex"
 
 
 def escape_text(value):
@@ -67,6 +70,56 @@ class Chapter:
         self.research_paper_dir = research_paper_dir.resolve()
         self.source = source
         self.chapters = chapters
+
+
+def code_spans(value, render):
+    """The value with each code span in it replaced by render of the content of the span.
+
+    A span opens at a run of backticks and closes at the next run of as many, with one character at least between
+    them, on one line. Where no close follows the whole run, the opening gets one backtick shorter. Where no width
+    closes, the next character is the next start.
+    """
+    out = []
+    done = 0
+    at = 0
+    while True:
+        opening = value.find("`", at)
+        if opening < 0:
+            break
+        newline = value.find("\n", opening)
+        limit = len(value) if newline < 0 else newline
+        run = opening
+        while run < limit and value[run] == "`":
+            run += 1
+        span = None
+        for width in range(run - opening, 0, -1):
+            closing = value.find("`" * width, opening + width + 1, limit)
+            if closing >= 0:
+                span = (width, closing)
+                break
+        if span is None:
+            at = opening + 1
+            continue
+        width, closing = span
+        out.append(value[done:opening])
+        out.append(render(value[opening + width : closing]))
+        done = at = closing + width
+    out.append(value[done:])
+    return "".join(out)
+
+
+def heading_parts(stripped):
+    """(level, text) of a heading line, or None for a line that is no heading.
+
+    A heading is one to six marks, white space, and the text. Closing marks and the white space before them are
+    not part of the text, but the text keeps one character at least. The line has no white space at either end.
+    """
+    level = len(stripped) - len(stripped.lstrip("#"))
+    rest = stripped[level:]
+    body = rest.lstrip()
+    if not 1 <= level <= 6 or not body or body == rest:
+        return None
+    return level, body.rstrip("#").rstrip() or body[:1]
 
 
 def link_target(url, chapter):
@@ -93,8 +146,8 @@ def inline(value, chapter):
         protected.append(content)
         return f"\x00{len(protected) - 1}\x00"
 
-    def format_code(match):
-        code = escape_text(match.group(2).strip())
+    def format_code(content):
+        code = escape_text(content.strip())
         code = code.replace("/", "/\\allowbreak{}")
         code = code.replace("-", "-\\allowbreak{}")
         code = code.replace(".", ".\\allowbreak{}")
@@ -116,7 +169,7 @@ def inline(value, chapter):
         opening, closing = link_target(match.group(2), chapter)
         return protect(opening) + match.group(1) + protect(closing)
 
-    value = re.sub(r"(`+)(.+?)\1", format_code, value)
+    value = code_spans(value, format_code)
     value = re.sub(r"(?<!\\)\$\$(.+?)(?<!\\)\$\$", format_math, value)
     value = re.sub(r"(?<!\\)\$(.+?)(?<!\\)\$", format_math, value)
     value = re.sub(
@@ -185,9 +238,18 @@ def records(rows, chapter):
     return output
 
 
+def first_size(width):
+    """The place in TABLE_SIZES where a table of width columns starts."""
+    if width <= 3:
+        return 0
+    if width <= 5:
+        return 1
+    return 2
+
+
 def longtable(rows, chapter):
     width = len(rows[0])
-    step = 0 if width <= 3 else 1 if width <= 5 else 2
+    step = first_size(width)
     weights, longest = [], []
     for column in range(width):
         cells = [row[column] for row in rows]
@@ -238,6 +300,40 @@ def starts_block(line):
     )
 
 
+def same_list(match, indent, ordered):
+    """True where a bullet match is an item at the indent of the list, and of its type."""
+    return bool(match) and len(match.group(1)) == indent and match.group(2)[0].isdigit() == ordered
+
+
+def next_filled(lines, index):
+    """The index of the first line from index on that is not blank."""
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    return index
+
+
+def item_body(lines, index, indent, content):
+    """The lines of one list item after its first line, and the index after them."""
+    body = []
+    while index < len(lines):
+        line = lines[index]
+        if not line.strip():
+            ahead = next_filled(lines, index)
+            if ahead < len(lines) and indentation(lines[ahead]) > indent:
+                body.extend([""] * (ahead - index))
+                index = ahead
+                continue
+            break
+        if indentation(line) > indent:
+            body.append(line[min(indentation(line), content):])
+        elif BULLET.match(line) or starts_block(line):
+            break
+        else:
+            body.append(line.strip())
+        index += 1
+    return body, index
+
+
 def parse_list(lines, index, chapter):
     first = BULLET.match(lines[index])
     indent = len(first.group(1))
@@ -245,41 +341,21 @@ def parse_list(lines, index, chapter):
     items = []
     while index < len(lines):
         match = BULLET.match(lines[index])
-        if not match or len(match.group(1)) != indent or match.group(2)[0].isdigit() != ordered:
+        if not same_list(match, indent, ordered):
             break
         content = indent + len(match.group(2)) + 1
-        body = [match.group(3)]
-        index += 1
-        while index < len(lines):
-            line = lines[index]
-            if not line.strip():
-                ahead = index
-                while ahead < len(lines) and not lines[ahead].strip():
-                    ahead += 1
-                if ahead < len(lines) and indentation(lines[ahead]) > indent:
-                    body.extend([""] * (ahead - index))
-                    index = ahead
-                    continue
-                break
-            if indentation(line) > indent:
-                body.append(line[min(indentation(line), content):])
-            elif BULLET.match(line) or starts_block(line):
-                break
-            else:
-                body.append(line.strip())
-            index += 1
-        items.append(body)
+        body, index = item_body(lines, index + 1, indent, content)
+        items.append([match.group(3), *body])
         # A blank line between two items at the same depth retains them in one list.
-        ahead = index
-        while ahead < len(lines) and not lines[ahead].strip():
-            ahead += 1
+        ahead = next_filled(lines, index)
         following = BULLET.match(lines[ahead]) if ahead < len(lines) else None
-        if (
-            following
-            and len(following.group(1)) == indent
-            and following.group(2)[0].isdigit() == ordered
-        ):
+        if same_list(following, indent, ordered):
             index = ahead
+    return render_list(items, ordered, chapter), index
+
+
+def render_list(items, ordered, chapter):
+    """The LaTeX of a list from the lines of each of its items."""
     environment = "enumerate" if ordered else "itemize"
     output = [rf"\begin{{{environment}}}"]
     for body in items:
@@ -289,99 +365,162 @@ def parse_list(lines, index, chapter):
         output.append(r"\item " + (converted[0] if converted else ""))
         output.extend(converted[1:])
     output.extend([rf"\end{{{environment}}}", ""])
-    return output, index
+    return output
+
+
+class BlockReader:
+    """One pass over the lines of a block of Markdown, and the LaTeX that it writes.
+
+    Each reader of a block type tests the line at the index. Where the line opens a block of its type, the reader
+    writes the open paragraph, then the block, and moves the index past the block. A line that opens no block joins
+    the paragraph.
+    """
+
+    def __init__(self, lines, chapter, title):
+        self.lines = lines
+        self.chapter = chapter
+        self.title = title
+        self.output = []
+        self.paragraph = []
+        self.index = 0
+
+    def convert(self):
+        readers = (
+            self.fence,
+            self.equation,
+            self.display,
+            self.blank,
+            self.rule,
+            self.heading,
+            self.table,
+            self.bullets,
+            self.quote,
+        )
+        while self.index < len(self.lines):
+            if not any(read() for read in readers):
+                self.text()
+        self.flush()
+        return self.output
+
+    def stripped(self):
+        return self.lines[self.index].strip()
+
+    def flush(self):
+        if self.paragraph:
+            self.output.append(" ".join(inline(part, self.chapter) for part in self.paragraph))
+            self.output.append("")
+            self.paragraph.clear()
+
+    def until(self, stop):
+        """The lines after the index up to the first line that stop accepts, and the index after that line."""
+        body = []
+        self.index += 1
+        while self.index < len(self.lines) and not stop(self.lines[self.index]):
+            body.append(self.lines[self.index])
+            self.index += 1
+        self.index += 1
+        return body
+
+    def fence(self):
+        fence = re.match(r"^\s*(`{3,}|~{3,})", self.lines[self.index])
+        if not fence:
+            return False
+        self.flush()
+        marker = fence.group(1)
+        code = self.until(lambda line: line.strip().startswith(marker))
+        self.output.extend([r"\begin{Verbatim}", *code, r"\end{Verbatim}", ""])
+        return True
+
+    def equation(self):
+        if self.stripped() != "$$":
+            return False
+        self.flush()
+        equation = self.until(lambda line: line.strip() == "$$")
+        self.output.extend([r"\[", *equation, r"\]", ""])
+        return True
+
+    def display(self):
+        display = re.fullmatch(r"\$\$(.+)\$\$", self.stripped())
+        if not display or "$$" in display.group(1):
+            return False
+        self.flush()
+        self.output.extend([r"\[", display.group(1).strip(), r"\]", ""])
+        self.index += 1
+        return True
+
+    def blank(self):
+        if self.stripped():
+            return False
+        self.flush()
+        self.index += 1
+        return True
+
+    def rule(self):
+        if not re.fullmatch(r"(?:-{3,}|\*{3,}|_{3,})", self.stripped()):
+            return False
+        self.flush()
+        self.output.extend([r"\medskip", ""])
+        self.index += 1
+        return True
+
+    def heading(self):
+        heading = heading_parts(self.stripped())
+        if heading is None:
+            return False
+        self.flush()
+        level, text = heading
+        if level == 1 and self.title is not None and not self.title:
+            self.title.append(text)
+        else:
+            command = HEADINGS.get(max(level, 2))
+            self.output.extend([f"\\{command}{{{heading_text(text, self.chapter)}}}", ""])
+        self.index += 1
+        return True
+
+    def table(self):
+        index = self.index
+        if not (
+            self.stripped().startswith("|") and index + 1 < len(self.lines) and is_separator(self.lines[index + 1])
+        ):
+            return False
+        self.flush()
+        rows, self.index = table_rows(self.lines, index)
+        if max(len(cell) for row in rows for cell in row) > RECORD_CELL:
+            self.output.extend(records(rows, self.chapter))
+        else:
+            self.output.extend(longtable(rows, self.chapter))
+        return True
+
+    def bullets(self):
+        if not BULLET.match(self.lines[self.index]):
+            return False
+        self.flush()
+        block, self.index = parse_list(self.lines, self.index, self.chapter)
+        self.output.extend(block)
+        return True
+
+    def quote(self):
+        if not self.stripped().startswith(">"):
+            return False
+        self.flush()
+        quoted = []
+        while self.index < len(self.lines) and self.stripped().startswith(">"):
+            quoted.append(re.sub(r"^\s*>\s?", "", self.lines[self.index]))
+            self.index += 1
+        self.output.extend([r"\begin{quote}", *convert_blocks(quoted, self.chapter), r"\end{quote}", ""])
+        return True
+
+    def text(self):
+        stripped = self.stripped()
+        # **Purpose:** and **Scope:** sit on consecutive lines and read as separate paragraphs.
+        if self.paragraph and re.match(r"^\*\*[^*]+\*\*", stripped):
+            self.flush()
+        self.paragraph.append(stripped)
+        self.index += 1
 
 
 def convert_blocks(lines, chapter, title=None):
-    output = []
-    paragraph = []
-    index = 0
-
-    def flush():
-        if paragraph:
-            output.append(" ".join(inline(part, chapter) for part in paragraph))
-            output.append("")
-            paragraph.clear()
-
-    while index < len(lines):
-        line = lines[index]
-        stripped = line.strip()
-        fence = re.match(r"^\s*(`{3,}|~{3,})", line)
-        if fence:
-            flush()
-            marker = fence.group(1)
-            code = []
-            index += 1
-            while index < len(lines) and not lines[index].strip().startswith(marker):
-                code.append(lines[index])
-                index += 1
-            index += 1
-            output.extend([r"\begin{Verbatim}", *code, r"\end{Verbatim}", ""])
-            continue
-        if stripped == "$$":
-            flush()
-            equation = []
-            index += 1
-            while index < len(lines) and lines[index].strip() != "$$":
-                equation.append(lines[index])
-                index += 1
-            index += 1
-            output.extend([r"\[", *equation, r"\]", ""])
-            continue
-        display = re.fullmatch(r"\$\$(.+)\$\$", stripped)
-        if display and "$$" not in display.group(1):
-            flush()
-            output.extend([r"\[", display.group(1).strip(), r"\]", ""])
-            index += 1
-            continue
-        if not stripped:
-            flush()
-            index += 1
-            continue
-        if re.fullmatch(r"(?:-{3,}|\*{3,}|_{3,})", stripped):
-            flush()
-            output.extend([r"\medskip", ""])
-            index += 1
-            continue
-        heading = re.match(r"^(#{1,6})\s+(.+?)\s*#*\s*$", stripped)
-        if heading:
-            flush()
-            level = len(heading.group(1))
-            if level == 1 and title is not None and not title:
-                title.append(heading.group(2))
-            else:
-                command = HEADINGS.get(max(level, 2))
-                output.extend([f"\\{command}{{{heading_text(heading.group(2), chapter)}}}", ""])
-            index += 1
-            continue
-        if stripped.startswith("|") and index + 1 < len(lines) and is_separator(lines[index + 1]):
-            flush()
-            rows, index = table_rows(lines, index)
-            if max(len(cell) for row in rows for cell in row) > RECORD_CELL:
-                output.extend(records(rows, chapter))
-            else:
-                output.extend(longtable(rows, chapter))
-            continue
-        if BULLET.match(line):
-            flush()
-            block, index = parse_list(lines, index, chapter)
-            output.extend(block)
-            continue
-        if stripped.startswith(">"):
-            flush()
-            quoted = []
-            while index < len(lines) and lines[index].strip().startswith(">"):
-                quoted.append(re.sub(r"^\s*>\s?", "", lines[index]))
-                index += 1
-            output.extend([r"\begin{quote}", *convert_blocks(quoted, chapter), r"\end{quote}", ""])
-            continue
-        # **Purpose:** and **Scope:** sit on consecutive lines and read as separate paragraphs.
-        if paragraph and re.match(r"^\*\*[^*]+\*\*", stripped):
-            flush()
-        paragraph.append(stripped)
-        index += 1
-    flush()
-    return output
+    return BlockReader(lines, chapter, title).convert()
 
 
 def pretty(stem):
@@ -405,7 +544,7 @@ def markdown_chapter(research_paper, source, chapters):
     ).rstrip() + "\n"
 
 
-def pdf_chapter(research_paper, source):
+def pdf_chapter(source):
     return "\n".join(
         [
             r"\chapter{" + escape_text(pretty(source.stem)) + "}",
@@ -445,35 +584,41 @@ def write_if_changed(path, text):
     return True
 
 
+def write_research_paper(research_paper, held):
+    """Write the chapters and the order of one research paper. Answer its sources and the files that changed."""
+    sources = research_paper_sources(research_paper, held)
+    chapters = {source.stem for source in sources}
+    chapter_dir = THEORY / research_paper / "chapters"
+    written = []
+    includes = []
+    for source in sources:
+        target = chapter_dir / f"chapter_{source.stem.lower()}.tex"
+        if source.suffix == ".md":
+            text = markdown_chapter(research_paper, source, chapters)
+        else:
+            text = pdf_chapter(source)
+        if write_if_changed(target, text):
+            written.append(target.name)
+        includes.append(r"\include{chapters/" + target.stem + "}")
+    order = "\n".join(includes) + "\n"
+    if write_if_changed(chapter_dir / ORDER, order):
+        written.append(ORDER)
+    retain = {f"chapter_{source.stem.lower()}.tex" for source in sources} | {ORDER}
+    for stale in chapter_dir.glob("*.tex"):
+        # This tool writes every chapter of a research paper. One with no source is stale.
+        if stale.name not in retain:
+            stale.unlink()
+            written.append(f"removed {stale.name}")
+    return sources, written
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--hold", default="", help="comma separated file names to leave out")
     arguments = parser.parse_args()
     held = {name.strip() for name in arguments.hold.split(",") if name.strip()}
     for research_paper in research_papers():
-        sources = research_paper_sources(research_paper, held)
-        chapters = {source.stem for source in sources}
-        chapter_dir = THEORY / research_paper / "chapters"
-        written = []
-        includes = []
-        for source in sources:
-            target = chapter_dir / f"chapter_{source.stem.lower()}.tex"
-            if source.suffix == ".md":
-                text = markdown_chapter(research_paper, source, chapters)
-            else:
-                text = pdf_chapter(research_paper, source)
-            if write_if_changed(target, text):
-                written.append(target.name)
-            includes.append(r"\include{chapters/" + target.stem + "}")
-        order = "\n".join(includes) + "\n"
-        if write_if_changed(chapter_dir / "order.tex", order):
-            written.append("order.tex")
-        retain = {f"chapter_{source.stem.lower()}.tex" for source in sources} | {"order.tex"}
-        for stale in chapter_dir.glob("*.tex"):
-            # This tool writes every chapter of a research paper. One with no source is stale.
-            if stale.name not in retain:
-                stale.unlink()
-                written.append(f"removed {stale.name}")
+        sources, written = write_research_paper(research_paper, held)
         print(f"  {research_paper}: {len(sources)} chapters, {len(written)} files changed")
         for name in written:
             print(f"      {name}")

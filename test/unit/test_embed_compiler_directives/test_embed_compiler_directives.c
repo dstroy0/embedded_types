@@ -206,11 +206,13 @@ static const uint32_t shadowed_probe_value = 11u;
  */
 void setUp(void)
 {
+    // Each case has nothing to prepare
 }
 
 /** @brief Runs after each case, and has nothing to release. */
 void tearDown(void)
 {
+    // Each case has nothing to release
 }
 
 /**

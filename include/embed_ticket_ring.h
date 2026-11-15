@@ -10,10 +10,12 @@
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-11-11
  *
- * The ring has 2^shift slots. A slot holds a stamp and a job pointer. The stamp is one atomic 64-bit word: the epoch
- * in bits 48 to 63, the flag bits in bits 32 to 47, and the ticket in bits 0 to 31. The ticket indexes the slot: the
- * low shift bits of the ticket are the slot index. The ticket is a 32-bit counter with wraparound, and the slot index
- * wraps with it, because 2^shift divides 2^32.
+ * The ring has 2^shift slots. A slot holds a stamp and a job pointer. The stamp is one atomic machine word. The
+ * ticket is in its low EMBED_TICKET_BITS bits, the 16 flag bits are above it, and the epoch is in the high bits. A word
+ * of 64 bits has a 32-bit ticket and a 16-bit epoch, and a word of 32 bits has a 12-bit ticket and a 4-bit epoch.
+ *
+ * The ticket indexes the slot: the low shift bits of the ticket are the slot index. The ticket is a counter with
+ * wraparound, and the slot index wraps with it, because 2^shift divides 2^EMBED_TICKET_BITS.
  *
  * @note Each transition of a slot is one compare-and-swap on the stamp word. The expected value is the stamp with
  *       the flag bits of the transitions before it. The new value adds the flag bit of the transition. So exactly
@@ -26,9 +28,10 @@
  *       replay check the pointer they read against it. Every single-bit error in the job pointer fails the check.
  *       Every double-bit error fails it too, except one whose two bits are a multiple of seven places apart. The
  *       pop then returns no job. EMBED_TICKET_JOB_CHECK turns the check off.
- * @note The epoch is 16 bits. The grantor derives it from the host clock. The tick period covers the lifetime of a
- *       stamp, so the epoch does not wrap while the stamp is live. A compare succeeds only where the ticket and the
- *       epoch both match, and the ticket alone distinguishes any two live stamps.
+ * @note The epoch is EMBED_TICKET_EPOCH_BITS wide: 16 bits on a word of 64 bits, and 4 bits on a word of 32 bits.
+ *       The grantor derives it from the host clock. The tick period covers the lifetime of a stamp, so the epoch does
+ *       not wrap while the stamp is live. A compare succeeds only where the ticket and the epoch both match, and the
+ *       ticket alone distinguishes any two live stamps.
  * @note The turnstile serializes the transitions with respect to the writer. A transition executes inside a pass,
  *       and the drain of a writer waits for every pass that started before it. The functions at the end of this
  *       header wrap each transition in a pass.
@@ -44,31 +47,52 @@
 
 EMBED_BEGIN_DECLS
 
-/** @brief The width of the ticket field, and the positions of the flag field and the epoch field. */
-#define EMBED_TICKET_BITS 32u
-#define EMBED_TICKET_MASK ((embed_u64)0xffffffffu)
-#define EMBED_TICKET_FLAG_SHIFT 32u
+/**
+ * @brief The stamp layout of each word width that the ring builds on: the bits of the ticket and of the epoch. The
+ *        flag field takes the 16 bits between them on each width.
+ *
+ * @note The epoch outlasts the longest hold of a stamp, and that time does not grow with the word. So the epoch
+ *       needs no more than 16 bits, and a wider word gives its bits to the ticket, which bounds the slot count.
+ * @warning At 32 bits the epoch covers 16 ticks. The tick of the grantor is then 1/16 of the longest hold at least.
+ */
+#define EMBED_TICKET_BITS_32 12u
+#define EMBED_TICKET_EPOCH_BITS_32 4u
+#define EMBED_TICKET_BITS_64 32u
+#define EMBED_TICKET_EPOCH_BITS_64 16u
+
+EMBED_STATIC_ASSERT(EMBED_TICKET_BITS_32 + 16u + EMBED_TICKET_EPOCH_BITS_32 == 32u,
+                    "the stamp layout of a 32-bit word fills the word");
+EMBED_STATIC_ASSERT(EMBED_TICKET_BITS_64 + 16u + EMBED_TICKET_EPOCH_BITS_64 == 64u,
+                    "the stamp layout of a 64-bit word fills the word");
+EMBED_STATIC_ASSERT(EMBED_WORD_BITS >= 32u,
+                    "the ticket ring needs a word of 32 bits at least: a 16-bit word has no room for three fields");
+
+/** @brief The width of the ticket field, and the positions of the flag field and the epoch field, of this word. */
+#define EMBED_TICKET_BITS EMBED_CAT(EMBED_TICKET_BITS_, EMBED_WORD_BITS)
+#define EMBED_TICKET_MASK ((((embed_word)1u) << EMBED_TICKET_BITS) - 1u)
+#define EMBED_TICKET_FLAG_SHIFT EMBED_TICKET_BITS
 #define EMBED_TICKET_FLAG_BITS 16u
-#define EMBED_TICKET_FLAG_MASK ((embed_u64)0xffffu << EMBED_TICKET_FLAG_SHIFT)
-#define EMBED_TICKET_EPOCH_SHIFT 48u
-#define EMBED_TICKET_EPOCH_BITS 16u
+#define EMBED_TICKET_FLAG_MASK ((embed_word)0xffffu << EMBED_TICKET_FLAG_SHIFT)
+#define EMBED_TICKET_EPOCH_SHIFT (EMBED_TICKET_FLAG_SHIFT + EMBED_TICKET_FLAG_BITS)
+#define EMBED_TICKET_EPOCH_BITS EMBED_CAT(EMBED_TICKET_EPOCH_BITS_, EMBED_WORD_BITS)
+#define EMBED_TICKET_EPOCH_MASK ((((embed_word)1u) << EMBED_TICKET_EPOCH_BITS) - 1u)
 
 /** @brief The flag bits: one per transition of the slot state machine, and the lane index of the pop. */
-#define EMBED_TICKET_GRANTED ((embed_u64)1u << 32)
-#define EMBED_TICKET_PUSHED ((embed_u64)1u << 33)
-#define EMBED_TICKET_POPPED ((embed_u64)1u << 34)
-#define EMBED_TICKET_REPLAYED ((embed_u64)1u << 35)
-#define EMBED_TICKET_RELEASED ((embed_u64)1u << 36)
-#define EMBED_TICKET_LANE_SHIFT 40u
-#define EMBED_TICKET_LANE_MASK ((embed_u64)0x7fu << EMBED_TICKET_LANE_SHIFT)
+#define EMBED_TICKET_GRANTED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 0u))
+#define EMBED_TICKET_PUSHED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 1u))
+#define EMBED_TICKET_POPPED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 2u))
+#define EMBED_TICKET_REPLAYED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 3u))
+#define EMBED_TICKET_RELEASED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 4u))
+#define EMBED_TICKET_LANE_SHIFT (EMBED_TICKET_FLAG_SHIFT + 8u)
+#define EMBED_TICKET_LANE_MASK ((embed_word)0x7fu << EMBED_TICKET_LANE_SHIFT)
 EMBED_STATIC_ASSERT(EMBED_TURNSTILE_LANES <= 128u, "the lane index of a pop fits seven flag bits");
 
 /** @brief The three check bits of the job pointer, which the push sets and the pop and the replay check. */
-#define EMBED_TICKET_CHECK_SHIFT 37u
-#define EMBED_TICKET_CHECK_MASK ((embed_u64)0x7u << EMBED_TICKET_CHECK_SHIFT)
+#define EMBED_TICKET_CHECK_SHIFT (EMBED_TICKET_FLAG_SHIFT + 5u)
+#define EMBED_TICKET_CHECK_MASK ((embed_word)0x7u << EMBED_TICKET_CHECK_SHIFT)
 
 /** @brief The reserved bit. No transition sets it, so an expected value with it set always fails the compare. */
-#define EMBED_TICKET_RESERVED ((embed_u64)1u << 47)
+#define EMBED_TICKET_RESERVED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 15u))
 
 /**
  * @brief 1 where the push stores the check of the job pointer in the stamp and the pop and the replay verify it,
@@ -81,67 +105,69 @@ EMBED_STATIC_ASSERT(EMBED_TURNSTILE_LANES <= 128u, "the lane index of a pop fits
 #error "EMBED_TICKET_JOB_CHECK must be 0 or 1"
 #endif
 
-/** @brief The max slot count as a shift: 2^EMBED_TICKET_RING_SHIFT_MAX slots. */
-#define EMBED_TICKET_RING_SHIFT_MAX 31u
+/** @brief The max slot count as a shift: 2^EMBED_TICKET_RING_SHIFT_MAX slots, below the ticket width. */
+#define EMBED_TICKET_RING_SHIFT_MAX (EMBED_TICKET_BITS - 1u)
 
 /** @brief One slot: the stamp word, the state of the slot, and the job pointer. */
 typedef struct
 {
-    embed_atomic_u64 stamp; /**< The stamp with the flag bits of the transitions that completed. */
-    void *job;              /**< The job [BORROWS]. */
+    embed_atomic_word stamp; /**< The stamp with the flag bits of the transitions that completed. */
+    void *job;               /**< The job [BORROWS]. */
 } EmbedTicketRingSlot;
-EMBED_STATIC_ASSERT(sizeof(EmbedTicketRingSlot) == 16u, "a slot is two words");
+EMBED_STATIC_ASSERT(sizeof(EmbedTicketRingSlot) ==
+                        2u *
+                            ((sizeof(embed_atomic_word) > sizeof(void *)) ? sizeof(embed_atomic_word) : sizeof(void *)),
+                    "a slot is two of its wider member: the stamp word and the job pointer");
 
 /** @brief A ring: its index mask, 2^shift - 1, on a cache line of its own, and its slot array. */
 typedef struct
 {
-    EMBED_ALIGN(64) embed_u64 mask; /**< 2^shift - 1. */
-    EmbedTicketRingSlot *slots;     /**< 2^shift slots. */
+    EMBED_ALIGN(64u) embed_word mask; /**< 2^shift - 1. */
+    EmbedTicketRingSlot *slots;       /**< 2^shift slots. */
 } EmbedTicketRing;
 
 /**
  * @brief The stamp of an epoch and a ticket, with the flag bits clear.
  *
- * @param[in] epoch  Bits 48 to 63.
- * @param[in] ticket Bits 0 to 31.
+ * @param[in] epoch  The epoch, of which the stamp keeps the low EMBED_TICKET_EPOCH_BITS bits.
+ * @param[in] ticket The ticket, of which the stamp keeps the low EMBED_TICKET_BITS bits.
  * @return           The stamp.
+ * @note Each field keeps only its own bits, so a wide epoch or ticket sets no flag bit.
  */
-EMBED_INLINE embed_u64 embed_ticket_stamp(embed_u16 epoch, embed_u32 ticket)
+EMBED_INLINE embed_word embed_ticket_stamp(embed_word epoch, embed_word ticket)
 {
-    return ((embed_u64)epoch << EMBED_TICKET_EPOCH_SHIFT) | (embed_u64)ticket;
+    return ((epoch & EMBED_TICKET_EPOCH_MASK) << EMBED_TICKET_EPOCH_SHIFT) | (ticket & EMBED_TICKET_MASK);
 }
 
 /**
  * @brief The ticket field of a stamp.
  *
  * @param[in] stamp The stamp.
- * @return          Bits 0 to 31.
+ * @return          The low EMBED_TICKET_BITS bits.
  */
-EMBED_INLINE embed_u32 embed_ticket_of_stamp(embed_u64 stamp)
+EMBED_INLINE embed_word embed_ticket_of_stamp(embed_word stamp)
 {
-    // Explicit cast truncates to the 32 bits that the mask leaves
-    return (embed_u32)(stamp & EMBED_TICKET_MASK);
+    return stamp & EMBED_TICKET_MASK;
 }
 
 /**
  * @brief The epoch field of a stamp.
  *
  * @param[in] stamp The stamp.
- * @return          Bits 48 to 63.
+ * @return          The high EMBED_TICKET_EPOCH_BITS bits, shifted down.
  */
-EMBED_INLINE embed_u16 embed_epoch_of_stamp(embed_u64 stamp)
+EMBED_INLINE embed_word embed_epoch_of_stamp(embed_word stamp)
 {
-    // Explicit cast truncates to the 16 bits that the shift brings down
-    return (embed_u16)(stamp >> EMBED_TICKET_EPOCH_SHIFT);
+    return stamp >> EMBED_TICKET_EPOCH_SHIFT;
 }
 
 /**
  * @brief The flag field of a stamp, the lane index included.
  *
  * @param[in] stamp The stamp.
- * @return          Bits 32 to 47.
+ * @return          The 16 bits from EMBED_TICKET_FLAG_SHIFT up.
  */
-EMBED_INLINE embed_u16 embed_ticket_flags_of_stamp(embed_u64 stamp)
+EMBED_INLINE embed_u16 embed_ticket_flags_of_stamp(embed_word stamp)
 {
     // Explicit cast truncates to the 16 flag bits that the shift brings down
     return (embed_u16)(stamp >> EMBED_TICKET_FLAG_SHIFT);
@@ -153,42 +179,46 @@ EMBED_INLINE embed_u16 embed_ticket_flags_of_stamp(embed_u64 stamp)
  * @param[in] stamp The stamp of a slot after its pop.
  * @return          The lane index, seven bits.
  */
-EMBED_INLINE unsigned int embed_ticket_lane_of_stamp(embed_u64 stamp)
+EMBED_INLINE unsigned int embed_ticket_lane_of_stamp(embed_word stamp)
 {
     // Explicit cast truncates to the seven lane bits that the mask leaves and the shift brings down
     return (unsigned int)((stamp & EMBED_TICKET_LANE_MASK) >> EMBED_TICKET_LANE_SHIFT);
 }
 
 /**
- * @brief The three-bit cyclic redundancy check of a job pointer: its 64 bits as a polynomial, modulo x^3 + x + 1.
+ * @brief The three-bit cyclic redundancy check of a job pointer: its bits as a polynomial, modulo x^3 + x + 1.
  *
  * @param[in] job The job pointer.
  * @return        The remainder, three bits.
- * @note The polynomial has period 7, so x^7 is 1 modulo it. A fold by shifts of 56, 28, 14 and 7 places sums the
- *       bits of each residue class modulo 7 into the low seven bits. The remainder of those seven bits reads off
- *       the table x^3 = x + 1, x^4 = x^2 + x, x^5 = x^2 + x + 1, x^6 = x^2 + 1.
+ * @note The polynomial has period 7, so x^7 is 1 modulo it. The fold shifts by 7 times each power of two, from the
+ *       byte count of the pointer down to 1. That sums the bits of each residue class modulo 7 into the low seven
+ *       bits. The shifts are 56, 28, 14 and 7 places for a pointer of 64 bits, and 28, 14 and 7 for 32 bits. The
+ *       remainder of the seven bits reads off the table x^3 = x + 1, x^4 = x^2 + x, x^5 = x^2 + x + 1, x^6 = x^2 + 1.
  * @note A single-bit error at any place changes the remainder, because no power of x is zero modulo the
  *       polynomial. A double-bit error changes it unless the two places are a multiple of seven apart.
  */
-EMBED_INLINE embed_u64 embed_ticket_job_check(const void *job)
+EMBED_INLINE embed_word embed_ticket_job_check(const void *job)
 {
     // Explicit cast carries the pointer as an integer for the fold
-    embed_u64 bits = (embed_u64)(uintptr_t)job;
+    uintptr_t bits = (uintptr_t)job;
 
-    bits ^= bits >> 56u;
-    bits ^= bits >> 28u;
-    bits ^= bits >> 14u;
-    bits ^= bits >> 7u;
+    for (uintptr_t fold_shift = 7u * sizeof(uintptr_t); fold_shift >= 7u; fold_shift /= 2u)
+    {
+        bits ^= bits >> fold_shift;
+    }
 
-    const embed_u64 r0 = bits & 1u;
-    const embed_u64 r1 = (bits >> 1u) & 1u;
-    const embed_u64 r2 = (bits >> 2u) & 1u;
-    const embed_u64 r3 = (bits >> 3u) & 1u;
-    const embed_u64 r4 = (bits >> 4u) & 1u;
-    const embed_u64 r5 = (bits >> 5u) & 1u;
-    const embed_u64 r6 = (bits >> 6u) & 1u;
+    const uintptr_t residue_0 = bits & 1u;
+    const uintptr_t residue_1 = (bits >> 1u) & 1u;
+    const uintptr_t residue_2 = (bits >> 2u) & 1u;
+    const uintptr_t residue_3 = (bits >> 3u) & 1u;
+    const uintptr_t residue_4 = (bits >> 4u) & 1u;
+    const uintptr_t residue_5 = (bits >> 5u) & 1u;
+    const uintptr_t residue_6 = (bits >> 6u) & 1u;
 
-    return (r0 ^ r3 ^ r5 ^ r6) | ((r1 ^ r3 ^ r4 ^ r5) << 1u) | ((r2 ^ r4 ^ r5 ^ r6) << 2u);
+    // Explicit cast narrows the remainder, three bits, to the word
+    return (embed_word)((residue_0 ^ residue_3 ^ residue_5 ^ residue_6) |
+                        ((residue_1 ^ residue_3 ^ residue_4 ^ residue_5) << 1u) |
+                        ((residue_2 ^ residue_4 ^ residue_5 ^ residue_6) << 2u));
 }
 
 /**
@@ -197,7 +227,7 @@ EMBED_INLINE embed_u64 embed_ticket_job_check(const void *job)
  * @param[in] job The job pointer.
  * @return        The check at EMBED_TICKET_CHECK_SHIFT, or 0.
  */
-EMBED_INLINE embed_u64 embed_ticket_job_check_bits(const void *job)
+EMBED_INLINE embed_word embed_ticket_job_check_bits(const void *job)
 {
 #if EMBED_TICKET_JOB_CHECK
     return embed_ticket_job_check(job) << EMBED_TICKET_CHECK_SHIFT;
@@ -211,9 +241,9 @@ EMBED_INLINE embed_u64 embed_ticket_job_check_bits(const void *job)
  * @brief The epoch and ticket fields of a stamp, with the flag field cleared.
  *
  * @param[in] stamp The stamp.
- * @return          The stamp with bits 32 to 47 clear.
+ * @return          The stamp with the 16 flag bits clear.
  */
-EMBED_INLINE embed_u64 embed_ticket_fields_of_stamp(embed_u64 stamp)
+EMBED_INLINE embed_word embed_ticket_fields_of_stamp(embed_word stamp)
 {
     return stamp & ~EMBED_TICKET_FLAG_MASK;
 }
@@ -228,7 +258,7 @@ EMBED_INLINE embed_u64 embed_ticket_fields_of_stamp(embed_u64 stamp)
  */
 EMBED_INLINE void embed_ticket_ring_begin(EmbedTicketRing *ring, EmbedTicketRingSlot *slots, unsigned int shift)
 {
-    ring->mask = ((embed_u64)1u << shift) - 1u;
+    ring->mask = ((embed_word)1u << shift) - 1u;
     ring->slots = slots;
 }
 
@@ -239,7 +269,7 @@ EMBED_INLINE void embed_ticket_ring_begin(EmbedTicketRing *ring, EmbedTicketRing
  * @param[in] stamp The stamp.
  * @return          The low shift bits of the ticket.
  */
-EMBED_INLINE embed_u64 embed_ticket_ring_place(const EmbedTicketRing *ring, embed_u64 stamp)
+EMBED_INLINE embed_word embed_ticket_ring_place(const EmbedTicketRing *ring, embed_word stamp)
 {
     return stamp & EMBED_TICKET_MASK & ring->mask;
 }
@@ -251,324 +281,340 @@ EMBED_INLINE embed_u64 embed_ticket_ring_place(const EmbedTicketRing *ring, embe
  * @param[in] stamp The stamp.
  * @return          The slot at the index of the ticket [BORROWS].
  */
-EMBED_INLINE EmbedTicketRingSlot *embed_ticket_ring_slot(const EmbedTicketRing *ring, embed_u64 stamp)
+EMBED_INLINE EmbedTicketRingSlot *embed_ticket_ring_slot(const EmbedTicketRing *ring, embed_word stamp)
 {
     return &ring->slots[embed_ticket_ring_place(ring, stamp)];
 }
 
 /**
- * @brief The expected value of a transition: the input stamp with the flag bits of the transitions before it.
+ * @brief The expected stamp of a transition: the input stamp with the flag bits of the transitions before it.
  *
  * @param[in] stamp The input stamp, as the caller holds it.
  * @param[in] flags The flag bits of the transitions before this one.
- * @return          The expected value.
- * @note An input stamp with any flag bit set is invalid. The expected value then has the reserved bit set, and no
+ * @return          The expected stamp.
+ * @note An input stamp with any flag bit set is invalid. The expected stamp then has the reserved bit set, and no
  *       slot word has it, so the compare fails. An input stamp with a corrupted ticket or epoch expects a word of
  *       another stamp, so the compare fails too.
  */
-EMBED_INLINE embed_u64 embed_ticket_ring_expected(embed_u64 stamp, embed_u64 flags)
+EMBED_INLINE embed_word embed_ticket_ring_expected_stamp(embed_word stamp, embed_word flags)
 {
     // Explicit cast converts the invalid-input condition to 1 or 0, for the shift to the reserved bit
-    const embed_u64 invalid = (embed_u64)((stamp & EMBED_TICKET_FLAG_MASK) != 0u);
+    const embed_word invalid_input = (embed_word)((stamp & EMBED_TICKET_FLAG_MASK) != 0u);
 
-    return stamp | flags | (invalid << 47u);
+    return stamp | flags | (invalid_input << (EMBED_TICKET_FLAG_SHIFT + 15u));
 }
 
 /**
- * @brief The expected value of a transition that read the current value first. It is the current value where the
- *        state test passed, and the current value with the reserved bit inverted where it did not.
+ * @brief The expected stamp of a transition that read the current stamp first. It is the current stamp where the
+ *        state test passed, and the current stamp with the reserved bit inverted where it did not.
  *
- * @param[in] current The current value of the slot word.
- * @param[in] valid   All ones where the state test passed, all zeros where it did not.
- * @return            The expected value.
- * @note A word with the reserved bit inverted differs from the current value in one bit, so the compare fails. An
- *       expected value of zero does not serve: a zero current value would match it.
+ * @param[in] current_stamp The current value of the slot word.
+ * @param[in] valid_mask    All ones where the state test passed, all zeros where it did not.
+ * @return                  The expected stamp.
+ * @note A word with the reserved bit inverted differs from the current stamp in one bit, so the compare fails. An
+ *       expected stamp of zero does not serve: a zero current stamp would match it.
  */
-EMBED_INLINE embed_u64 embed_ticket_ring_guarded(embed_u64 current, embed_u64 valid)
+EMBED_INLINE embed_word embed_ticket_ring_guarded_stamp(embed_word current_stamp, embed_word valid_mask)
 {
-    return current ^ (~valid & EMBED_TICKET_RESERVED);
+    return current_stamp ^ (~valid_mask & EMBED_TICKET_RESERVED_BIT);
 }
 
 /**
- * @brief One transition of a slot: a compare-and-swap from the expected value to the new value.
+ * @brief One transition of a slot: a compare-and-swap from the expected stamp to the new stamp.
  *
- * @param[in,out] slot     The slot [BORROWS].
- * @param[in]     expected The expected value.
- * @param[in]     value    The new value: the expected value with the flag bit of the transition.
- * @param[out]    seen     The value found [BORROWS]: the expected value on success, the current value on failure.
- * @return                 EMBED_TRUE on success.
+ * @param[in,out] slot           The slot [BORROWS].
+ * @param[in]     expected_stamp The expected stamp.
+ * @param[in]     new_stamp      The new stamp: the expected stamp with the flag bit of the transition.
+ * @param[out]    found_stamp    The stamp that the compare found in the slot [BORROWS]: the expected stamp on
+ *                               success, the current stamp on failure.
+ * @return                       EMBED_TRUE on success.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_transition(EmbedTicketRingSlot *slot, embed_u64 expected, embed_u64 value,
-                                                     embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_transition(EmbedTicketRingSlot *slot, embed_word expected_stamp,
+                                                     embed_word new_stamp, embed_word *found_stamp)
 {
-    embed_u64 found = expected;
-    const embed_bool success = embed_atomic_u64_swap_if(&slot->stamp, &found, value);
+    embed_word compared_stamp = expected_stamp;
+    const embed_bool success = embed_atomic_word_swap_if(&slot->stamp, &compared_stamp, new_stamp);
 
-    *seen = found;
+    *found_stamp = compared_stamp;
     return success;
 }
 
 /**
  * @brief The grant transition: the stamp with the granted bit, from a zero word or from a released word.
  *
- * @param[in,out] ring  The ring [BORROWS].
- * @param[in]     stamp The input stamp, flag bits clear.
- * @param[out]    seen  The value found [BORROWS].
- * @return              EMBED_TRUE on success.
- * @note The expected value is the current value where it has the released bit, and zero where it does not. A
+ * @param[in]     ring        The ring [BORROWS].
+ * @param[in]     stamp       The input stamp, flag bits clear.
+ * @param[out]    found_stamp The stamp that the compare found in the slot [BORROWS].
+ * @return                    EMBED_TRUE on success.
+ * @note The expected stamp is the current stamp where it has the released bit, and zero where it does not. A
  *       word in any other state fails the compare. The next grant at an index reuses the released word.
- * @note An input stamp with a flag bit set adds the reserved bit to the expected value, so the compare fails.
+ * @note An input stamp with a flag bit set adds the reserved bit to the expected stamp, so the compare fails.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_grant(EmbedTicketRing *ring, embed_u64 stamp, embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_grant(const EmbedTicketRing *ring, embed_word stamp, embed_word *found_stamp)
 {
     EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
-    const embed_u64 current = embed_atomic_u64_load(&slot->stamp);
-    // Explicit cast converts the released bit to an all-ones or all-zeros mask over the current value
-    const embed_u64 released = (embed_u64)0u - ((current & EMBED_TICKET_RELEASED) >> 36u);
-    const embed_u64 invalid = embed_ticket_ring_expected(stamp, 0u) & EMBED_TICKET_RESERVED;
+    const embed_word current_stamp = embed_atomic_word_load(&slot->stamp);
+    // Explicit cast converts the released bit to an all-ones or all-zeros mask over the current stamp
+    const embed_word released_mask =
+        (embed_word)0u - ((current_stamp & EMBED_TICKET_RELEASED_BIT) >> (EMBED_TICKET_FLAG_SHIFT + 4u));
+    const embed_word reserved_bit = embed_ticket_ring_expected_stamp(stamp, 0u) & EMBED_TICKET_RESERVED_BIT;
 
-    return embed_ticket_ring_transition(slot, (current & released) | invalid, stamp | EMBED_TICKET_GRANTED, seen);
+    return embed_ticket_ring_transition(slot, (current_stamp & released_mask) | reserved_bit,
+                                        stamp | EMBED_TICKET_GRANTED_BIT, found_stamp);
 }
 
 /**
  * @brief The push transition: the job pointer stored, then the pushed bit added to the granted word.
  *
- * @param[in,out] ring  The ring [BORROWS].
- * @param[in]     stamp The input stamp of a granted slot.
- * @param[in]     job   The job [BORROWS].
- * @param[out]    seen  The value found [BORROWS].
- * @return              EMBED_TRUE on success.
+ * @param[in]     ring        The ring [BORROWS].
+ * @param[in]     stamp       The input stamp of a granted slot.
+ * @param[in]     job         The job [BORROWS].
+ * @param[out]    found_stamp The stamp that the compare found in the slot [BORROWS].
+ * @return                    EMBED_TRUE on success.
  * @note The store of the job pointer precedes the compare-and-swap, which has release semantics. A pop that succeeds
  *       after it has acquire semantics, so the pop reads the job pointer.
- * @note The new value carries the check bits of the job pointer where the build verifies them.
+ * @note The new stamp carries the check bits of the job pointer where the build verifies them.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_push(EmbedTicketRing *ring, embed_u64 stamp, void *job, embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_push(const EmbedTicketRing *ring, embed_word stamp, void *job,
+                                               embed_word *found_stamp)
 {
     EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
-    const embed_u64 expected = embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED);
-    const embed_u64 value = expected | EMBED_TICKET_PUSHED | embed_ticket_job_check_bits(job);
+    const embed_word expected_stamp = embed_ticket_ring_expected_stamp(stamp, EMBED_TICKET_GRANTED_BIT);
+    const embed_word new_stamp = expected_stamp | EMBED_TICKET_PUSHED_BIT | embed_ticket_job_check_bits(job);
 
     slot->job = job;
-    return embed_ticket_ring_transition(slot, expected, value, seen);
+    return embed_ticket_ring_transition(slot, expected_stamp, new_stamp, found_stamp);
 }
 
 /**
  * @brief The job pointer of a slot after a successful read transition, verified against the check bits of the word.
  *
- * @param[in]  slot    The slot [BORROWS].
- * @param[in]  current The word of the slot before the transition.
- * @param[out] job     The job where the check matches [BORROWS], and NULL where it does not.
- * @param[out] seen    The word, with the reserved bit set where the check does not match [BORROWS].
- * @return             EMBED_TRUE where the check matches, or where the build does not verify it.
- * @note The reserved bit in seen marks a corrupted job pointer, which no contention produces, since no slot word
- *       ever holds that bit.
+ * @param[in]  slot          The slot [BORROWS].
+ * @param[in]  current_stamp The stamp of the slot before the transition.
+ * @param[out] job           The job where the check matches [BORROWS], and NULL where it does not.
+ * @param[out] found_stamp   The stamp, with the reserved bit set where the check does not match [BORROWS].
+ * @return                   EMBED_TRUE where the check matches, or where the build does not verify it.
+ * @note The reserved bit in found_stamp marks a corrupted job pointer, which no contention produces, since no slot
+ *       word ever holds that bit.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_job_checked(const EmbedTicketRingSlot *slot, embed_u64 current, void **job,
-                                                      embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_job_verify(const EmbedTicketRingSlot *slot, embed_word current_stamp,
+                                                     void **job, embed_word *found_stamp)
 {
-    void *const read = slot->job;
+    void *const read_job = slot->job;
 #if EMBED_TICKET_JOB_CHECK
-    const embed_u64 stored = (current & EMBED_TICKET_CHECK_MASK) >> EMBED_TICKET_CHECK_SHIFT;
-    const embed_bool match = (embed_bool)(embed_ticket_job_check(read) == stored);
+    const embed_word stored_check = (current_stamp & EMBED_TICKET_CHECK_MASK) >> EMBED_TICKET_CHECK_SHIFT;
+    // Explicit cast converts the comparison, an int of 0 or 1, to the project boolean
+    const embed_bool match = (embed_bool)(embed_ticket_job_check(read_job) == stored_check);
 #else
     const embed_bool match = EMBED_TRUE;
 #endif
 
-    *job = match ? read : NULL;
-    *seen = match ? current : (current | EMBED_TICKET_RESERVED);
+    *job = match ? read_job : NULL;
+    *found_stamp = match ? current_stamp : (current_stamp | EMBED_TICKET_RESERVED_BIT);
     return match;
 }
 
 /**
  * @brief The pop transition: the popped bit and the lane index added to the pushed word, and the job pointer read.
  *
- * @param[in,out] ring  The ring [BORROWS].
- * @param[in]     stamp The input stamp of a pushed slot.
- * @param[in]     lane  The lane index of the pass of the caller, as embed_turnstile_enter returned it.
- * @param[out]    job   The job on success [BORROWS], and NULL on failure.
- * @param[out]    seen  The value found [BORROWS], with the reserved bit set where the job pointer failed its check.
- * @return              EMBED_TRUE on success.
- * @note Two pops of one stamp contend here. One succeeds, and the other finds the popped bit in seen.
- * @note The expected value is the current value where the current value is the pushed word of the stamp, check
+ * @param[in]     ring        The ring [BORROWS].
+ * @param[in]     stamp       The input stamp of a pushed slot.
+ * @param[in]     lane_place  The place of the lane of the pass of the caller, as embed_turnstile_enter returned it.
+ * @param[out]    job         The job on success [BORROWS], and NULL on failure.
+ * @param[out]    found_stamp The stamp that the compare found in the slot [BORROWS], with the reserved bit set where
+ *                            the job pointer failed its check.
+ * @return                    EMBED_TRUE on success.
+ * @note Two pops of one stamp contend here. One succeeds, and the other finds the popped bit in found_stamp.
+ * @note The expected stamp is the current stamp where the current stamp is the pushed word of the stamp, check
  *       bits aside. A pop whose compare succeeds but whose job pointer fails its check returns failure, with the
- *       reserved bit in seen. The slot stays popped, so no caller runs the corrupted job.
+ *       reserved bit in found_stamp. The slot stays popped, so no caller runs the corrupted job.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_pop(EmbedTicketRing *ring, embed_u64 stamp, unsigned int lane, void **job,
-                                              embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_pop(const EmbedTicketRing *ring, embed_word stamp, unsigned int lane_place,
+                                              void **job, embed_word *found_stamp)
 {
     EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
-    const embed_u64 current = embed_atomic_u64_load(&slot->stamp);
-    const embed_u64 pushed = embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED | EMBED_TICKET_PUSHED);
-    // Explicit cast converts the state test, check bits aside, to an all-ones or all-zeros mask over the current value
-    const embed_u64 valid = (embed_u64)0u - (embed_u64)((current & ~EMBED_TICKET_CHECK_MASK) == pushed);
-    const embed_u64 value = current | EMBED_TICKET_POPPED | ((embed_u64)lane << EMBED_TICKET_LANE_SHIFT);
-    const embed_bool success =
-        embed_ticket_ring_transition(slot, embed_ticket_ring_guarded(current, valid), value, seen);
+    const embed_word current_stamp = embed_atomic_word_load(&slot->stamp);
+    const embed_word pushed_stamp =
+        embed_ticket_ring_expected_stamp(stamp, EMBED_TICKET_GRANTED_BIT | EMBED_TICKET_PUSHED_BIT);
+    // Explicit cast converts the state test, check bits aside, to an all-ones or all-zeros mask over the current stamp
+    const embed_word valid_mask =
+        (embed_word)0u - (embed_word)((current_stamp & ~EMBED_TICKET_CHECK_MASK) == pushed_stamp);
+    // Explicit cast converts the lane place to the stamp, and EMBED_TURNSTILE_LANES bounds it at 64
+    const embed_word new_stamp =
+        current_stamp | EMBED_TICKET_POPPED_BIT | ((embed_word)lane_place << EMBED_TICKET_LANE_SHIFT);
+    const embed_bool success = embed_ticket_ring_transition(
+        slot, embed_ticket_ring_guarded_stamp(current_stamp, valid_mask), new_stamp, found_stamp);
 
     if (!success)
     {
         *job = NULL;
         return EMBED_FALSE;
     }
-    return embed_ticket_ring_job_checked(slot, current, job, seen);
+    return embed_ticket_ring_job_verify(slot, current_stamp, job, found_stamp);
 }
 
 /**
  * @brief The replay transition: the replayed bit added to the popped word, and the job pointer read again.
  *
- * @param[in,out] ring  The ring [BORROWS].
- * @param[in]     stamp The input stamp of a popped slot.
- * @param[out]    job   The job on success [BORROWS], and NULL on failure.
- * @param[out]    seen  The value found [BORROWS].
- * @return              EMBED_TRUE on success.
- * @note A rewind of k tickets is a replay at the ticket k back. The expected value is the current value where the
- *       current value is the popped word of the stamp, lane and check bits aside. Any other current value fails
- *       the compare. The job pointer passes the same check as at the pop.
+ * @param[in]     ring        The ring [BORROWS].
+ * @param[in]     stamp       The input stamp of a popped slot.
+ * @param[out]    job         The job on success [BORROWS], and NULL on failure.
+ * @param[out]    found_stamp The stamp that the compare found in the slot [BORROWS].
+ * @return                    EMBED_TRUE on success.
+ * @note A rewind of a count of tickets is a replay at the ticket that count back. The expected stamp is the current
+ *       stamp where the current stamp is the popped word of the stamp, lane and check bits aside. Any other current
+ *       stamp fails the compare. The job pointer passes the same check as at the pop.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_replay(EmbedTicketRing *ring, embed_u64 stamp, void **job, embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_replay(const EmbedTicketRing *ring, embed_word stamp, void **job,
+                                                 embed_word *found_stamp)
 {
     EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
-    const embed_u64 current = embed_atomic_u64_load(&slot->stamp);
-    const embed_u64 popped =
-        embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED | EMBED_TICKET_PUSHED | EMBED_TICKET_POPPED);
+    const embed_word current_stamp = embed_atomic_word_load(&slot->stamp);
+    const embed_word popped_stamp = embed_ticket_ring_expected_stamp(
+        stamp, EMBED_TICKET_GRANTED_BIT | EMBED_TICKET_PUSHED_BIT | EMBED_TICKET_POPPED_BIT);
     // Explicit cast converts the state test, lane and check bits aside, to an all-ones or all-zeros mask
-    const embed_u64 valid =
-        (embed_u64)0u - (embed_u64)((current & ~(EMBED_TICKET_LANE_MASK | EMBED_TICKET_CHECK_MASK)) == popped);
-    const embed_bool success = embed_ticket_ring_transition(slot, embed_ticket_ring_guarded(current, valid),
-                                                            current | EMBED_TICKET_REPLAYED, seen);
+    const embed_word valid_mask =
+        (embed_word)0u -
+        (embed_word)((current_stamp & ~(EMBED_TICKET_LANE_MASK | EMBED_TICKET_CHECK_MASK)) == popped_stamp);
+    const embed_bool success =
+        embed_ticket_ring_transition(slot, embed_ticket_ring_guarded_stamp(current_stamp, valid_mask),
+                                     current_stamp | EMBED_TICKET_REPLAYED_BIT, found_stamp);
 
     if (!success)
     {
         *job = NULL;
         return EMBED_FALSE;
     }
-    return embed_ticket_ring_job_checked(slot, current, job, seen);
+    return embed_ticket_ring_job_verify(slot, current_stamp, job, found_stamp);
 }
 
 /**
  * @brief The release transition: the released bit added to the popped word, replayed or not.
  *
- * @param[in,out] ring  The ring [BORROWS].
- * @param[in]     stamp The input stamp of a popped slot.
- * @param[out]    seen  The value found [BORROWS].
- * @return              EMBED_TRUE on success.
+ * @param[in]     ring        The ring [BORROWS].
+ * @param[in]     stamp       The input stamp of a popped slot.
+ * @param[out]    found_stamp The stamp that the compare found in the slot [BORROWS].
+ * @return                    EMBED_TRUE on success.
  * @note The writer releases after its drain, so no pass that started before the release reads the slot after it.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_release(EmbedTicketRing *ring, embed_u64 stamp, embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_release(const EmbedTicketRing *ring, embed_word stamp,
+                                                  embed_word *found_stamp)
 {
     EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
-    const embed_u64 current = embed_atomic_u64_load(&slot->stamp);
-    const embed_u64 popped =
-        embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED | EMBED_TICKET_PUSHED | EMBED_TICKET_POPPED);
+    const embed_word current_stamp = embed_atomic_word_load(&slot->stamp);
+    const embed_word popped_stamp = embed_ticket_ring_expected_stamp(
+        stamp, EMBED_TICKET_GRANTED_BIT | EMBED_TICKET_PUSHED_BIT | EMBED_TICKET_POPPED_BIT);
+    const embed_word ignored_bits = EMBED_TICKET_LANE_MASK | EMBED_TICKET_REPLAYED_BIT | EMBED_TICKET_CHECK_MASK;
     // Explicit cast converts the state test, lane, replayed and check bits aside, to an all-ones or all-zeros mask
-    const embed_u64 valid =
-        (embed_u64)0u -
-        (embed_u64)((current & ~(EMBED_TICKET_LANE_MASK | EMBED_TICKET_REPLAYED | EMBED_TICKET_CHECK_MASK)) == popped);
+    const embed_word valid_mask = (embed_word)0u - (embed_word)((current_stamp & ~ignored_bits) == popped_stamp);
 
-    return embed_ticket_ring_transition(slot, embed_ticket_ring_guarded(current, valid),
-                                        current | EMBED_TICKET_RELEASED, seen);
+    return embed_ticket_ring_transition(slot, embed_ticket_ring_guarded_stamp(current_stamp, valid_mask),
+                                        current_stamp | EMBED_TICKET_RELEASED_BIT, found_stamp);
 }
 
 /**
  * @brief The grant transition inside a pass: enter at address, grant, leave.
  *
- * @param[in,out] set     The turnstiles over the ring [BORROWS].
- * @param[in]     address The address of the worker, as embed_turnstile_enter takes it.
- * @param[in,out] ring    The ring [BORROWS].
- * @param[in]     stamp   The input stamp, flag bits clear.
- * @param[out]    seen    The value found [BORROWS].
- * @return                EMBED_TRUE on success.
+ * @param[in,out] set         The turnstiles over the ring [BORROWS].
+ * @param[in]     address     The address of the worker, as embed_turnstile_enter takes it.
+ * @param[in]     ring        The ring [BORROWS].
+ * @param[in]     stamp       The input stamp, flag bits clear.
+ * @param[out]    found_stamp The stamp that the compare found in the slot [BORROWS].
+ * @return                    EMBED_TRUE on success.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_granted(EmbedTurnstiles *set, embed_atomic_uptr_value address,
-                                                  EmbedTicketRing *ring, embed_u64 stamp, embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_pass_grant(EmbedTurnstiles *set, embed_atomic_uptr_value address,
+                                                     const EmbedTicketRing *ring, embed_word stamp,
+                                                     embed_word *found_stamp)
 {
-    const unsigned int lane = embed_turnstile_enter(set, address);
-    const embed_bool success = embed_ticket_ring_grant(ring, stamp, seen);
+    const unsigned int place = embed_turnstile_enter(set, address);
+    const embed_bool success = embed_ticket_ring_grant(ring, stamp, found_stamp);
 
-    embed_turnstile_leave(set, lane);
+    embed_turnstile_leave(set, place);
     return success;
 }
 
 /**
  * @brief The push transition inside a pass: enter at address, push, leave.
  *
- * @param[in,out] set     The turnstiles over the ring [BORROWS].
- * @param[in]     address The address of the worker, as embed_turnstile_enter takes it.
- * @param[in,out] ring    The ring [BORROWS].
- * @param[in]     stamp   The input stamp of a granted slot.
- * @param[in]     job     The job [BORROWS].
- * @param[out]    seen    The value found [BORROWS].
- * @return                EMBED_TRUE on success.
+ * @param[in,out] set         The turnstiles over the ring [BORROWS].
+ * @param[in]     address     The address of the worker, as embed_turnstile_enter takes it.
+ * @param[in]     ring        The ring [BORROWS].
+ * @param[in]     stamp       The input stamp of a granted slot.
+ * @param[in]     job         The job [BORROWS].
+ * @param[out]    found_stamp The stamp that the compare found in the slot [BORROWS].
+ * @return                    EMBED_TRUE on success.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_pushed(EmbedTurnstiles *set, embed_atomic_uptr_value address,
-                                                 EmbedTicketRing *ring, embed_u64 stamp, void *job, embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_pass_push(EmbedTurnstiles *set, embed_atomic_uptr_value address,
+                                                    const EmbedTicketRing *ring, embed_word stamp, void *job,
+                                                    embed_word *found_stamp)
 {
-    const unsigned int lane = embed_turnstile_enter(set, address);
-    const embed_bool success = embed_ticket_ring_push(ring, stamp, job, seen);
+    const unsigned int place = embed_turnstile_enter(set, address);
+    const embed_bool success = embed_ticket_ring_push(ring, stamp, job, found_stamp);
 
-    embed_turnstile_leave(set, lane);
+    embed_turnstile_leave(set, place);
     return success;
 }
 
 /**
  * @brief The pop transition inside a pass: enter at address, pop with the lane index of that pass, leave.
  *
- * @param[in,out] set     The turnstiles over the ring [BORROWS].
- * @param[in]     address The address of the worker, as embed_turnstile_enter takes it.
- * @param[in,out] ring    The ring [BORROWS].
- * @param[in]     stamp   The input stamp of a pushed slot.
- * @param[out]    job     The job on success [BORROWS], and NULL on failure.
- * @param[out]    seen    The value found [BORROWS].
- * @return                EMBED_TRUE on success.
+ * @param[in,out] set         The turnstiles over the ring [BORROWS].
+ * @param[in]     address     The address of the worker, as embed_turnstile_enter takes it.
+ * @param[in]     ring        The ring [BORROWS].
+ * @param[in]     stamp       The input stamp of a pushed slot.
+ * @param[out]    job         The job on success [BORROWS], and NULL on failure.
+ * @param[out]    found_stamp The stamp that the compare found in the slot [BORROWS].
+ * @return                    EMBED_TRUE on success.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_popped(EmbedTurnstiles *set, embed_atomic_uptr_value address,
-                                                 EmbedTicketRing *ring, embed_u64 stamp, void **job, embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_pass_pop(EmbedTurnstiles *set, embed_atomic_uptr_value address,
+                                                   const EmbedTicketRing *ring, embed_word stamp, void **job,
+                                                   embed_word *found_stamp)
 {
-    const unsigned int lane = embed_turnstile_enter(set, address);
-    const embed_bool success = embed_ticket_ring_pop(ring, stamp, lane, job, seen);
+    const unsigned int place = embed_turnstile_enter(set, address);
+    const embed_bool success = embed_ticket_ring_pop(ring, stamp, place, job, found_stamp);
 
-    embed_turnstile_leave(set, lane);
+    embed_turnstile_leave(set, place);
     return success;
 }
 
 /**
  * @brief The replay transition inside a pass: enter at address, replay, leave.
  *
- * @param[in,out] set     The turnstiles over the ring [BORROWS].
- * @param[in]     address The address of the worker, as embed_turnstile_enter takes it.
- * @param[in,out] ring    The ring [BORROWS].
- * @param[in]     stamp   The input stamp of a popped slot.
- * @param[out]    job     The job on success [BORROWS], and NULL on failure.
- * @param[out]    seen    The value found [BORROWS].
- * @return                EMBED_TRUE on success.
+ * @param[in,out] set         The turnstiles over the ring [BORROWS].
+ * @param[in]     address     The address of the worker, as embed_turnstile_enter takes it.
+ * @param[in]     ring        The ring [BORROWS].
+ * @param[in]     stamp       The input stamp of a popped slot.
+ * @param[out]    job         The job on success [BORROWS], and NULL on failure.
+ * @param[out]    found_stamp The stamp that the compare found in the slot [BORROWS].
+ * @return                    EMBED_TRUE on success.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_replayed(EmbedTurnstiles *set, embed_atomic_uptr_value address,
-                                                   EmbedTicketRing *ring, embed_u64 stamp, void **job,
-                                                   embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_pass_replay(EmbedTurnstiles *set, embed_atomic_uptr_value address,
+                                                      const EmbedTicketRing *ring, embed_word stamp, void **job,
+                                                      embed_word *found_stamp)
 {
-    const unsigned int lane = embed_turnstile_enter(set, address);
-    const embed_bool success = embed_ticket_ring_replay(ring, stamp, job, seen);
+    const unsigned int place = embed_turnstile_enter(set, address);
+    const embed_bool success = embed_ticket_ring_replay(ring, stamp, job, found_stamp);
 
-    embed_turnstile_leave(set, lane);
+    embed_turnstile_leave(set, place);
     return success;
 }
 
 /**
  * @brief The release transition after a drain: drain set, then release the stamp.
  *
- * @param[in,out] set   The turnstiles over the ring [BORROWS].
- * @param[in,out] ring  The ring [BORROWS].
- * @param[in]     stamp The input stamp of a popped slot.
- * @param[out]    seen  The value found [BORROWS].
- * @return              EMBED_TRUE on success.
+ * @param[in,out] set         The turnstiles over the ring [BORROWS].
+ * @param[in]     ring        The ring [BORROWS].
+ * @param[in]     stamp       The input stamp of a popped slot.
+ * @param[out]    found_stamp The stamp that the compare found in the slot [BORROWS].
+ * @return                    EMBED_TRUE on success.
  * @note The writer calls this after it observed the popped bit and replaced what the slot referenced. The pass of
  *       that pop started before the drain, so the drain waits for it, and the release follows.
  */
-EMBED_INLINE embed_bool embed_ticket_ring_released(EmbedTurnstiles *set, EmbedTicketRing *ring, embed_u64 stamp,
-                                                   embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_drain_release(EmbedTurnstiles *set, const EmbedTicketRing *ring,
+                                                        embed_word stamp, embed_word *found_stamp)
 {
     embed_turnstiles_drain(set);
-    return embed_ticket_ring_release(ring, stamp, seen);
+    return embed_ticket_ring_release(ring, stamp, found_stamp);
 }
 
 EMBED_END_DECLS

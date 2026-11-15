@@ -125,8 +125,8 @@ theorem lane_u32s_is_8 : 256 / 32 = 8 := by decide
 theorem unit_shift_valid : 0 ≤ Manifold.Backoff.shiftMost := by
   simp [Manifold.Backoff.shiftMost]
 
-/-- The ceiling of a wait on a device is 2^20 ns. -/
-theorem ceiling_is_2_20 : Manifold.Backoff.limitNs 0 Manifold.Backoff.kMost = 2 ^ 20 := by
+/-- The ceiling of a wait on a device, whose word is 64 bits, is 2^20 ns. -/
+theorem ceiling_is_2_20 : Manifold.Backoff.limitNs 0 (Manifold.Backoff.kMost 64) = 2 ^ 20 := by
   simp [Manifold.Backoff.limitNs, Manifold.Backoff.kMost]
 
 end EmbeddedTypes.Device

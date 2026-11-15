@@ -101,31 +101,19 @@ The truth value.
 ### `embed_word` { #embed_word }
 
 ```c
-#if EMBED_WORD_BITS == 64
-typedef embed_u64 embed_word;
-#elif EMBED_WORD_BITS == 32
-typedef embed_u32 embed_word;
-#elif EMBED_WORD_BITS == 16
-typedef embed_u16 embed_word;
-#endif
+typedef EMBED_CAT(embed_u, EMBED_WORD_BITS) embed_word;
 ```
 
-The unsigned word that every lane operation runs in, [`EMBED_WORD_BITS`](#EMBED_WORD_BITS) wide.
+The unsigned word that every lane operation runs in, [`EMBED_WORD_BITS`](#EMBED_WORD_BITS) wide: the exact-width type above whose name ends in that width.
 
 > **Note:** A consumer reasons in this register. A lane mask, a zero test and a byte count all have this width, so a change to [`EMBED_WORD_BITS`](#EMBED_WORD_BITS) changes what one operation covers.
 
-> **Note:** All three arms below declare this type. The 64-bit arm carries this block because the compiler reaches it first.
+> **Note:** [`EMBED_CAT`](embed_compiler_directives.md#EMBED_CAT) pastes the width onto the stem of the name, so one line serves each width. A build that defines [`EMBED_WORD_BITS`](#EMBED_WORD_BITS) gives a plain decimal, as 32, and not 32u.
 
 ### `embed_iword` { #embed_iword }
 
 ```c
-#if EMBED_WORD_BITS == 64
-typedef embed_i64 embed_iword;
-#elif EMBED_WORD_BITS == 32
-typedef embed_i32 embed_iword;
-#elif EMBED_WORD_BITS == 16
-typedef embed_i16 embed_iword;
-#endif
+typedef EMBED_CAT(embed_i, EMBED_WORD_BITS) embed_iword;
 ```
 
 The signed word, the same register as [`embed_word`](#embed_word).
@@ -135,18 +123,14 @@ The signed word, the same register as [`embed_word`](#embed_word).
 ### `embed_index` { #embed_index }
 
 ```c
-#if EMBED_INDEX_BITS == 32
-typedef embed_u32 embed_index;
-#elif EMBED_INDEX_BITS == 16
-typedef embed_u16 embed_index;
-#endif
+typedef EMBED_CAT(embed_u, EMBED_INDEX_BITS) embed_index;
 ```
 
 The index type, [`EMBED_INDEX_BITS`](#EMBED_INDEX_BITS) wide, for every offset and length.
 
 > **Note:** This type is not `size_t`. `size_t` is as wide as the target's pointer. Then one expression would be 32-bit index arithmetic on a device and 64-bit on the host that tests it. One source would then emit different code on the two.
 
-> **Note:** Both arms below declare this type. The 32-bit arm carries this block because the compiler reaches it first.
+> **Note:** [`EMBED_CAT`](embed_compiler_directives.md#EMBED_CAT) pastes the width onto the stem of the name, as for [`embed_word`](#embed_word).
 
 ### `embed_raw_word` { #embed_raw_word }
 

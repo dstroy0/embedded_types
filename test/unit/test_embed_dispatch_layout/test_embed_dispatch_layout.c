@@ -280,6 +280,7 @@ void setUp(void)
 /** @brief Runs after each case, and has nothing to release. */
 void tearDown(void)
 {
+    // Each case has nothing to release
 }
 
 /**

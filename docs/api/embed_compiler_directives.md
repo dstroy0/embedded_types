@@ -494,6 +494,38 @@ Expands to `#text_`.
 
 > **Note:** This macro is above the compiler arms below. A definition in each arm would put two copies in the file, and they would drift at the first edit of one.
 
+### `EMBED_CAT_` { #EMBED_CAT_ }
+
+```c
+#define EMBED_CAT_(left_, right_) left_##right_
+```
+
+Expands to `left_`#`#right_`.
+
+- `[in]`: `left_` Left operand of ##.
+- `[in]`: `right_` Right operand of ##.
+
+\*\*Returns:\*\* The single token that `left_` and `right_` make together.
+
+> **Note:** [`EMBED_CAT`](#EMBED_CAT) calls this macro. ## does not expand its own operands, and [`EMBED_CAT`](#EMBED_CAT) expands them before it gives them to this macro. Call [`EMBED_CAT`](#EMBED_CAT) when either operand is itself a macro.
+
+### `EMBED_CAT` { #EMBED_CAT }
+
+```c
+#define EMBED_CAT(left_, right_) EMBED_CAT_(left_, right_)
+```
+
+Expands to [`EMBED_CAT_`](#EMBED_CAT_)(`left_`, `right_`).
+
+- `[in]`: `left_` Left operand, forwarded to [`EMBED_CAT_`](#EMBED_CAT_).
+- `[in]`: `right_` Right operand, forwarded to [`EMBED_CAT_`](#EMBED_CAT_).
+
+\*\*Returns:\*\* The single token that `left_` and `right_` make together.
+
+> **Note:** This expands its arguments first, then [`EMBED_CAT_`](#EMBED_CAT_) pastes the results. A macro operand reaches [`EMBED_CAT_`](#EMBED_CAT_) as its value.
+
+> **Note:** The types of each word width paste their width onto a stem, as [`embed_word`](embed_types.md#embed_word) does with [`EMBED_WORD_BITS`](embed_types.md#EMBED_WORD_BITS). [`EMBED_TABLE_LAYOUT`](embed_dispatch_layout.md#EMBED_TABLE_LAYOUT) builds an `EMBED_TABLE_SLOTS_`&lt;n&gt; name from the count of [`EMBED_NARG`](embed_dispatch_layout.md#EMBED_NARG).
+
 ### `EMBED_DIAGNOSTIC_PUSH` { #EMBED_DIAGNOSTIC_PUSH }
 
 ```c

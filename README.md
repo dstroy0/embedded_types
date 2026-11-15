@@ -42,8 +42,9 @@ queue, the drain and the sleeps. The GenMC clients under [`test/prove/`](test/pr
 and the resize under five memory models.
 
 The ticket ring is the job queue of the scheduler. It has 2^shift slots, and a slot holds a stamp
-and a job pointer. The stamp is one atomic 64-bit word: the epoch in the high 16 bits, 16 flag bits,
-and the ticket in the low 32 bits. The low shift bits of the ticket select the slot.
+and a job pointer. The stamp is one atomic machine word: the epoch in the high bits, 16 flag bits,
+and the ticket in the low bits. A word of 64 bits has a 16-bit epoch and a 32-bit ticket. A word of
+32 bits has a 4-bit epoch and a 12-bit ticket. The low shift bits of the ticket select the slot.
 
 The flag bits are the state machine of the slot: granted, pushed, popped, replayed, released. Each
 transition is one compare-and-swap inside a pass through a turnstile. It expects the word with the

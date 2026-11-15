@@ -79,15 +79,15 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 int main(void)
 {
   UnityBegin("D:/git_project/repos/owned/public/embedded_types/test/unit/test_embed_dispatch_layout\\test_embed_dispatch_layout.c");
-  run_test(test_the_argument_count_matches_the_length_of_the_list, "test_the_argument_count_matches_the_length_of_the_list", 296);
-  run_test(test_a_macro_name_is_built_from_an_expanded_count, "test_a_macro_name_is_built_from_an_expanded_count", 321);
-  run_test(test_the_call_passes_named_members_and_zeroes_the_rest, "test_the_call_passes_named_members_and_zeroes_the_rest", 334);
-  run_test(test_each_member_reaches_the_function_it_names, "test_each_member_reaches_the_function_it_names", 352);
-  run_test(test_the_slot_stride_is_the_width_of_a_table_member, "test_the_slot_stride_is_the_width_of_a_table_member", 372);
-  run_test(test_the_table_is_exactly_its_three_pointers, "test_the_table_is_exactly_its_three_pointers", 384);
-  run_test(test_the_shortest_and_longest_tables_hold_only_their_slots, "test_the_shortest_and_longest_tables_hold_only_their_slots", 399);
-  run_test(test_a_generated_entry_forwards_its_configuration_to_its_backend, "test_a_generated_entry_forwards_its_configuration_to_its_backend", 417);
-  run_test(test_a_generated_void_entry_reaches_its_backend, "test_a_generated_void_entry_reaches_its_backend", 438);
+  run_test(test_the_argument_count_matches_the_length_of_the_list, "test_the_argument_count_matches_the_length_of_the_list", 297);
+  run_test(test_a_macro_name_is_built_from_an_expanded_count, "test_a_macro_name_is_built_from_an_expanded_count", 322);
+  run_test(test_the_call_passes_named_members_and_zeroes_the_rest, "test_the_call_passes_named_members_and_zeroes_the_rest", 335);
+  run_test(test_each_member_reaches_the_function_it_names, "test_each_member_reaches_the_function_it_names", 353);
+  run_test(test_the_slot_stride_is_the_width_of_a_table_member, "test_the_slot_stride_is_the_width_of_a_table_member", 373);
+  run_test(test_the_table_is_exactly_its_three_pointers, "test_the_table_is_exactly_its_three_pointers", 385);
+  run_test(test_the_shortest_and_longest_tables_hold_only_their_slots, "test_the_shortest_and_longest_tables_hold_only_their_slots", 400);
+  run_test(test_a_generated_entry_forwards_its_configuration_to_its_backend, "test_a_generated_entry_forwards_its_configuration_to_its_backend", 418);
+  run_test(test_a_generated_void_entry_reaches_its_backend, "test_a_generated_void_entry_reaches_its_backend", 439);
 
   return UNITY_END();
 }

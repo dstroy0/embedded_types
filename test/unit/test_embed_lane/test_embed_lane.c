@@ -40,6 +40,7 @@ void setUp(void)
 
 void tearDown(void)
 {
+    // Each case has nothing to release
 }
 
 /** @brief Every byte of `bytes`, `count` of them, set to `val`. */

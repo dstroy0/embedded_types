@@ -27,67 +27,90 @@
 #define RING_THREADS 8u
 #define RING_PUSHES (RING_SLOTS / RING_THREADS)
 
+/** @brief The bits of a job pointer, which the check of the job folds. */
+#define POINTER_BITS (8u * (unsigned int)sizeof(uintptr_t))
+
 /** @brief The flags of a slot after each step of its life, lane bits aside. */
-#define LIFE_GRANTED EMBED_TICKET_GRANTED
-#define LIFE_PUSHED (LIFE_GRANTED | EMBED_TICKET_PUSHED)
-#define LIFE_POPPED (LIFE_PUSHED | EMBED_TICKET_POPPED)
-#define LIFE_RELEASED (LIFE_POPPED | EMBED_TICKET_RELEASED)
+#define LIFE_GRANT_BITS EMBED_TICKET_GRANTED_BIT
+#define LIFE_PUSH_BITS (LIFE_GRANT_BITS | EMBED_TICKET_PUSHED_BIT)
+#define LIFE_POP_BITS (LIFE_PUSH_BITS | EMBED_TICKET_POPPED_BIT)
+#define LIFE_RELEASE_BITS (LIFE_POP_BITS | EMBED_TICKET_RELEASED_BIT)
 
 static EmbedTicketRingSlot s_slots[RING_SLOTS];
 static EmbedTicketRing s_ring;
 static EmbedTurnstiles s_set;
 static embed_atomic_u32 s_next_ticket = EMBED_ATOMIC_INIT(0u);
-static embed_atomic_u32 s_refused = EMBED_ATOMIC_INIT(0u);
+static embed_atomic_u32 s_refusal_count = EMBED_ATOMIC_INIT(0u);
 static embed_u32 s_jobs[RING_SLOTS];
 
 void setUp(void)
 {
-    for (unsigned int at = 0u; at < RING_SLOTS; at += 1u)
+    for (unsigned int slot_index = 0u; slot_index < RING_SLOTS; slot_index += 1u)
     {
-        embed_atomic_u64_store(&s_slots[at].stamp, 0u);
-        s_slots[at].job = NULL;
-        s_jobs[at] = at;
+        embed_atomic_word_store(&s_slots[slot_index].stamp, 0u);
+        s_slots[slot_index].job = NULL;
+        s_jobs[slot_index] = slot_index;
     }
     embed_ticket_ring_begin(&s_ring, s_slots, RING_SHIFT);
     embed_atomic_u32_store(&s_next_ticket, 0u);
-    embed_atomic_u32_store(&s_refused, 0u);
-    for (unsigned int at = 0u; at < EMBED_TURNSTILE_LANES; at += 1u)
+    embed_atomic_u32_store(&s_refusal_count, 0u);
+    for (unsigned int place = 0u; place < EMBED_TURNSTILE_LANES; place += 1u)
     {
-        embed_atomic_word_store(&s_set.lane[at].word, 0u);
+        embed_atomic_word_store(&s_set.lanes[place].word, 0u);
     }
-    embed_atomic_word_store(&s_set.open, 0u);
-    embed_atomic_u32_store(&s_set.queue, 0u);
+    embed_atomic_word_store(&s_set.top_open_lane, 0u);
+    embed_atomic_u32_store(&s_set.queue_length, 0u);
 }
 
 void tearDown(void)
 {
+    // Each case has nothing to release
 }
 
-/** @brief The three fields of a stamp as the stamp holds them, flags aside. */
-static embed_u64 fields(embed_u16 epoch, embed_u32 ticket)
+/** @brief The stamp of the fields of a stamp as the stamp holds them, flags aside. */
+static embed_word stamp_of_fields(embed_word epoch, embed_word ticket)
 {
     return embed_ticket_stamp(epoch, ticket);
 }
 
 void test_the_stamp_gives_its_epoch_and_ticket_back(void)
 {
-    const embed_u64 stamp = embed_ticket_stamp(0x1234u, 0x9abcdef0u);
+    const embed_word epoch = (embed_word)0x1234u & EMBED_TICKET_EPOCH_MASK;
+    const embed_word ticket = (embed_word)0x9abcdef0u & EMBED_TICKET_MASK;
+    const embed_word stamp = embed_ticket_stamp(epoch, ticket);
 
-    TEST_ASSERT_EQUAL_HEX64(0x123400009abcdef0ull, stamp);
-    TEST_ASSERT_EQUAL_HEX16(0x1234u, embed_epoch_of_stamp(stamp));
-    TEST_ASSERT_EQUAL_HEX32(0x9abcdef0u, embed_ticket_of_stamp(stamp));
+    TEST_ASSERT_EQUAL_HEX64((epoch << EMBED_TICKET_EPOCH_SHIFT) | ticket, stamp);
+    TEST_ASSERT_EQUAL_HEX64(epoch, embed_epoch_of_stamp(stamp));
+    TEST_ASSERT_EQUAL_HEX64(ticket, embed_ticket_of_stamp(stamp));
     TEST_ASSERT_EQUAL_HEX16(0u, embed_ticket_flags_of_stamp(stamp));
-    TEST_ASSERT_EQUAL_HEX64(stamp, embed_ticket_fields_of_stamp(stamp | LIFE_POPPED));
+    TEST_ASSERT_EQUAL_HEX64(stamp, embed_ticket_fields_of_stamp(stamp | LIFE_POP_BITS));
+}
+
+void test_a_wide_field_keeps_only_its_own_bits(void)
+{
+    const embed_word stamp = embed_ticket_stamp(~(embed_word)0u, ~(embed_word)0u);
+
+    TEST_ASSERT_EQUAL_HEX64(EMBED_TICKET_EPOCH_MASK, embed_epoch_of_stamp(stamp));
+    TEST_ASSERT_EQUAL_HEX64(EMBED_TICKET_MASK, embed_ticket_of_stamp(stamp));
+    TEST_ASSERT_EQUAL_HEX16(0u, embed_ticket_flags_of_stamp(stamp));
 }
 
 void test_the_flags_sit_between_the_ticket_and_the_epoch(void)
 {
-    const embed_u64 stamp = embed_ticket_stamp(0xffffu, 0xffffffffu) | LIFE_RELEASED;
+    const embed_word stamp = embed_ticket_stamp(EMBED_TICKET_EPOCH_MASK, EMBED_TICKET_MASK) | LIFE_RELEASE_BITS;
 
-    TEST_ASSERT_EQUAL_HEX16(0xffffu, embed_epoch_of_stamp(stamp));
-    TEST_ASSERT_EQUAL_HEX32(0xffffffffu, embed_ticket_of_stamp(stamp));
+    TEST_ASSERT_EQUAL_HEX64(EMBED_TICKET_EPOCH_MASK, embed_epoch_of_stamp(stamp));
+    TEST_ASSERT_EQUAL_HEX64(EMBED_TICKET_MASK, embed_ticket_of_stamp(stamp));
     TEST_ASSERT_EQUAL_HEX16(0x17u, embed_ticket_flags_of_stamp(stamp));
-    TEST_ASSERT_EQUAL_UINT(5u, embed_ticket_lane_of_stamp(stamp | ((embed_u64)5u << EMBED_TICKET_LANE_SHIFT)));
+    TEST_ASSERT_EQUAL_UINT(5u, embed_ticket_lane_of_stamp(stamp | ((embed_word)5u << EMBED_TICKET_LANE_SHIFT)));
+}
+
+void test_the_fields_fill_the_word(void)
+{
+    TEST_ASSERT_EQUAL_UINT(EMBED_WORD_BITS, EMBED_TICKET_BITS + EMBED_TICKET_FLAG_BITS + EMBED_TICKET_EPOCH_BITS);
+    TEST_ASSERT_EQUAL_HEX64(~(embed_word)0u,
+                            EMBED_TICKET_MASK | EMBED_TICKET_FLAG_MASK |
+                                (EMBED_TICKET_EPOCH_MASK << EMBED_TICKET_EPOCH_SHIFT));
 }
 
 void test_the_mask_is_the_count_of_slots_less_one(void)
@@ -100,7 +123,7 @@ void test_the_place_is_the_low_bits_of_the_ticket(void)
 {
     for (embed_u32 ticket = 0u; ticket < 4u * RING_SLOTS; ticket += 1u)
     {
-        TEST_ASSERT_EQUAL_UINT64(ticket % RING_SLOTS, embed_ticket_ring_place(&s_ring, fields(7u, ticket)));
+        TEST_ASSERT_EQUAL_UINT64(ticket % RING_SLOTS, embed_ticket_ring_place(&s_ring, stamp_of_fields(7u, ticket)));
     }
 }
 
@@ -108,125 +131,139 @@ void test_a_ticket_a_ring_on_lands_at_the_same_place(void)
 {
     for (embed_u32 ticket = 0u; ticket < RING_SLOTS; ticket += 1u)
     {
-        TEST_ASSERT_EQUAL_UINT64(embed_ticket_ring_place(&s_ring, fields(0u, ticket)),
-                                 embed_ticket_ring_place(&s_ring, fields(0u, ticket + RING_SLOTS)));
+        TEST_ASSERT_EQUAL_UINT64(embed_ticket_ring_place(&s_ring, stamp_of_fields(0u, ticket)),
+                                 embed_ticket_ring_place(&s_ring, stamp_of_fields(0u, ticket + RING_SLOTS)));
     }
 }
 
-void test_the_ticket_rolls_at_32_bits_onto_the_next_place(void)
+void test_the_ticket_rolls_at_its_width_onto_the_next_place(void)
 {
-    TEST_ASSERT_EQUAL_UINT64(RING_SLOTS - 1u, embed_ticket_ring_place(&s_ring, fields(0u, 0xffffffffu)));
-    TEST_ASSERT_EQUAL_UINT64(0u, embed_ticket_ring_place(&s_ring, fields(1u, 0u)));
+    TEST_ASSERT_EQUAL_UINT64(RING_SLOTS - 1u,
+                             embed_ticket_ring_place(&s_ring, stamp_of_fields(0u, EMBED_TICKET_MASK)));
+    TEST_ASSERT_EQUAL_UINT64(0u, embed_ticket_ring_place(&s_ring, stamp_of_fields(1u, 0u)));
 }
 
 void test_the_epoch_and_the_flags_do_not_move_the_place(void)
 {
-    TEST_ASSERT_EQUAL_UINT64(embed_ticket_ring_place(&s_ring, fields(0u, 5u)),
-                             embed_ticket_ring_place(&s_ring, fields(0xffffu, 5u) | LIFE_RELEASED));
+    TEST_ASSERT_EQUAL_UINT64(
+        embed_ticket_ring_place(&s_ring, stamp_of_fields(0u, 5u)),
+        embed_ticket_ring_place(&s_ring, stamp_of_fields(EMBED_TICKET_EPOCH_MASK, 5u) | LIFE_RELEASE_BITS));
 }
 
 void test_the_life_of_a_slot_lands_each_step_once_in_order(void)
 {
-    const embed_u64 stamp = fields(3u, 9u);
-    embed_u64 seen = 0u;
+    const embed_word stamp = stamp_of_fields(3u, 9u);
+    embed_word found_stamp = 0u;
     void *job = NULL;
 
-    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_grant(&s_ring, stamp, &seen), "the grant lands on an empty word");
-    TEST_ASSERT_EQUAL_HEX64(0u, seen);
-    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_grant(&s_ring, stamp, &seen), "a second grant finds the granted word");
-    TEST_ASSERT_EQUAL_HEX64(stamp | LIFE_GRANTED, seen);
+    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_grant(&s_ring, stamp, &found_stamp), "the grant lands on an empty word");
+    TEST_ASSERT_EQUAL_HEX64(0u, found_stamp);
+    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_grant(&s_ring, stamp, &found_stamp),
+                              "a second grant finds the granted word");
+    TEST_ASSERT_EQUAL_HEX64(stamp | LIFE_GRANT_BITS, found_stamp);
 
-    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &seen), "a pop before the push fails");
+    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &found_stamp),
+                              "a pop before the push fails");
     TEST_ASSERT_NULL(job);
-    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[9], &seen), "the push lands");
-    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[9], &seen), "a second push fails");
-    TEST_ASSERT_EQUAL_HEX64(stamp | LIFE_PUSHED | embed_ticket_job_check_bits(&s_jobs[9]), seen);
+    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[9], &found_stamp), "the push lands");
+    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[9], &found_stamp), "a second push fails");
+    TEST_ASSERT_EQUAL_HEX64(stamp | LIFE_PUSH_BITS | embed_ticket_job_check_bits(&s_jobs[9]), found_stamp);
 
-    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_release(&s_ring, stamp, &seen), "a release before the pop fails");
-    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 5u, &job, &seen), "the pop lands");
+    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_release(&s_ring, stamp, &found_stamp),
+                              "a release before the pop fails");
+    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 5u, &job, &found_stamp), "the pop lands");
     TEST_ASSERT_EQUAL_PTR(&s_jobs[9], job);
-    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 6u, &job, &seen), "a second pop fails");
+    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 6u, &job, &found_stamp), "a second pop fails");
     TEST_ASSERT_NULL(job);
-    TEST_ASSERT_EQUAL_HEX64(stamp | LIFE_POPPED | embed_ticket_job_check_bits(&s_jobs[9]) |
-                                ((embed_u64)5u << EMBED_TICKET_LANE_SHIFT),
-                            seen);
-    TEST_ASSERT_EQUAL_UINT(5u, embed_ticket_lane_of_stamp(seen));
+    TEST_ASSERT_EQUAL_HEX64(stamp | LIFE_POP_BITS | embed_ticket_job_check_bits(&s_jobs[9]) |
+                                ((embed_word)5u << EMBED_TICKET_LANE_SHIFT),
+                            found_stamp);
+    TEST_ASSERT_EQUAL_UINT(5u, embed_ticket_lane_of_stamp(found_stamp));
 
-    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_replay(&s_ring, stamp, &job, &seen), "the replay lands");
+    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_replay(&s_ring, stamp, &job, &found_stamp), "the replay lands");
     TEST_ASSERT_EQUAL_PTR(&s_jobs[9], job);
-    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_replay(&s_ring, stamp, &job, &seen), "a second replay fails");
+    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_replay(&s_ring, stamp, &job, &found_stamp), "a second replay fails");
     TEST_ASSERT_NULL(job);
 
-    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_release(&s_ring, stamp, &seen), "the release lands after the replay");
-    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_release(&s_ring, stamp, &seen), "a second release fails");
-    TEST_ASSERT_EQUAL_HEX16(0x1fu, (embed_u16)(embed_ticket_flags_of_stamp(seen) & 0x1fu));
+    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_release(&s_ring, stamp, &found_stamp),
+                             "the release lands after the replay");
+    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_release(&s_ring, stamp, &found_stamp), "a second release fails");
+    // Explicit cast narrows the five state bits of the flag field to the width that the assertion compares
+    TEST_ASSERT_EQUAL_HEX16(0x1fu, (embed_u16)(embed_ticket_flags_of_stamp(found_stamp) & 0x1fu));
 }
 
 void test_a_release_lands_with_no_replay(void)
 {
-    const embed_u64 stamp = fields(1u, 2u);
-    embed_u64 seen = 0u;
+    const embed_word stamp = stamp_of_fields(1u, 2u);
+    embed_word found_stamp = 0u;
     void *job = NULL;
 
-    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &seen));
-    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[2], &seen));
-    TEST_ASSERT_TRUE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &seen));
-    TEST_ASSERT_TRUE(embed_ticket_ring_release(&s_ring, stamp, &seen));
-    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_replay(&s_ring, stamp, &job, &seen), "a replay after the release fails");
+    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &found_stamp));
+    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[2], &found_stamp));
+    TEST_ASSERT_TRUE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &found_stamp));
+    TEST_ASSERT_TRUE(embed_ticket_ring_release(&s_ring, stamp, &found_stamp));
+    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_replay(&s_ring, stamp, &job, &found_stamp),
+                              "a replay after the release fails");
 }
 
 void test_the_next_grant_takes_a_released_word_over(void)
 {
-    const embed_u64 first = fields(1u, 4u);
-    const embed_u64 later = fields(2u, 4u + RING_SLOTS);
-    embed_u64 seen = 0u;
+    const embed_word first_stamp = stamp_of_fields(1u, 4u);
+    const embed_word later_stamp = stamp_of_fields(2u, 4u + RING_SLOTS);
+    embed_word found_stamp = 0u;
     void *job = NULL;
 
-    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, first, &seen));
-    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, first, &s_jobs[4], &seen));
-    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_grant(&s_ring, later, &seen), "a grant on a live word fails");
-    TEST_ASSERT_TRUE(embed_ticket_ring_pop(&s_ring, first, 0u, &job, &seen));
-    TEST_ASSERT_TRUE(embed_ticket_ring_release(&s_ring, first, &seen));
-    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_grant(&s_ring, later, &seen), "a grant on a released word lands");
-    TEST_ASSERT_EQUAL_HEX64(first | LIFE_RELEASED | embed_ticket_job_check_bits(&s_jobs[4]), seen);
-    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, later, &s_jobs[5], &seen));
-    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, first, 0u, &job, &seen), "the old stamp finds the new word");
-    TEST_ASSERT_EQUAL_HEX64(later | LIFE_PUSHED | embed_ticket_job_check_bits(&s_jobs[5]), seen);
-    TEST_ASSERT_TRUE(embed_ticket_ring_pop(&s_ring, later, 0u, &job, &seen));
+    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, first_stamp, &found_stamp));
+    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, first_stamp, &s_jobs[4], &found_stamp));
+    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_grant(&s_ring, later_stamp, &found_stamp),
+                              "a grant on a live word fails");
+    TEST_ASSERT_TRUE(embed_ticket_ring_pop(&s_ring, first_stamp, 0u, &job, &found_stamp));
+    TEST_ASSERT_TRUE(embed_ticket_ring_release(&s_ring, first_stamp, &found_stamp));
+    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_grant(&s_ring, later_stamp, &found_stamp),
+                             "a grant on a released word lands");
+    TEST_ASSERT_EQUAL_HEX64(first_stamp | LIFE_RELEASE_BITS | embed_ticket_job_check_bits(&s_jobs[4]), found_stamp);
+    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, later_stamp, &s_jobs[5], &found_stamp));
+    TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, first_stamp, 0u, &job, &found_stamp),
+                              "the old stamp finds the new word");
+    TEST_ASSERT_EQUAL_HEX64(later_stamp | LIFE_PUSH_BITS | embed_ticket_job_check_bits(&s_jobs[5]), found_stamp);
+    TEST_ASSERT_TRUE(embed_ticket_ring_pop(&s_ring, later_stamp, 0u, &job, &found_stamp));
     TEST_ASSERT_EQUAL_PTR(&s_jobs[5], job);
 }
 
 void test_a_flipped_stamp_refuses_every_step(void)
 {
-    const embed_u64 stamp = fields(6u, 11u);
-    embed_u64 seen = 0u;
+    const embed_word stamp = stamp_of_fields(6u, 11u);
+    embed_word found_stamp = 0u;
     void *job = NULL;
 
-    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &seen));
-    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[11], &seen));
-    for (unsigned int bit = 0u; bit < 64u; bit += 1u)
+    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &found_stamp));
+    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[11], &found_stamp));
+    for (unsigned int bit = 0u; bit < EMBED_WORD_BITS; bit += 1u)
     {
-        const embed_u64 flipped = stamp ^ ((embed_u64)1u << bit);
+        const embed_word flipped_stamp = stamp ^ ((embed_word)1u << bit);
 
         // A flip in the epoch or the ticket lands on another word, or on this one with another expectation. A flip
         // in the flags expects a word that no step lands
-        TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, flipped, 0u, &job, &seen), "a flipped pop fails");
+        TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, flipped_stamp, 0u, &job, &found_stamp),
+                                  "a flipped pop fails");
         TEST_ASSERT_NULL(job);
     }
-    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &seen), "the true stamp still pops");
+    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &found_stamp),
+                             "the true stamp still pops");
 }
 
 void test_the_push_records_the_check_of_the_job_pointer(void)
 {
-    const embed_u64 stamp = fields(4u, 13u);
-    embed_u64 seen = 0u;
+    const embed_word stamp = stamp_of_fields(4u, 13u);
+    embed_word found_stamp = 0u;
 
-    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &seen));
-    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[13], &seen));
+    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &found_stamp));
+    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[13], &found_stamp));
     TEST_ASSERT_EQUAL_HEX64(embed_ticket_job_check_bits(&s_jobs[13]),
-                            embed_atomic_u64_load(&s_slots[13].stamp) & EMBED_TICKET_CHECK_MASK);
+                            embed_atomic_word_load(&s_slots[13].stamp) & EMBED_TICKET_CHECK_MASK);
     TEST_ASSERT_EQUAL_HEX64(0u, embed_ticket_job_check_bits(NULL));
-    // The remainders of x^0 to x^7 modulo x^3 + x + 1: 1, x, x^2, x + 1, x^2 + x, x^2 + x + 1, x^2 + 1, 1
+    // The remainders of x^0 to x^7 modulo x^3 + x + 1: 1, x, x^2, x + 1, x^2 + x, x^2 + x + 1, x^2 + 1, 1. Explicit
+    // casts carry each integer as a pointer value that nothing dereferences.
     TEST_ASSERT_EQUAL_UINT64(1u, embed_ticket_job_check((const void *)(uintptr_t)1u));
     TEST_ASSERT_EQUAL_UINT64(2u, embed_ticket_job_check((const void *)(uintptr_t)2u));
     TEST_ASSERT_EQUAL_UINT64(4u, embed_ticket_job_check((const void *)(uintptr_t)4u));
@@ -239,37 +276,41 @@ void test_the_push_records_the_check_of_the_job_pointer(void)
 }
 
 /** @brief The slot of ticket 14 set to the pushed state with the check of the intact job, and the job set to value. */
-static void slot_14_pushed_with(embed_u64 stamp, embed_u64 value)
+static void slot_14_pushed_with(embed_word stamp, uintptr_t value)
 {
     // Explicit cast carries the integer back as a pointer value that nothing dereferences
-    s_slots[14].job = (void *)(uintptr_t)value;
-    embed_atomic_u64_store(&s_slots[14].stamp, stamp | LIFE_PUSHED | embed_ticket_job_check_bits(&s_jobs[14]));
+    s_slots[14].job = (void *)value;
+    embed_atomic_word_store(&s_slots[14].stamp, stamp | LIFE_PUSH_BITS | embed_ticket_job_check_bits(&s_jobs[14]));
 }
 
 void test_a_single_bit_error_in_the_job_pointer_fails_the_pop_and_the_replay(void)
 {
 #if EMBED_TICKET_JOB_CHECK
-    const embed_u64 stamp = fields(4u, 14u);
+    const embed_word stamp = stamp_of_fields(4u, 14u);
     // Explicit cast carries the pointer as an integer for the flips
-    const embed_u64 intact = (embed_u64)(uintptr_t)&s_jobs[14];
-    embed_u64 seen = 0u;
+    const uintptr_t intact_job = (uintptr_t)&s_jobs[14];
+    embed_word found_stamp = 0u;
     void *job = NULL;
 
-    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &seen));
-    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[14], &seen));
-    for (unsigned int bit = 0u; bit < 64u; bit += 1u)
+    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &found_stamp));
+    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[14], &found_stamp));
+    for (unsigned int bit = 0u; bit < POINTER_BITS; bit += 1u)
     {
-        slot_14_pushed_with(stamp, intact ^ ((embed_u64)1u << bit));
-        TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &seen), "the pop refuses the job");
+        slot_14_pushed_with(stamp, intact_job ^ ((uintptr_t)1u << bit));
+        TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &found_stamp),
+                                  "the pop refuses the job");
         TEST_ASSERT_NULL(job);
-        TEST_ASSERT_EQUAL_HEX64_MESSAGE(EMBED_TICKET_RESERVED, seen & EMBED_TICKET_RESERVED, "seen marks corruption");
-        TEST_ASSERT_EQUAL_HEX64_MESSAGE(EMBED_TICKET_POPPED, embed_atomic_u64_load(&s_slots[14].stamp) & EMBED_TICKET_POPPED,
+        TEST_ASSERT_EQUAL_HEX64_MESSAGE(EMBED_TICKET_RESERVED_BIT, found_stamp & EMBED_TICKET_RESERVED_BIT,
+                                        "the found stamp marks corruption");
+        TEST_ASSERT_EQUAL_HEX64_MESSAGE(EMBED_TICKET_POPPED_BIT,
+                                        embed_atomic_word_load(&s_slots[14].stamp) & EMBED_TICKET_POPPED_BIT,
                                         "the slot stays popped");
-        TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_replay(&s_ring, stamp, &job, &seen), "the replay refuses the job");
+        TEST_ASSERT_FALSE_MESSAGE(embed_ticket_ring_replay(&s_ring, stamp, &job, &found_stamp),
+                                  "the replay refuses the job");
         TEST_ASSERT_NULL(job);
     }
-    slot_14_pushed_with(stamp, intact);
-    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &seen), "the intact job pops");
+    slot_14_pushed_with(stamp, intact_job);
+    TEST_ASSERT_TRUE_MESSAGE(embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &found_stamp), "the intact job pops");
     TEST_ASSERT_EQUAL_PTR(&s_jobs[14], job);
 #else
     TEST_IGNORE_MESSAGE("EMBED_TICKET_JOB_CHECK is 0 here, so the pop does not verify the job pointer");
@@ -279,22 +320,23 @@ void test_a_single_bit_error_in_the_job_pointer_fails_the_pop_and_the_replay(voi
 void test_a_double_bit_error_fails_the_pop_unless_seven_apart(void)
 {
 #if EMBED_TICKET_JOB_CHECK
-    const embed_u64 stamp = fields(4u, 14u);
+    const embed_word stamp = stamp_of_fields(4u, 14u);
     // Explicit cast carries the pointer as an integer for the flips
-    const embed_u64 intact = (embed_u64)(uintptr_t)&s_jobs[14];
-    embed_u64 seen = 0u;
+    const uintptr_t intact_job = (uintptr_t)&s_jobs[14];
+    embed_word found_stamp = 0u;
     void *job = NULL;
 
-    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &seen));
-    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[14], &seen));
-    for (unsigned int first = 0u; first < 64u; first += 1u)
+    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, stamp, &found_stamp));
+    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, stamp, &s_jobs[14], &found_stamp));
+    for (unsigned int first_bit = 0u; first_bit < POINTER_BITS; first_bit += 1u)
     {
-        for (unsigned int second = first + 1u; second < 64u; second += 1u)
+        for (unsigned int second_bit = first_bit + 1u; second_bit < POINTER_BITS; second_bit += 1u)
         {
-            const embed_bool detected = (embed_bool)(((second - first) % 7u) != 0u);
+            // Explicit cast converts the test, an int of 0 or 1, to the project boolean
+            const embed_bool error_detection = (embed_bool)(((second_bit - first_bit) % 7u) != 0u);
 
-            slot_14_pushed_with(stamp, intact ^ ((embed_u64)1u << first) ^ ((embed_u64)1u << second));
-            TEST_ASSERT_EQUAL_MESSAGE(!detected, embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &seen),
+            slot_14_pushed_with(stamp, intact_job ^ ((uintptr_t)1u << first_bit) ^ ((uintptr_t)1u << second_bit));
+            TEST_ASSERT_EQUAL_MESSAGE(!error_detection, embed_ticket_ring_pop(&s_ring, stamp, 0u, &job, &found_stamp),
                                       "the pop refuses a double error exactly where the places are not seven apart");
         }
     }
@@ -306,19 +348,20 @@ void test_a_double_bit_error_fails_the_pop_unless_seven_apart(void)
 /** @brief One thread of the contention case: each ticket from the counter, each step inside a pass at its address. */
 static void lives_in_passes(void)
 {
-    embed_u32 own = 0u;
-    const embed_atomic_uptr_value address = (embed_atomic_uptr_value)(uintptr_t)&own;
+    embed_u32 address_anchor = 0u;
+    // Explicit casts carry the address of a local of this thread as the integer that the entry takes
+    const embed_atomic_uptr_value address = (embed_atomic_uptr_value)(uintptr_t)&address_anchor;
 
-    for (unsigned int round = 0u; round < RING_PUSHES; round += 1u)
+    for (unsigned int round_index = 0u; round_index < RING_PUSHES; round_index += 1u)
     {
         const embed_u32 ticket = embed_atomic_u32_fetch_add(&s_next_ticket, 1u);
-        const embed_u64 stamp = fields((embed_u16)round, ticket);
-        embed_u64 seen = 0u;
+        const embed_word stamp = stamp_of_fields(round_index, ticket);
+        embed_word found_stamp = 0u;
 
-        if (!embed_ticket_ring_granted(&s_set, address, &s_ring, stamp, &seen) ||
-            !embed_ticket_ring_pushed(&s_set, address, &s_ring, stamp, &s_jobs[ticket], &seen))
+        if (!embed_ticket_ring_pass_grant(&s_set, address, &s_ring, stamp, &found_stamp) ||
+            !embed_ticket_ring_pass_push(&s_set, address, &s_ring, stamp, &s_jobs[ticket], &found_stamp))
         {
-            (void)embed_atomic_u32_fetch_add(&s_refused, 1u);
+            (void)embed_atomic_u32_fetch_add(&s_refusal_count, 1u);
         }
     }
 }
@@ -328,46 +371,48 @@ void test_lives_inside_passes_each_pop_whole_after_the_drain(void)
     TEST_ASSERT_TRUE_MESSAGE(host_threads_run(lives_in_passes, RING_THREADS), "every thread started");
     embed_turnstiles_drain(&s_set);
     TEST_ASSERT_EQUAL_UINT32(RING_SLOTS, embed_atomic_u32_load(&s_next_ticket));
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, embed_atomic_u32_load(&s_refused), "every grant and push landed");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0u, embed_atomic_u32_load(&s_refusal_count), "every grant and push landed");
     for (embed_u32 ticket = 0u; ticket < RING_SLOTS; ticket += 1u)
     {
-        const embed_u64 stamp = fields((embed_u16)(ticket % RING_PUSHES), ticket);
-        embed_u64 seen = 0u;
+        const embed_word stamp = stamp_of_fields(ticket % RING_PUSHES, ticket);
+        embed_word found_stamp = 0u;
         void *job = NULL;
 
-        TEST_ASSERT_TRUE(embed_ticket_ring_popped(&s_set, (embed_atomic_uptr_value)(uintptr_t)&seen, &s_ring, stamp,
-                                                  &job, &seen));
+        // Explicit casts carry the address of a local as the integer that the entry takes
+        TEST_ASSERT_TRUE(embed_ticket_ring_pass_pop(&s_set, (embed_atomic_uptr_value)(uintptr_t)&found_stamp, &s_ring,
+                                                    stamp, &job, &found_stamp));
         TEST_ASSERT_EQUAL_PTR(&s_jobs[ticket], job);
-        TEST_ASSERT_TRUE(embed_ticket_ring_released(&s_set, &s_ring, stamp, &seen));
+        TEST_ASSERT_TRUE(embed_ticket_ring_drain_release(&s_set, &s_ring, stamp, &found_stamp));
     }
-    TEST_ASSERT_EQUAL_UINT(1u, embed_turnstile_lanes(&s_set));
+    TEST_ASSERT_EQUAL_UINT(1u, embed_turnstile_open_lane_count(&s_set));
 }
 
 /** @brief The two pops of one stamp from two threads: the collision case. */
-static embed_u64 s_collision_stamp;
-static embed_atomic_u32 s_collision_landed = EMBED_ATOMIC_INIT(0u);
+static embed_word s_collision_stamp;
+static embed_atomic_u32 s_collision_landings = EMBED_ATOMIC_INIT(0u);
 
-static void pops_collide(void)
+static void pop_collision(void)
 {
-    embed_u32 own = 0u;
-    embed_u64 seen = 0u;
+    embed_u32 address_anchor = 0u;
+    embed_word found_stamp = 0u;
     void *job = NULL;
 
-    if (embed_ticket_ring_popped(&s_set, (embed_atomic_uptr_value)(uintptr_t)&own, &s_ring, s_collision_stamp, &job,
-                                 &seen))
+    // Explicit casts carry the address of a local of this thread as the integer that the entry takes
+    if (embed_ticket_ring_pass_pop(&s_set, (embed_atomic_uptr_value)(uintptr_t)&address_anchor, &s_ring,
+                                   s_collision_stamp, &job, &found_stamp))
     {
-        (void)embed_atomic_u32_fetch_add(&s_collision_landed, 1u);
+        (void)embed_atomic_u32_fetch_add(&s_collision_landings, 1u);
     }
 }
 
 void test_two_pops_of_one_stamp_land_once(void)
 {
-    embed_u64 seen = 0u;
+    embed_word found_stamp = 0u;
 
-    s_collision_stamp = fields(2u, 7u);
-    embed_atomic_u32_store(&s_collision_landed, 0u);
-    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, s_collision_stamp, &seen));
-    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, s_collision_stamp, &s_jobs[7], &seen));
-    TEST_ASSERT_TRUE_MESSAGE(host_threads_run(pops_collide, RING_THREADS), "every thread started");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1u, embed_atomic_u32_load(&s_collision_landed), "one pop of the stamp landed");
+    s_collision_stamp = stamp_of_fields(2u, 7u);
+    embed_atomic_u32_store(&s_collision_landings, 0u);
+    TEST_ASSERT_TRUE(embed_ticket_ring_grant(&s_ring, s_collision_stamp, &found_stamp));
+    TEST_ASSERT_TRUE(embed_ticket_ring_push(&s_ring, s_collision_stamp, &s_jobs[7], &found_stamp));
+    TEST_ASSERT_TRUE_MESSAGE(host_threads_run(pop_collision, RING_THREADS), "every thread started");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(1u, embed_atomic_u32_load(&s_collision_landings), "one pop of the stamp landed");
 }

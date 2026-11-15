@@ -45,6 +45,7 @@ void setUp(void)
 
 void tearDown(void)
 {
+    // Each case has nothing to release
 }
 
 /** @brief Marks the case ignored where no part is present to run it. */

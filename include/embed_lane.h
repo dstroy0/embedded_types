@@ -143,10 +143,10 @@ EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must 
 #if EMBED_LANE_VECTOR
 typedef embed_u32 embed_lane EMBED_VECTOR(EMBED_LANE_BYTES);
 
-/** @brief The lane seen as its bytes, which the byte masks compare in. */
+/** @brief The view of the lane as its bytes, which the byte masks compare in. */
 typedef embed_u8 embed_lane_bytes EMBED_VECTOR(EMBED_LANE_BYTES);
 
-/** @brief The lane seen as char, the shape the compiler's byte mask builtin reads. */
+/** @brief The view of the lane as char, the shape that the byte mask builtin of the compiler reads. */
 typedef char embed_lane_chars EMBED_VECTOR(EMBED_LANE_BYTES);
 #else
 typedef struct
@@ -537,9 +537,11 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
 #else
     // A byte of the difference of a word is zero where its high bit is clear after the carry test. The sum
     // carries out of each byte that holds a bit, and the complement retains the other bytes.
-#define EMBED_LANE_ZERO_BYTES(at_)                                                                                    \
-    ((~((((one.at[at_] ^ other.at[at_]) & 0x7f7f7f7fu) + 0x7f7f7f7fu) | (one.at[at_] ^ other.at[at_]) | 0x7f7f7f7fu)) >> 7u)
-#define EMBED_LANE_EQUAL_WORD(at_)                                                                                    \
+#define EMBED_LANE_ZERO_BYTES(at_)                                                                                     \
+    ((~((((one.at[at_] ^ other.at[at_]) & 0x7f7f7f7fu) + 0x7f7f7f7fu) | (one.at[at_] ^ other.at[at_]) |                \
+        0x7f7f7f7fu)) >>                                                                                               \
+     7u)
+#define EMBED_LANE_EQUAL_WORD(at_)                                                                                     \
     mask |= (embed_lane_mask)((EMBED_LANE_ZERO_BYTES(at_) * EMBED_LANE_NIBBLE_GATHER) >> 24u) << (4u * (at_));
     EMBED_LANE_WORDS(EMBED_LANE_EQUAL_WORD)
 #undef EMBED_LANE_EQUAL_WORD

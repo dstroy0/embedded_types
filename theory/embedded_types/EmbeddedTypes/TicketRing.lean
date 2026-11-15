@@ -1,21 +1,30 @@
 import Std.Tactic.BVDecide
+import EmbeddedTypes.Flags
 
 /-!
 # embedded_types, the ticket ring
 
-`include/embed_ticket_ring.h` is a ring of 2^shift slots that a ticket indexes. A stamp is one 64-bit word. The
-epoch is in the high 16 bits, the flag field of `Flags.lean` in the 16 below them, and the ticket in the low 32 bits.
-The turnstile grants each ticket once and holds each transition of a slot inside a pass, which `Manifold/LaneWord.lean`
-proves exclusive.
+`include/embed_ticket_ring.h` is a ring of 2^shift slots that a ticket indexes. A stamp is one machine word. The
+ticket is in the low t bits, the flag field of `Flags.lean` in the 16 above it, and the epoch in the high bits.
+`Flags.rows` holds the widths of each row. The turnstile grants each ticket once and holds each transition of a slot
+inside a pass, which `Manifold/LaneWord.lean` proves exclusive.
 
-- `stamp_ticket`, `stamp_epoch` and `stamp_injective`. The two fields come back out of the stamp. Two stamps that
-  agree are the same epoch and ticket.
+- `stamp_value_ticket`, `stamp_value_epoch`, `stamp_value_flags`, `stamp_value_fits` and `stamp_value_injective`.
+  These theorems hold on a word of any width n = e + 16 + t. The two fields come back out of the stamp, the flag bits
+  are clear, and the stamp fits the word. Two stamps that agree are the same epoch and ticket.
+
+- `stamp_ticket`, `stamp_epoch`, `stamp_flags_clear` and `stamp_injective`. The same facts on the words of each row,
+  as the C computes them. Each field keeps only its own bits, so a wide epoch or ticket sets no flag bit.
+
+- `stamp_sum`, `stamp_parts_bound` and `stamp_is_value`. On each row, the two parts of the stamp share no bit and
+  each fits its field. So the stamp word is the stamp number of the theorems on any width.
 
 - `place_lt`. The place of a ticket is below the count of slots.
 
 - `place_wrap`. A ticket 2^shift on lands at the same place, so the ring wraps with no division.
 
-- `place_roll`. The roll of the ticket at 32 bits leaves the place as it is, because 2^shift divides 2^32.
+- `place_roll` and `shift_max_rolls`. The roll of the ticket at its width t leaves the place as it is, because
+  2^shift divides 2^t. Every shift that the ring takes is below t.
 
 - `place_mask`. The mask of the C, `ticket &&& (2^shift - 1)`, is that place.
 
@@ -28,33 +37,122 @@ proves exclusive.
 
 namespace EmbeddedTypes.TicketRing
 
-/-! ## The stamp -/
+/-! ## The stamp on a word of any width -/
 
-/-- The stamp of an epoch and a ticket, as `embed_ticket_stamp` builds it. -/
-def stamp (epoch : BitVec 16) (ticket : BitVec 32) : BitVec 64 :=
-  (epoch.zeroExtend 64 <<< 48) ||| ticket.zeroExtend 64
+/-- The stamp of an epoch and a ticket as a number, on a word of a ticket width of t bits. The epoch is above the
+ticket and the 16 flag bits. -/
+def stampValue (t epoch ticket : Nat) : Nat := epoch * 2 ^ (t + 16) + ticket
+
+/-- The ticket comes back out of the stamp as its low t bits. -/
+theorem stamp_value_ticket (t epoch ticket : Nat) (h : ticket < 2 ^ t) :
+    stampValue t epoch ticket % 2 ^ t = ticket := by
+  rw [stampValue, Nat.pow_add, Nat.mul_comm (2 ^ t), ← Nat.mul_assoc, Nat.add_comm, Nat.add_mul_mod_self_right,
+    Nat.mod_eq_of_lt h]
+
+/-- The epoch comes back out of the stamp as its bits from t + 16 up. -/
+theorem stamp_value_epoch (t epoch ticket : Nat) (h : ticket < 2 ^ t) :
+    stampValue t epoch ticket / 2 ^ (t + 16) = epoch := by
+  have hlt : ticket < 2 ^ (t + 16) := Nat.lt_of_lt_of_le h (Nat.pow_le_pow_right (by decide) (Nat.le_add_right t 16))
+  rw [stampValue, Nat.add_comm, Nat.add_mul_div_right _ _ (Nat.two_pow_pos _), Nat.div_eq_of_lt hlt, Nat.zero_add]
+
+/-- The 16 flag bits of a stamp are clear. -/
+theorem stamp_value_flags (t epoch ticket : Nat) (h : ticket < 2 ^ t) :
+    stampValue t epoch ticket / 2 ^ t % 2 ^ 16 = 0 := by
+  rw [stampValue, Nat.pow_add, Nat.mul_comm (2 ^ t), ← Nat.mul_assoc, Nat.add_comm,
+    Nat.add_mul_div_right _ _ (Nat.two_pow_pos _), Nat.div_eq_of_lt h, Nat.zero_add, Nat.mul_mod_left]
+
+/-- On a word of n = e + 16 + t bits, an epoch below 2^e and a ticket below 2^t give a stamp below 2^n. So the
+stamp fits the word on every width whose fields fill it. -/
+theorem stamp_value_fits (e t epoch ticket : Nat) (he : epoch < 2 ^ e) (h : ticket < 2 ^ t) :
+    stampValue t epoch ticket < 2 ^ (e + 16 + t) := by
+  have hpow : 2 ^ (e + 16 + t) = 2 ^ e * 2 ^ (t + 16) := by
+    rw [← Nat.pow_add]
+    congr 1
+    omega
+  have hstep : (epoch + 1) * 2 ^ (t + 16) ≤ 2 ^ e * 2 ^ (t + 16) := Nat.mul_le_mul_right _ he
+  have hlt : ticket < 2 ^ (t + 16) := Nat.lt_of_lt_of_le h (Nat.pow_le_pow_right (by decide) (Nat.le_add_right t 16))
+  rw [hpow, stampValue]
+  rw [Nat.add_mul, Nat.one_mul] at hstep
+  omega
+
+/-- Two stamps that agree are the same epoch and ticket, on a word of any width. -/
+theorem stamp_value_injective (t e1 e2 k1 k2 : Nat) (h1 : k1 < 2 ^ t) (h2 : k2 < 2 ^ t)
+    (h : stampValue t e1 k1 = stampValue t e2 k2) : e1 = e2 ∧ k1 = k2 := by
+  constructor
+  · rw [← stamp_value_epoch t e1 k1 h1, ← stamp_value_epoch t e2 k2 h2, h]
+  · rw [← stamp_value_ticket t e1 k1 h1, ← stamp_value_ticket t e2 k2 h2, h]
+
+/-! ## The stamp on each row of the C -/
+
+/-- The stamp of an epoch and a ticket, as `embed_ticket_stamp` builds it: each field keeps only its own bits. -/
+def stamp (w t : Nat) (epoch ticket : BitVec w) : BitVec w :=
+  ((epoch &&& Flags.epochMask w t) <<< (t + 16)) ||| (ticket &&& Flags.ticketMask w t)
 
 /-- The ticket of a stamp, as `embed_ticket_of_stamp` reads it. -/
-def ticketOf (s : BitVec 64) : BitVec 32 := (s &&& 0xffffffff#64).truncate 32
+def ticketOf (w t : Nat) (s : BitVec w) : BitVec w := s &&& Flags.ticketMask w t
 
 /-- The epoch of a stamp, as `embed_epoch_of_stamp` reads it. -/
-def epochOf (s : BitVec 64) : BitVec 16 := (s >>> 48).truncate 16
+def epochOf (t : Nat) (s : BitVec w) : BitVec w := s >>> (t + 16)
 
-theorem stamp_ticket (epoch : BitVec 16) (ticket : BitVec 32) : ticketOf (stamp epoch ticket) = ticket := by
-  simp only [stamp, ticketOf]
-  bv_decide
+/-- The stamp of a row in the goal, as constants for `bv_decide`. -/
+macro "stamp_unfold" : tactic =>
+  `(tactic| (simp only [stamp, ticketOf, epochOf] at *; layout_unfold))
 
-theorem stamp_epoch (epoch : BitVec 16) (ticket : BitVec 32) : epochOf (stamp epoch ticket) = epoch := by
-  simp only [stamp, epochOf]
-  bv_decide
+theorem stamp_ticket (w t : Nat) (hr : (w, t) ∈ Flags.rows) (epoch ticket : BitVec w) :
+    ticketOf w t (stamp w t epoch ticket) = ticket &&& Flags.ticketMask w t := by
+  rows_cases hr <;> stamp_unfold <;> bv_decide
 
-theorem stamp_injective (e1 e2 : BitVec 16) (t1 t2 : BitVec 32) (h : stamp e1 t1 = stamp e2 t2) :
-    e1 = e2 ∧ t1 = t2 := by
+theorem stamp_epoch (w t : Nat) (hr : (w, t) ∈ Flags.rows) (epoch ticket : BitVec w) :
+    epochOf t (stamp w t epoch ticket) = epoch &&& Flags.epochMask w t := by
+  rows_cases hr <;> stamp_unfold <;> bv_decide
+
+/-- A wide epoch or ticket sets no flag bit, so a stamp is its own fields. -/
+theorem stamp_flags_clear (w t : Nat) (hr : (w, t) ∈ Flags.rows) (epoch ticket : BitVec w) :
+    stamp w t epoch ticket &&& Flags.flagMask w t = 0 ∧ Flags.fields t (stamp w t epoch ticket) = stamp w t epoch ticket := by
+  rows_cases hr <;> stamp_unfold <;> bv_decide
+
+/-- Two stamps that agree are the same epoch and ticket, in the bits that the stamp keeps of each. -/
+theorem stamp_injective (w t : Nat) (hr : (w, t) ∈ Flags.rows) (e1 e2 k1 k2 : BitVec w)
+    (h : stamp w t e1 k1 = stamp w t e2 k2) :
+    e1 &&& Flags.epochMask w t = e2 &&& Flags.epochMask w t ∧ k1 &&& Flags.ticketMask w t = k2 &&& Flags.ticketMask w t := by
   constructor
-  · have := congrArg epochOf h
-    rwa [stamp_epoch, stamp_epoch] at this
-  · have := congrArg ticketOf h
-    rwa [stamp_ticket, stamp_ticket] at this
+  · rw [← stamp_epoch w t hr e1 k1, ← stamp_epoch w t hr e2 k2, h]
+  · rw [← stamp_ticket w t hr e1 k1, ← stamp_ticket w t hr e2 k2, h]
+
+/-- The two parts of a stamp share no bit, so the stamp is their sum. -/
+theorem stamp_sum (w t : Nat) (hr : (w, t) ∈ Flags.rows) (epoch ticket : BitVec w) :
+    stamp w t epoch ticket = ((epoch &&& Flags.epochMask w t) <<< (t + 16)) + (ticket &&& Flags.ticketMask w t) := by
+  rw [stamp, BitVec.add_eq_or_of_and_eq_zero]
+  rows_cases hr <;> layout_unfold <;> bv_decide
+
+/-- A word below a constant that fits the word is below it as a number. -/
+theorem toNat_below {x : BitVec w} {n : Nat} (hn : n < 2 ^ w) (h : x < BitVec.ofNat w n) : x.toNat < n := by
+  rw [BitVec.lt_def, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hn] at h
+  exact h
+
+/-- The epoch part of a stamp is below 2^e, and the ticket part is below 2^t. -/
+theorem stamp_parts_bound (w t : Nat) (hr : (w, t) ∈ Flags.rows) (epoch ticket : BitVec w) :
+    (epoch &&& Flags.epochMask w t).toNat < 2 ^ Flags.epochBits w t ∧
+      (ticket &&& Flags.ticketMask w t).toNat < 2 ^ t := by
+  rows_cases hr <;> layout_unfold <;> simp only [Nat.reducePow] <;>
+    exact ⟨toNat_below (by decide) (by bv_decide), toNat_below (by decide) (by bv_decide)⟩
+
+/-- On each row, the stamp as a word is the stamp as a number, so the theorems on any width hold on the row. -/
+theorem stamp_is_value (w t : Nat) (hr : (w, t) ∈ Flags.rows) (epoch ticket : BitVec w) :
+    (stamp w t epoch ticket).toNat =
+      stampValue t (epoch &&& Flags.epochMask w t).toNat (ticket &&& Flags.ticketMask w t).toNat := by
+  obtain ⟨he, hk⟩ := stamp_parts_bound w t hr epoch ticket
+  have hfit := stamp_value_fits _ _ _ _ he hk
+  have hw : Flags.epochBits w t + 16 + t = w := by
+    have := Flags.rows_fill (w, t) hr
+    simp only at this
+    omega
+  rw [hw] at hfit
+  have hhigh : (epoch &&& Flags.epochMask w t).toNat * 2 ^ (t + 16) < 2 ^ w := by
+    simp only [stampValue] at hfit
+    omega
+  rw [stamp_sum w t hr, BitVec.toNat_add, BitVec.toNat_shiftLeft, Nat.shiftLeft_eq, Nat.mod_eq_of_lt hhigh]
+  exact Nat.mod_eq_of_lt hfit
 
 /-! ## The place -/
 
@@ -67,10 +165,15 @@ theorem place_lt (shift ticket : Nat) : place shift ticket < 2 ^ shift :=
 theorem place_wrap (shift ticket : Nat) : place shift (ticket + 2 ^ shift) = place shift ticket := by
   simp [place, Nat.add_mod_right]
 
-/-- The ticket rolls at 32 bits, and 2^shift divides 2^32, so the place is the same before and after the roll. -/
-theorem place_roll (shift ticket : Nat) (h : shift ≤ 32) : place shift (ticket % 2 ^ 32) = place shift ticket := by
+/-- The ticket rolls at its width of t bits, and 2^shift divides 2^t, so the place is the same before and after the
+roll. -/
+theorem place_roll (t shift ticket : Nat) (h : shift ≤ t) : place shift (ticket % 2 ^ t) = place shift ticket := by
   simp only [place]
   exact Nat.mod_mod_of_dvd ticket (Nat.pow_dvd_pow 2 h)
+
+/-- On each row, `EMBED_TICKET_RING_SHIFT_MAX` is the ticket width less one, so every shift that the ring takes
+meets `place_roll`. -/
+theorem shift_max_rolls : ∀ r ∈ Flags.rows, r.2 - 1 ≤ r.2 ∧ 0 < r.2 - 1 := by decide
 
 /-- The C masks with `2^shift - 1`, which is the modulus. -/
 theorem place_mask (shift ticket : Nat) : ticket &&& (2 ^ shift - 1) = place shift ticket := by

@@ -6,13 +6,13 @@ This paper describes and verifies a decoupled synchronization and storage archit
 
 A bounded concurrent queue is usually one object. The Vyukov multi-producer multi-consumer queue [Vyukov](#src:Vyukov) stores a sequence counter beside each slot, and a producer claims a slot with a compare-and-swap loop over the enqueue position, then publishes the slot by a release store of the counter. The LMAX Disruptor [Disruptor](#src:Disruptor) couples a ring, a sequence barrier and a wait strategy into one framework. In both, the proof of the data structure is the proof of the coupling: a slot is correct because the counter next to it says so, and the counter is correct because every path that writes the slot also writes the counter.
 
-We take the opposite position. The ring holds no counter and no per-slot sequence. A slot is one 64-bit stamp word and one job pointer, and every transition of the slot is one compare-and-swap on the stamp from the word with the flag bits of the transitions before it to the word with its own. The compare-and-swap is not a loop: it succeeds for exactly one caller and fails for every other, and a failure is a result, not a retry. The guard against the writer is outside the ring: the turnstile. A worker enters a turnstile before it touches the ring and leaves after. The entry is one atomic fetch-or on a lane word, the leave is one atomic fetch-add on the same word. A writer that wants to retire storage swaps a published pointer and *drains*: it reads each open lane once, and waits on each lane that a pass holds until that pass ends. The drain is the only wait in the architecture, and the only place where one thread observes the progress of another.
+We take the opposite position. The ring holds no counter and no per-slot sequence. A slot is one stamp word, a machine word, and one job pointer, and every transition of the slot is one compare-and-swap on the stamp from the word with the flag bits of the transitions before it to the word with its own. The compare-and-swap is not a loop: it succeeds for exactly one caller and fails for every other, and a failure is a result, not a retry. The guard against the writer is outside the ring: the turnstile. A worker enters a turnstile before it touches the ring and leaves after. The entry is one atomic fetch-or on a lane word, the leave is one atomic fetch-add on the same word. A writer that wants to retire storage swaps a published pointer and *drains*: it reads each open lane once, and waits on each lane that a pass holds until that pass ends. The drain is the only wait in the architecture, and the only place where one thread observes the progress of another.
 
 The decoupling buys three things.
 
 - **A small ABI.** The ring exports a stamp, a place, a push and a pop, and two wrappers that put the push and the pop inside a pass. The turnstile exports an entry, a leave, a drain, a lane count and a backoff. There is no wait strategy to configure and no sequence barrier to compose.
 - **A small proof.** The ring is proved as a function from a list of pushes to a ring state, with no concurrency in the model, because the turnstile retains each push and each pop inside a pass. The turnstile is proved as a transition system over one lane word, one open count and one queue word. The two proofs meet at one obligation: a pass is exclusive with respect to the drain that waits for it.
-- **A causal log.** Every slot records the 64-bit stamp of the push that wrote it. A pop returns that stamp beside the job. The stamp is injective in its two fields, so a consumer can tell the ticket that wrote a slot from the ticket it expected, which turns the ring into an append-only record of causal events over its window. A rewind of $k$ events is one pop at the ticket $k$ back, and a damaged stamp is one compare after the pop (Section 3.6).
+- **A causal log.** Every slot records the stamp of the push that wrote it. A pop returns that stamp beside the job. The stamp is injective in its two fields, so a consumer can tell the ticket that wrote a slot from the ticket it expected, which turns the ring into an append-only record of causal events over its window. A rewind of $k$ events is one pop at the ticket $k$ back, and a damaged stamp is one compare after the pop (Section 3.6).
 
 The rest of the paper is the system model (Section 2), the Lean 4 formalization with its theorems (Section 3), the verified consumer built over the interface, the cellblock memory manager of MMgr, whose Lean proofs import the turnstile's and take its drain as one whole step (Section 4), related work (Section 5), and the trust boundary (Section 6).
 
@@ -20,7 +20,7 @@ The rest of the paper is the system model (Section 2), the Lean 4 formalization 
 
 ### 2.1 Two composite words
 
-The architecture packs its state into two 64-bit words, each one a composite of fields.
+The architecture packs its state into two machine words, each one a composite of fields.
 
 The **lane word** is the state of one turnstile lane. From bit 0 up, its fields are:
 
@@ -31,38 +31,49 @@ The **lane word** is the state of one turnstile lane. From bit 0 up, its fields 
 | 2 | sleeper | a thread sleeps on the word with the futex contract |
 | 3 up | generation | one count for each pass end, each close, each release and each takeover; rolls at the width |
 
-The C defines the fields as `EMBED_TURNSTILE_BUSY`, `EMBED_TURNSTILE_CLOSED`, `EMBED_TURNSTILE_SLEEPER` and `EMBED_TURNSTILE_GENERATION`, with the generation shift at 3. Each lane is one `embed_atomic_word`, the atomic word as wide as the machine word, aligned to 64 bytes so that no lane shares a cache line with another:
+The C defines the fields as `EMBED_TURNSTILE_BUSY_BIT`, `EMBED_TURNSTILE_CLOSED_BIT`, `EMBED_TURNSTILE_SLEEPER_BIT` and `EMBED_TURNSTILE_GENERATION_UNIT`, with the generation shift at 3. Each lane is one `embed_atomic_word`, the atomic word as wide as the machine word, aligned to 64 bytes so that no lane shares a cache line with another:
 
 ```
 typedef struct
 {
-    EMBED_ALIGN(64) embed_atomic_word word;
+    EMBED_ALIGN(64u) embed_atomic_word word; /**< The lane word. */
 } EmbedTurnstileLane;
 EMBED_STATIC_ASSERT(sizeof(EmbedTurnstileLane) == 64u, "a lane takes one cache line");
 ```
 
-The **stamp** is the capability that the ring indexes by. It is one atomic 64-bit word: the epoch in bits 48 to 63, a 16-bit flag field in bits 32 to 47, and the ticket in bits 0 to 31. Five flag bits are the transitions of the slot state machine, one is the parity of the job pointer, seven hold the lane index of the pop, and bit 47 is reserved and never set:
+The **stamp** is the capability that the ring indexes by. It is one atomic machine word: the ticket in the low `EMBED_TICKET_BITS` bits, a 16-bit flag field above it, and the epoch in the high bits. A word of 64 bits has the epoch in bits 48 to 63, the flag field in bits 32 to 47, and the ticket in bits 0 to 31. A word of 32 bits has the epoch in bits 28 to 31, the flag field in bits 12 to 27, and the ticket in bits 0 to 11. A word of 16 bits has no room for the three fields, and the build stops. Five flag bits are the transitions of the slot state machine, three hold the check of the job pointer, seven hold the lane index of the pop, and the top bit of the flag field is reserved and never set:
 
 ```
-#define EMBED_TICKET_MASK ((embed_u64)0xffffffffu)
-#define EMBED_TICKET_FLAG_MASK ((embed_u64)0xffffu << 32)
-#define EMBED_TICKET_EPOCH_SHIFT 48u
-#define EMBED_TICKET_GRANTED ((embed_u64)1u << 32)
-#define EMBED_TICKET_PUSHED ((embed_u64)1u << 33)
-#define EMBED_TICKET_POPPED ((embed_u64)1u << 34)
-#define EMBED_TICKET_REPLAYED ((embed_u64)1u << 35)
-#define EMBED_TICKET_RELEASED ((embed_u64)1u << 36)
-#define EMBED_TICKET_PARITY ((embed_u64)1u << 37)
-#define EMBED_TICKET_LANE_SHIFT 40u
-#define EMBED_TICKET_RESERVED ((embed_u64)1u << 47)
+#define EMBED_TICKET_BITS_32 12u
+#define EMBED_TICKET_EPOCH_BITS_32 4u
+#define EMBED_TICKET_BITS_64 32u
+#define EMBED_TICKET_EPOCH_BITS_64 16u
 
-EMBED_INLINE embed_u64 embed_ticket_stamp(embed_u16 epoch, embed_u32 ticket)
+#define EMBED_TICKET_BITS EMBED_CAT(EMBED_TICKET_BITS_, EMBED_WORD_BITS)
+#define EMBED_TICKET_MASK ((((embed_word)1u) << EMBED_TICKET_BITS) - 1u)
+#define EMBED_TICKET_FLAG_SHIFT EMBED_TICKET_BITS
+#define EMBED_TICKET_FLAG_BITS 16u
+#define EMBED_TICKET_FLAG_MASK ((embed_word)0xffffu << EMBED_TICKET_FLAG_SHIFT)
+#define EMBED_TICKET_EPOCH_SHIFT (EMBED_TICKET_FLAG_SHIFT + EMBED_TICKET_FLAG_BITS)
+#define EMBED_TICKET_EPOCH_BITS EMBED_CAT(EMBED_TICKET_EPOCH_BITS_, EMBED_WORD_BITS)
+#define EMBED_TICKET_EPOCH_MASK ((((embed_word)1u) << EMBED_TICKET_EPOCH_BITS) - 1u)
+#define EMBED_TICKET_GRANTED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 0u))
+#define EMBED_TICKET_PUSHED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 1u))
+#define EMBED_TICKET_POPPED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 2u))
+#define EMBED_TICKET_REPLAYED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 3u))
+#define EMBED_TICKET_RELEASED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 4u))
+#define EMBED_TICKET_CHECK_SHIFT (EMBED_TICKET_FLAG_SHIFT + 5u)
+#define EMBED_TICKET_CHECK_MASK ((embed_word)0x7u << EMBED_TICKET_CHECK_SHIFT)
+#define EMBED_TICKET_LANE_SHIFT (EMBED_TICKET_FLAG_SHIFT + 8u)
+#define EMBED_TICKET_RESERVED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 15u))
+
+EMBED_INLINE embed_word embed_ticket_stamp(embed_word epoch, embed_word ticket)
 {
-    return ((embed_u64)epoch << EMBED_TICKET_EPOCH_SHIFT) | (embed_u64)ticket;
+    return ((epoch & EMBED_TICKET_EPOCH_MASK) << EMBED_TICKET_EPOCH_SHIFT) | (ticket & EMBED_TICKET_MASK);
 }
 ```
 
-The epoch is 16 bits because a compare succeeds only where the ticket and the epoch both match, and the ticket alone distinguishes any two live stamps. The epoch therefore only has to outlast the longest hold of a stamp, which is the bound the grantor retains as part of Axiom A3. At a 16 µs tick it covers one second, and the grantor derives it from `embed_clock_ns` by a shift.
+The epoch is 16 bits on a word of 64 bits and 4 bits on a word of 32 bits, because a compare succeeds only where the ticket and the epoch both match, and the ticket alone distinguishes any two live stamps. The epoch therefore only has to outlast the longest hold of a stamp, which is the bound the grantor retains as part of Axiom A3. At a 16 µs tick the 16-bit epoch covers one second. The 4-bit epoch covers 16 ticks, so its tick is 1/16 of the longest hold at least. The grantor derives the epoch from `embed_clock_ns` by a shift.
 
 The two words divide the capability between them. The lane word carries the waiter flag (sleeper), the hold flag (busy) and the generation; the stamp carries the epoch, the ticket, and the state of its slot. Two more values complete it and cost nothing, because the turnstile already requires them. The identity of a worker is the constant address it enters by: `embed_turnstile_enter` takes `address`, an immutable place such as the worker's own state, and selects the start lane from it (`start_shift`). The time of a worker is `embed_clock_ns`, the nanosecond clock that the host defines for the backoff and that every worker can read at the cost of one call. A grantor that folds that clock into the epoch field gives every stamp a time order, and a consumer that reads a stamp back from a slot (Section 2.2) reads the ticket, the epoch and, through the slot, the job that a worker at a known address pushed at a known time. The detection of a damaged stamp is the same read-back, Section 3.6.
 
@@ -73,70 +84,87 @@ A ring is a mask and a pointer to $2^{s}$ slots that the caller owns:
 ```
 typedef struct
 {
-    embed_atomic_u64 stamp;
-    void *job;
+    embed_atomic_word stamp; /**< The stamp with the flag bits of the transitions that completed. */
+    void *job;               /**< The job [BORROWS]. */
 } EmbedTicketRingSlot;
-EMBED_STATIC_ASSERT(sizeof(EmbedTicketRingSlot) == 16u, "a slot is two words");
+EMBED_STATIC_ASSERT(sizeof(EmbedTicketRingSlot) ==
+                        2u *
+                            ((sizeof(embed_atomic_word) > sizeof(void *)) ? sizeof(embed_atomic_word) : sizeof(void *)),
+                    "a slot is two of its wider member: the stamp word and the job pointer");
 
 typedef struct
 {
-    EMBED_ALIGN(64) embed_u64 mask;
-    EmbedTicketRingSlot *slots;
+    EMBED_ALIGN(64u) embed_word mask; /**< 2^shift - 1. */
+    EmbedTicketRingSlot *slots;       /**< 2^shift slots. */
 } EmbedTicketRing;
 ```
 
-The place of a stamp is its ticket masked to $s$ bits. Every transition of a slot is one compare-and-swap on its stamp word. The expected value is the input stamp with the flag bits of the transitions before, and the new value adds the flag bit of the transition. An input stamp with any flag bit set is invalid, and the expected value then carries the reserved bit, which no slot word has:
+The place of a stamp is its ticket masked to $s$ bits. Every transition of a slot is one compare-and-swap on its stamp word. The expected stamp is the input stamp with the flag bits of the transitions before, and the new stamp adds the flag bit of the transition. An input stamp with any flag bit set is invalid, and the expected stamp then carries the reserved bit, which no slot word has:
 
 ```
-EMBED_INLINE embed_u64 embed_ticket_ring_expected(embed_u64 stamp, embed_u64 flags)
+EMBED_INLINE embed_word embed_ticket_ring_expected_stamp(embed_word stamp, embed_word flags)
 {
-    const embed_u64 invalid = (embed_u64)((stamp & EMBED_TICKET_FLAG_MASK) != 0u);
+    // Explicit cast converts the invalid-input condition to 1 or 0, for the shift to the reserved bit
+    const embed_word invalid_input = (embed_word)((stamp & EMBED_TICKET_FLAG_MASK) != 0u);
 
-    return stamp | flags | (invalid << 47u);
+    return stamp | flags | (invalid_input << (EMBED_TICKET_FLAG_SHIFT + 15u));
 }
 
-EMBED_INLINE embed_bool embed_ticket_ring_transition(EmbedTicketRingSlot *slot, embed_u64 expected,
-                                                     embed_u64 value, embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_transition(EmbedTicketRingSlot *slot, embed_word expected_stamp,
+                                                     embed_word new_stamp, embed_word *found_stamp)
 {
-    embed_u64 found = expected;
-    const embed_bool success = embed_atomic_u64_swap_if(&slot->stamp, &found, value);
+    embed_word compared_stamp = expected_stamp;
+    const embed_bool success = embed_atomic_word_swap_if(&slot->stamp, &compared_stamp, new_stamp);
 
-    *seen = found;
+    *found_stamp = compared_stamp;
     return success;
 }
 
-EMBED_INLINE embed_bool embed_ticket_ring_push(EmbedTicketRing *ring, embed_u64 stamp, void *job,
-                                               embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_push(const EmbedTicketRing *ring, embed_word stamp, void *job,
+                                               embed_word *found_stamp)
 {
     EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
-    const embed_u64 expected = embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED);
+    const embed_word expected_stamp = embed_ticket_ring_expected_stamp(stamp, EMBED_TICKET_GRANTED_BIT);
+    const embed_word new_stamp = expected_stamp | EMBED_TICKET_PUSHED_BIT | embed_ticket_job_check_bits(job);
 
     slot->job = job;
-    return embed_ticket_ring_transition(slot, expected, expected | EMBED_TICKET_PUSHED, seen);
+    return embed_ticket_ring_transition(slot, expected_stamp, new_stamp, found_stamp);
 }
 
-EMBED_INLINE embed_bool embed_ticket_ring_pop(EmbedTicketRing *ring, embed_u64 stamp, unsigned int lane,
-                                              void **job, embed_u64 *seen)
+EMBED_INLINE embed_bool embed_ticket_ring_pop(const EmbedTicketRing *ring, embed_word stamp, unsigned int lane_place,
+                                              void **job, embed_word *found_stamp)
 {
     EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
-    const embed_u64 expected = embed_ticket_ring_expected(stamp, EMBED_TICKET_GRANTED | EMBED_TICKET_PUSHED);
-    const embed_u64 value = expected | EMBED_TICKET_POPPED | ((embed_u64)lane << EMBED_TICKET_LANE_SHIFT);
-    const embed_bool success = embed_ticket_ring_transition(slot, expected, value, seen);
+    const embed_word current_stamp = embed_atomic_word_load(&slot->stamp);
+    const embed_word pushed_stamp =
+        embed_ticket_ring_expected_stamp(stamp, EMBED_TICKET_GRANTED_BIT | EMBED_TICKET_PUSHED_BIT);
+    // Explicit cast converts the state test, check bits aside, to an all-ones or all-zeros mask over the current stamp
+    const embed_word valid_mask =
+        (embed_word)0u - (embed_word)((current_stamp & ~EMBED_TICKET_CHECK_MASK) == pushed_stamp);
+    // Explicit cast converts the lane place to the stamp, and EMBED_TURNSTILE_LANES bounds it at 64
+    const embed_word new_stamp =
+        current_stamp | EMBED_TICKET_POPPED_BIT | ((embed_word)lane_place << EMBED_TICKET_LANE_SHIFT);
+    const embed_bool success = embed_ticket_ring_transition(
+        slot, embed_ticket_ring_guarded_stamp(current_stamp, valid_mask), new_stamp, found_stamp);
 
-    *job = success ? slot->job : NULL;
-    return success;
+    if (!success)
+    {
+        *job = NULL;
+        return EMBED_FALSE;
+    }
+    return embed_ticket_ring_job_verify(slot, current_stamp, job, found_stamp);
 }
 ```
 
-The state sequence of a slot is grant, push, pop, replay, release, one transition each: `embed_ticket_ring_grant` from a zero or released word, `embed_ticket_ring_push`, `embed_ticket_ring_pop` with the lane index of the pass, `embed_ticket_ring_replay` for a rewind, and `embed_ticket_ring_release` by the writer after its drain. The job pointer is stored before the push's compare-and-swap, which has release semantics, and read after the pop's, which has acquire semantics. The push also computes a three-bit cyclic redundancy check of the job pointer, the pointer as a polynomial modulo $x^{3} + x + 1$, and stores it in three flag bits of the new value; the pop and the replay compute it over the pointer they read and compare. A pop whose compare succeeds but whose job pointer fails the check returns no job and marks the reserved bit in the value it reports, so no caller runs a corrupted job and the fault is distinguishable from contention, since no slot word ever holds the reserved bit. The check is a fold by four shifts that are multiples of seven, since $x^{7} \equiv 1$, and a three-bit remainder; `EMBED_TICKET_JOB_CHECK` turns it off. The shift is at max `EMBED_TICKET_RING_SHIFT_MAX`, which is 31, so the mask never reaches the flag field.
+The state sequence of a slot is grant, push, pop, replay, release, one transition each: `embed_ticket_ring_grant` from a zero or released word, `embed_ticket_ring_push`, `embed_ticket_ring_pop` with the lane index of the pass, `embed_ticket_ring_replay` for a rewind, and `embed_ticket_ring_release` by the writer after its drain. The job pointer is stored before the push's compare-and-swap, which has release semantics, and read after the pop's, which has acquire semantics. The push also computes a three-bit cyclic redundancy check of the job pointer, the pointer as a polynomial modulo $x^{3} + x + 1$, and stores it in three flag bits of the new value; the pop and the replay compute it over the pointer they read and compare. A pop whose compare succeeds but whose job pointer fails the check returns no job and marks the reserved bit in the value it reports, so no caller runs a corrupted job and the fault is distinguishable from contention, since no slot word ever holds the reserved bit. The check is a fold by shifts that are multiples of seven, since $x^{7} \equiv 1$, and a three-bit remainder. The fold takes four shifts on a pointer of 64 bits, three on a pointer of 32 bits and two on a pointer of 16 bits; `EMBED_TICKET_JOB_CHECK` turns it off. The shift is at max `EMBED_TICKET_RING_SHIFT_MAX`, the ticket width less one: 31 on a word of 64 bits and 11 on a word of 32 bits. So the mask never reaches the flag field.
 
 ### 2.3 The turnstile
 
-A set of turnstiles is `EmbedTurnstiles`: `EMBED_TURNSTILE_LANES` lanes (64 by default, and a build can set 1 to 64), an open count `open` that holds the number of open lanes less one, and a queue word `queue` that counts the workers that found every open lane busy. A set of zeros is at rest with one lane open.
+A set of turnstiles is `EmbedTurnstiles`: `EMBED_TURNSTILE_LANES` lanes (64 by default, and a build can set 1 to 64), an open count `top_open_lane` that holds the number of open lanes less one, and a queue word `queue_length` that counts the workers that found every open lane busy. A set of zeros is at rest with one lane open.
 
-An **entry** by a worker at address $a$ reads the open count $n$, starts at lane $(a \gg 6) \bmod n$, and tries a fetch-or of the busy bit on each lane in turn. The fetch-or takes the lane where the old value has busy clear; where the old value has busy set, the fetch-or changed nothing and the entry spills to the next lane modulo $n$. Where every open lane was busy, the worker adds one to the queue word and tries to grow the manifold: a compare-and-swap on lane $n$ from free or from closed to busy, then a compare-and-swap of `open` from $n$ to $n+1$. A growth that lands gives the worker lane $n$ as its pass. A growth that fails backs off (Section 2.5) and tries again. On its way out of the entry a worker that was in the queue subtracts one from the queue word, and the entry ends with a sequentially consistent fence.
+An **entry** by a worker at address $a$ reads the open count $n$, starts at lane $(a \gg 6) \bmod n$, and tries a fetch-or of the busy bit on each lane in turn. The fetch-or takes the lane where the old value has busy clear; where the old value has busy set, the fetch-or changed nothing and the entry spills to the next lane modulo $n$. Where every open lane was busy, the worker adds one to the queue word and tries to grow the manifold: a compare-and-swap on lane $n$ from free or from closed to busy, then a compare-and-swap of `top_open_lane` from $n - 1$ to $n$. A growth that lands gives the worker lane $n$ as its pass. A growth that fails backs off (Section 2.5) and tries again. On its way out of the entry a worker that was in the queue subtracts one from the queue word, and the entry ends with a sequentially consistent fence.
 
-A **leave** on lane $k$ is one fetch-add of `GENERATION - BUSY`, which clears busy and adds one to the generation in a single indivisible step. Where the old value had the sleeper bit, the leave clears that bit with a fetch-and and wakes every thread asleep on the word. Where $k$ was the top open lane, the leave contracts the manifold while the queue word reads zero, more than one lane is open and no pass holds the top lane. A contraction claims the top lane with the same fetch-or an entry uses, swaps `open` down by one, and closes the lane with a fetch-add of `GENERATION + CLOSED`. The chain of contractions after one leave is the *cascade*.
+A **leave** on lane $k$ is one fetch-add of `EMBED_TURNSTILE_GENERATION_UNIT - EMBED_TURNSTILE_BUSY_BIT`, which clears busy and adds one to the generation in a single indivisible step. Where the old value had the sleeper bit, the leave clears that bit with a fetch-and and wakes every thread asleep on the word. Where $k$ was the top open lane, the leave contracts the manifold while the queue word reads zero, more than one lane is open and no pass holds the top lane. A contraction claims the top lane with the same fetch-or an entry uses, swaps `top_open_lane` down by one, and closes the lane with a fetch-add of `EMBED_TURNSTILE_GENERATION_UNIT + EMBED_TURNSTILE_CLOSED_BIT`. The chain of contractions after one leave is the *cascade*.
 
 A **drain** by a writer runs after the writer has swapped a published pointer. It issues a sequentially consistent fence, reads the open count, reads each open lane once into a snapshot, and then for each lane whose snapshot has busy set and closed clear it waits until busy reads clear or the generation differs from the snapshot. Every pass that began before the fence of the drain and still holds a lane at the fence is below the open count that the drain reads (Theorem 3.3), so the snapshot covers every such pass, and the generation makes each wait end at the end of the pass that the snapshot saw and not at a later pass on the same lane.
 
@@ -150,21 +178,21 @@ This argument is checked and not proved: Section 3.6 names the five memory model
 
 ### 2.5 The sleep and the futex contract
 
-A worker that cannot grow the manifold, and a drain that waits on a held lane, back off on the lane word. The backoff retains two locals, the nanosecond at its start and an exponent $k$, and no shared word holds a time. Inside the first unit of $2^{u}$ nanoseconds, with $u$ as `EMBED_TURNSTILE_UNIT_SHIFT`, a step is a processor pause and no call. From one unit on, a step sets the sleeper bit with a fetch-or and calls the wait of the host on the lane word for at max $2^{u+k}$ nanoseconds, then $k$ rises by one to at max `EMBED_TURNSTILE_K_MAX`, which is 20.
+A worker that cannot grow the manifold, and a drain that waits on a held lane, back off on the lane word. The backoff retains two locals, the nanosecond at its start and an exponent $k$, and no shared word holds a time. Inside the first unit of $2^{u}$ nanoseconds, with $u$ as `EMBED_TURNSTILE_UNIT_SHIFT`, a step is a processor pause and no call. From one unit on, a step sets the sleeper bit with a fetch-or and calls the wait of the host on the lane word for at max $2^{u+k}$ nanoseconds, then $k$ rises by one to at max `EMBED_TURNSTILE_EXPONENT_MAX`, which is 20 on a word of 32 or 64 bits and 5 on a word of 16 bits. The start, the clock and the limit are machine words, `embed_word`. The clock rolls at the width of the word, and the backoff takes the difference of two reads, which is correct across the roll.
 
 The host supplies three functions, and the headers declare them without a definition:
 
 ```
-int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value seen, embed_u64 nanoseconds);
+int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value old_value, embed_word nanoseconds);
 void embed_word_wake(embed_atomic_word *word);
-embed_u64 embed_clock_ns(void);
+embed_word embed_clock_ns(void);
 ```
 
-The contract of the wait is the futex contract [futex](#src:futex): the compare of the word against `seen` and the sleep are one step with respect to every wake on the word, and a wake ends each sleep on the word. The test host implements it on the Linux futex, on `WaitOnAddress` on Windows, on `__ulock_wait` on macOS, and as a timed sleep elsewhere. The futex compares 32 bits; on a little-endian host those are the low half of the lane word, which holds the three state bits and the low bits of the generation, and every leave, close and takeover changes them (Theorem 3.1, `changes_seen`). A build that defines none of the three functions fails at the link, and the error names them.
+The contract of the wait is the futex contract [futex](#src:futex): the compare of the word against `old_value` and the sleep are one step with respect to every wake on the word, and a wake ends each sleep on the word. The test host implements it on the Linux futex, on `WaitOnAddress` on Windows, on `__ulock_wait` on macOS, and as a timed sleep elsewhere. The futex compares 32 bits; on a little-endian host those are the whole lane word of 32 bits, or the low half of a lane word of 64 bits. Those bits hold the three state bits and the low bits of the generation, and every leave, close and takeover changes them (Theorem 3.1, `changes_futex_bits`). A build that defines none of the three functions fails at the link, and the error names them.
 
 ## 3. Formal verification in Lean 4
 
-The Lean project is `theory/embedded_types`. It builds with Lean `v4.35.0`, and the proofs workflow fails where any theorem closes with `sorry`. Bit-level theorems are stated on `BitVec` at 32 and at 64 bits and closed with `bv_decide`, which checks the statement on every value of the width through a SAT solver with a verified certificate checker. Transition-system theorems are closed by induction over an inductive `Reach` relation. This section lists the definitions and the theorems as the files state them.
+The Lean project is `theory/embedded_types`. It builds with Lean `v4.35.0`, and the proofs workflow fails where any theorem closes with `sorry`. Bit-level theorems are stated on `BitVec` at each width that the C admits and closed with `bv_decide`, which checks the statement on every value of each width through a SAT solver with a verified certificate checker. Transition-system theorems are closed by induction over an inductive `Reach` relation. This section lists the definitions and the theorems as the files state them.
 
 ### 3.1 The lane word (`Manifold/LaneWord.lean`)
 
@@ -186,18 +214,18 @@ def unflagged {w : Nat} (x : BitVec w) : BitVec w := x &&& ~~~(sleeper w)
 def low {w : Nat} (x : BitVec w) : BitVec w := x &&& 0xFFFFFFFF
 ```
 
-Each theorem below exists at 64 bits and at 32 bits; the paper names the 64-bit form.
+The lane word is an `embed_atomic_word`: 64 bits on a word of 64 bits, and 32 bits below it. Each theorem below holds on both widths.
 
-- `entry_takes_64`: $\forall x,\; x \land 1 = 0 \Rightarrow \mathrm{entered}(x) = x + \mathrm{busy} \;\land\; \mathrm{entered}(x) \land \neg\mathrm{busy} = x$. An entry on a free word sets exactly the busy bit and leaves every other field, the generation among them, as it was.
-- `entry_refused_64`: $\forall x,\; x \land 1 = 1 \Rightarrow \mathrm{entered}(x) = x \land \neg\mathrm{takes}(x)$. An entry on a busy word changes nothing.
-- `leave_64`: a leave on a word with busy set clears busy, retains the closed and sleeper bits, and adds one to the generation.
-- `close_64`: a close on a word with busy set and closed clear sets closed, retains busy and the sleeper bit, and adds one to the generation.
-- `takeover_64`: a takeover on a word with both bits set leaves the two low bits at busy alone, retains the sleeper bit, and adds one to the generation.
-- `changes_seen_64`: $\forall x,\; (x \land 1 = 1 \Rightarrow \mathrm{low}(\mathrm{left}(x)) \neq \mathrm{low}(x)) \land (x \land 3 = 1 \Rightarrow \mathrm{low}(\mathrm{shut}(x)) \neq \mathrm{low}(x)) \land (x \land 3 = 3 \Rightarrow \mathrm{low}(\mathrm{takenOver}(x)) \neq \mathrm{low}(x))$. Every operation that ends a hold, applied to a word in the state it applies to, changes the 32 bits that the futex compares.
-- `sleeper_not_over_64` and `end_over_64`: the sleeper bit alone does not make a snapshot read as over, and a leave does.
-- `pass_64`: $\forall x,\; x \land 1 = 0 \Rightarrow \mathrm{left}(\mathrm{entered}(x)) = x + \mathrm{unit} \land \mathrm{left}(\mathrm{entered}(x)) \land 1 = 0$. One pass adds exactly one unit to the word and returns the lane free.
-- `roll_64`: $\forall x,\; x + \mathrm{unit} \cdot 2^{61} = x$. The generation rolls after $2^{w-3}$ counts.
-- `classes_64` and `class_two_never_64`: the two low bits give the three lane states of `Open.lean` (free, held, closed), and no operation reaches the fourth class, closed with busy clear.
+- `entry_takes`: $\forall x,\; x \land 1 = 0 \Rightarrow \mathrm{entered}(x) = x + \mathrm{busy} \;\land\; \mathrm{entered}(x) \land \neg\mathrm{busy} = x$. An entry on a free word sets exactly the busy bit and leaves every other field, the generation among them, as it was.
+- `entry_refused`: $\forall x,\; x \land 1 = 1 \Rightarrow \mathrm{entered}(x) = x \land \neg\mathrm{takes}(x)$. An entry on a busy word changes nothing.
+- `leave`: a leave on a word with busy set clears busy, retains the closed and sleeper bits, and adds one to the generation.
+- `close`: a close on a word with busy set and closed clear sets closed, retains busy and the sleeper bit, and adds one to the generation.
+- `takeover`: a takeover on a word with both bits set leaves the two low bits at busy alone, retains the sleeper bit, and adds one to the generation.
+- `changes_futex_bits`: $\forall x,\; (x \land 1 = 1 \Rightarrow \mathrm{low}(\mathrm{left}(x)) \neq \mathrm{low}(x)) \land (x \land 3 = 1 \Rightarrow \mathrm{low}(\mathrm{shut}(x)) \neq \mathrm{low}(x)) \land (x \land 3 = 3 \Rightarrow \mathrm{low}(\mathrm{takenOver}(x)) \neq \mathrm{low}(x))$. Every operation that ends a hold, applied to a word in the state it applies to, changes the 32 bits that the futex compares.
+- `sleeper_not_over` and `end_over`: the sleeper bit alone does not make a snapshot read as over, and a leave does.
+- `pass`: $\forall x,\; x \land 1 = 0 \Rightarrow \mathrm{left}(\mathrm{entered}(x)) = x + \mathrm{unit} \land \mathrm{left}(\mathrm{entered}(x)) \land 1 = 0$. One pass adds exactly one unit to the word and returns the lane free.
+- `roll`: $\forall x,\; x + \mathrm{unit} \cdot 2^{w-3} = x$. The generation rolls after $2^{w-3}$ counts: $2^{61}$ at 64 bits and $2^{29}$ at 32 bits.
+- `classes` and `class_two_never`: the two low bits give the three lane states of `Open.lean` (free, held, closed), and no operation reaches the fourth class, closed with busy clear.
 
 Theorem 1 below is the conjunction that the architecture needs from this file: **a lane word is exclusive**. Where a worker's fetch-or returns a value with busy clear, no other fetch-or returned busy clear between that worker's entry and its leave, because `entry_refused` holds for every intermediate value and `leave` is the only operation that clears busy on a held lane. This is a property of the atomic read-modify-write on one word, which the target guarantees (Axiom A1) and the Lean file states per operation.
 
@@ -216,7 +244,7 @@ structure State where
   lane : Nat → Lane
 ```
 
-`Step max` is an inductive relation with one constructor for each atomic operation of the C: the fetch-or of an entry, the fetch-add of a leave, the fetch-or of a contraction and its swap of `open` that lands or fails, the fetch-add that closes a sealing lane, the compare-and-swap of a growth from free or from closed, and the swap of `open` that lands or fails. Other steps can come between any two of them. `Reach max` is the reflexive-transitive closure from `rest`, the set of zeros. An invariant `Inv max s` is proved for every reachable state, and from it:
+`Step max` is an inductive relation with one constructor for each atomic operation of the C: the fetch-or of an entry, the fetch-add of a leave, the fetch-or of a contraction and its swap of the open count that lands or fails, the fetch-add that closes a sealing lane, the compare-and-swap of a growth from free or from closed, and the swap of the open count that lands or fails. Other steps can come between any two of them. `Reach max` is the reflexive-transitive closure from `rest`, the set of zeros. An invariant `Inv max s` is proved for every reachable state, and from it:
 
 - `start_in_range`, `start_shift`: $\forall a\, n,\; 0 < n \Rightarrow (a \gg 6) \bmod n < n$, and the C expression `(address >> 6) % n` is that start.
 - `spill_lane`, `spill_reaches`: the next lane of the C, 0 after the top and else the lane above, visits $(f + j) \bmod n$ at step $j$, so a spill from any start reaches each lane below $n$ within $n$ steps.
@@ -225,7 +253,7 @@ structure State where
   $$(\forall l,\; s.\mathrm{lane}(l) = \mathrm{pass} \Rightarrow l < s.\mathrm{count}) \;\land\; (\forall l,\; s.\mathrm{lane}(l) = \mathrm{held} \Rightarrow l < s.\mathrm{count}),$$
   $$(\forall l,\; s.\mathrm{lane}(l) = \mathrm{closed} \Rightarrow s.\mathrm{count} \le l) \;\land\; 1 \le s.\mathrm{count} \le \mathrm{max}.$$
 
-Theorem 3.3 is what makes the snapshot of the drain complete: the drain reads `open` after its fence, and every lane that a pass can hold is below that value.
+Theorem 3.3 is what makes the snapshot of the drain complete: the drain reads the open count after its fence, and every lane that a pass can hold is below that value.
 
 ### 3.3 The queue word (`Manifold/Queue.lean`)
 
@@ -245,30 +273,33 @@ The wake file models the sleeper bit, a pending clear and an owed wake. Its theo
 
 ### 3.5 The backoff (`Manifold/Backoff.lean`)
 
-`shift_defined` proves that the shift of the C, one shifted left by the unit shift plus the exponent, is below 64 bits for every exponent the C reaches, so the C is defined. `limit_fits` and `ceilings` bound every wait at $2^{30}$ nanoseconds on a CPU host and $2^{20}$ on a device. `no_call_in_unit` and `wait_from_unit` prove that a step inside the first unit makes no call and a step from one unit on waits with the limit of $k$. `timespec_fits`, `microseconds_fit` and `milliseconds_fit` prove that each host conversion of the limit fits its argument type. `update_is_next` proves that the branchless increment `exponent += (exponent < EMBED_TURNSTILE_K_MAX)` is the function `nextK`.
+`shift_defined` proves that the shift of the C, one shifted left by the unit shift plus the exponent, is below the width of the word for every exponent the C reaches, so the C is defined, and `limit_below_infinite` proves that each limit is below `EMBED_WAIT_INFINITE`. `limit_fits` and `ceilings` bound every wait at $2^{30}$ nanoseconds on a CPU host, $2^{15}$ on a word of 16 bits and $2^{20}$ on a device. `elapsed_rolls` and `elapsed_true` prove that the difference of two reads of the clock is the true time wherever that time is below one roll. `no_call_in_unit` and `wait_from_unit` prove that a step inside the first unit makes no call and a step from one unit on waits with the limit of $k$. `timespec_fits`, `microseconds_fit` and `milliseconds_fit` prove that each host conversion of the limit fits its argument type. `update_is_next` proves that the branchless increment `exponent += (exponent < EMBED_TURNSTILE_EXPONENT_MAX)` is the function `nextK`.
 
 ### 3.6 The ticket ring (`TicketRing.lean`)
 
 The stamp and the place are definitions on `BitVec` and on `Nat`:
 
 ```
-def stamp (epoch ticket : BitVec 32) : BitVec 64 :=
-  (epoch.zeroExtend 64 <<< 32) ||| ticket.zeroExtend 64
-def ticketOf (s : BitVec 64) : BitVec 32 := (s &&& 0xffffffff#64).truncate 32
-def epochOf (s : BitVec 64) : BitVec 32 := (s >>> 32).truncate 32
+def stampValue (t epoch ticket : Nat) : Nat := epoch * 2 ^ (t + 16) + ticket
+def stamp (w t : Nat) (epoch ticket : BitVec w) : BitVec w :=
+  ((epoch &&& Flags.epochMask w t) <<< (t + 16)) ||| (ticket &&& Flags.ticketMask w t)
+def ticketOf (w t : Nat) (s : BitVec w) : BitVec w := s &&& Flags.ticketMask w t
+def epochOf (t : Nat) (s : BitVec w) : BitVec w := s >>> (t + 16)
 def place (shift ticket : Nat) : Nat := ticket % 2 ^ shift
 ```
 
-**Theorem 1 (non-aliasing).** The theorems `stamp_ticket`, `stamp_epoch` and `stamp_injective` state
+**Theorem 1 (non-aliasing).** On a word of any width $n = h + 16 + b$, with an epoch $e < 2^{h}$ and a ticket $t < 2^{b}$, the theorems `stamp_value_ticket`, `stamp_value_epoch`, `stamp_value_fits` and `stamp_value_injective` state
 
-$$\forall e\, t,\; \mathrm{ticketOf}(\mathrm{stamp}(e, t)) = t \;\land\; \mathrm{epochOf}(\mathrm{stamp}(e, t)) = e,$$
+$$\mathrm{stamp}(e, t) \bmod 2^{b} = t \;\land\; \lfloor \mathrm{stamp}(e, t) / 2^{b+16} \rfloor = e \;\land\; \mathrm{stamp}(e, t) < 2^{n},$$
 $$\forall e_1\, t_1\, e_2\, t_2,\; \mathrm{stamp}(e_1, t_1) = \mathrm{stamp}(e_2, t_2) \Rightarrow e_1 = e_2 \land t_1 = t_2.$$
+
+On each row of the C, `stamp_is_value` proves that the stamp word is that number, and `stamp_ticket`, `stamp_epoch`, `stamp_flags_clear` and `stamp_injective` state the same facts on the word. Each field keeps only its own bits, so a wide epoch or ticket sets no flag bit.
 
 The theorems `place_lt`, `place_wrap`, `place_roll`, `place_mask` and `window_distinct` state
 
 $$\forall s\, t,\; \mathrm{place}(s, t) < 2^{s},$$
 $$\forall s\, t,\; \mathrm{place}(s, t + 2^{s}) = \mathrm{place}(s, t),$$
-$$\forall s\, t,\; s \le 32 \Rightarrow \mathrm{place}(s, t \bmod 2^{32}) = \mathrm{place}(s, t),$$
+$$\forall b\, s\, t,\; s \le b \Rightarrow \mathrm{place}(s, t \bmod 2^{b}) = \mathrm{place}(s, t),$$
 $$\forall s\, t,\; t \land (2^{s} - 1) = \mathrm{place}(s, t),$$
 $$\forall s\, t_1\, t_2,\; t_1 < t_2 \land t_2 - t_1 < 2^{s} \Rightarrow \mathrm{place}(s, t_1) \neq \mathrm{place}(s, t_2).$$
 
@@ -291,9 +322,9 @@ where $\mathrm{Pairwise}_{\neq}(l)$ states that any two members of $l$ have tick
 
 **Theorem 2 (schedule confluence of a window).** `pop_pushes` quantifies over every list $l$ whose tickets are at distinct places, and places no condition on the order of $l$. Any two interleavings of the pushes of one window are two such lists with the same members, and the theorem gives the same pop for every ticket of the window under both. The ring state after a window is therefore a function of the set of pushes and not of their schedule: every schedule projects to the same ring, which is the confluence the architecture claims. Two pushes to one place do not occur, because the grantor retains the depth of the ring below $2^{s}$ (Axiom A3), and a pop never interleaves with the push of its own ticket, because the turnstile retains each inside a pass and the drain of the producer orders the two (Section 2.4).
 
-**Theorem 3 (bounded rewind).** A rewind of $k$ tickets from a current ticket $c$ is one pop at $\mathrm{stamp}(e, c - k)$, and the artifact needs no second operation for it. For $k < 2^{s}$, `window_distinct` puts $c - k$ at a place of its own among the live tickets, `place_wrap` and `place_roll` make the place the same across the wrap of the ring and the roll of the 32-bit ticket, and `pop_pushes` gives the pop the job that the push of $c - k$ wrote. The pop is $O(1)$: one shift, one mask, two loads. The echoed stamp confirms the rewind landed, by `stamp_injective`: a slot that a ticket outside the window overwrote carries that ticket's stamp and not $c - k$. The retention window $W$ is $2^{s}$ by `place_lt`, and an undo over the window is the same pop applied $k$ times, each one an instance of `pop_pushes`.
+**Theorem 3 (bounded rewind).** A rewind of $k$ tickets from a current ticket $c$ is one pop at $\mathrm{stamp}(e, c - k)$, and the artifact needs no second operation for it. For $k < 2^{s}$, `window_distinct` puts $c - k$ at a place of its own among the live tickets, `place_wrap` and `place_roll` make the place the same across the wrap of the ring and the roll of the ticket at its width, and `pop_pushes` gives the pop the job that the push of $c - k$ wrote. The pop is $O(1)$: one shift, one mask, two loads. The echoed stamp confirms the rewind landed, by `stamp_injective`: a slot that a ticket outside the window overwrote carries that ticket's stamp and not $c - k$. The retention window $W$ is $2^{s}$ by `place_lt`, and an undo over the window is the same pop applied $k$ times, each one an instance of `pop_pushes`.
 
-**Theorem 4 (single-event upset containment).** `place_lt` holds for every natural number $t$, with no hypothesis on $t$. A stamp whose ticket field a single-event upset flipped in any bit still indexes a slot below $2^{s}$, because the mask of the C is the modulus (`place_mask`). The slot access is therefore in bounds for every 64-bit value of the stamp, flipped or not. Detection is the read-back and the claim, Section 3.9: `flip_changes` proves that any nonzero mask changes a stamp, so a flip in the stamp field of a slot always fails the compare against the stamp the consumer holds, and `collision_detected` proves that a flip in the consumer's own ticket, which lands on the live slot of another ticket, collides with that ticket's owner at the claim and one of the two fails. `pop_stamp_free_of_job` proves that the stamp of a pop does not depend on the job; the job pointer is covered by its own three-bit check in the stamp, Section 3.10, so a single-bit flip there, or an adjacent double, fails the read and no caller runs the job.
+**Theorem 4 (single-event upset containment).** `place_lt` holds for every natural number $t$, with no hypothesis on $t$. A stamp whose ticket field a single-event upset flipped in any bit still indexes a slot below $2^{s}$, because the mask of the C is the modulus (`place_mask`). The slot access is therefore in bounds for every value of the stamp word, flipped or not. Detection is the read-back and the claim, Section 3.9: `flip_changes` proves that any nonzero mask changes a stamp, so a flip in the stamp field of a slot always fails the compare against the stamp the consumer holds, and `collision_detected` proves that a flip in the consumer's own ticket, which lands on the live slot of another ticket, collides with that ticket's owner at the claim and one of the two fails. `pop_stamp_free_of_job` proves that the stamp of a pop does not depend on the job; the job pointer is covered by its own three-bit check in the stamp, Section 3.10, so a single-bit flip there, or an adjacent double, fails the read and no caller runs the job.
 
 ### 3.7 Model checks (`test/prove`)
 
@@ -326,7 +357,7 @@ def claim (slot : Slot) (stamp pass : Nat) : Slot × Bool :=
 
 The theorems:
 
-- `flip_changes` and `bit_flip_changes`: $\forall x\, m,\; m \neq 0 \Rightarrow x \oplus m \neq x$, and $\forall x\, i,\; i < 64 \Rightarrow x \oplus 2^{i} \neq x$, by `bv_decide`. Any flip in a stamp field fails the stamp compare.
+- `flip_changes` and `bit_flip_changes`: $\forall x\, m,\; m \neq 0 \Rightarrow x \oplus m \neq x$, and $\forall x\, i,\; i < n \Rightarrow x \oplus 2^{i} \neq x$ on the word of $n$ bits of each row, by `bv_decide`. Any flip in a stamp field fails the stamp compare.
 - `pop_stamp_free_of_job`: the stamp that a pop returns is the same after any change to any job in the ring.
 - `push_once`, `claim_pushed`, `claim_other_fails`, `claim_once`: a push lands on an empty slot alone; a claim with the stamp of a pushed slot lands; a claim with another stamp fails; after one claim lands, no claim lands.
 - `claims_at_max_one`: $\forall \mathit{slot}\, l,\; \mathrm{count}(\mathrm{claims}(\mathit{slot}, l)) \le 1$. Any sequence of claims on one slot lands at max once, so no job runs twice.
@@ -338,20 +369,20 @@ The claim binds the identity to the gate. The lane that a worker holds is the on
 
 ### 3.10 The flag matrix (`Flags.lean`)
 
-The flag field is the slot state machine, and `Flags.lean` is its matrix, every cell a `bv_decide` theorem over the 64-bit word:
+The flag field is the slot state machine, and `Flags.lean` is its matrix, every cell a `bv_decide` theorem over the word of each row, 32 and 64 bits, with $b$ the ticket width of the row:
 
 - `set_retains_fields`, `set_retains_others`: a transition preserves the ticket, the epoch, and every other flag bit. $\forall x\, f,\; f \land \mathrm{flagMask} = f \Rightarrow \mathrm{fields}(x \lor f) = \mathrm{fields}(x)$.
 - `set_once`: $\forall x\, f,\; f \neq 0 \land x \land f = 0 \Rightarrow x \lor f \neq x$. The word after a transition differs from the word before, so the compare-and-swap that expects the word before succeeds exactly once, and a repeat fails.
 - `states_distinct`, `states_retain_fields`: the five state words granted, pushed, popped, replayed, released are pairwise distinct along the sequence and each preserves the fields of the stamp.
 - `independent`: two flag bits set in either order give one word, and each stays set. Sixteen flags are sixteen independent one-success gates on one word.
-- `lane_recorded`: $\forall s\, l,\; l < 128 \Rightarrow (\mathrm{statePopped}(s, l) \land \mathrm{laneMask}) \gg 40 = l$. The lane index of the pop is recoverable from the popped word.
+- `lane_recorded`: $\forall s\, l,\; l < 128 \Rightarrow (\mathrm{statePopped}(s, l) \land \mathrm{laneMask}) \gg (b + 8) = l$. The lane index of the pop is recoverable from the popped word.
 - `corruption_refuses`: $\forall x\, m,\; m \neq 0 \Rightarrow x \oplus m \neq x$. Any bit flip in a slot word fails the next transition.
-- `states_reserved_clear`, `invalid_input_refuses`, `valid_input_expects`: no state word has the reserved bit; an input stamp with a flag bit set expects a value with the reserved bit, so its transition fails on every state word; an input stamp with a clear flag field expects exactly the stamp with the prior flags. So a flip in any of the 64 bits of a held stamp fails the transition: a flip in the ticket or the epoch expects another stamp's word, a flip in the flag field expects the reserved bit.
+- `states_reserved_clear`, `invalid_input_refuses`, `valid_input_expects`: no state word has the reserved bit; an input stamp with a flag bit set expects a value with the reserved bit, so its transition fails on every state word; an input stamp with a clear flag field expects exactly the stamp with the prior flags. So a flip in any bit of a held stamp fails the transition: a flip in the ticket or the epoch expects another stamp's word, a flip in the flag field expects the reserved bit.
 - `guarded_refuses`: a transition that reads the current value first and fails its state test expects the current value with the reserved bit inverted, which differs from every current value, the zero word of an empty slot among them. The pop, the replay and the release are of this form, because the lane and check bits of the current value are not known to the caller in advance.
 
-- `job_flip_changes_check`: $\forall j\, i,\; i < 64 \Rightarrow \mathrm{check}(j \oplus 2^{i}) \neq \mathrm{check}(j)$, where $\mathrm{check}$ is the three-bit cyclic redundancy check of the C, the pointer as a polynomial modulo $x^{3} + x + 1$. `job_double_flip`: $\forall j\, i\, d,\; 0 < d \land i + d < 64 \Rightarrow (\mathrm{check}(j \oplus 2^{i} \oplus 2^{i+d}) \neq \mathrm{check}(j) \iff d \bmod 7 \neq 0)$. A double-bit error is detected exactly where the two places are not a multiple of seven apart, which covers every adjacent multi-cell upset. `check_recorded`: the pushed and the popped words carry the check the push stored, where the pop reads it.
+- `job_flip_changes_check`: on a pointer of $p$ bits, $p \in \{16, 32, 64\}$, $\forall j\, i,\; i < p \Rightarrow \mathrm{check}(j \oplus 2^{i}) \neq \mathrm{check}(j)$, where $\mathrm{check}$ is the three-bit cyclic redundancy check of the C, the pointer as a polynomial modulo $x^{3} + x + 1$. `job_double_flip`: $\forall j\, i\, d,\; 0 < d \land i + d < p \Rightarrow (\mathrm{check}(j \oplus 2^{i} \oplus 2^{i+d}) \neq \mathrm{check}(j) \iff d \bmod 7 \neq 0)$. A double-bit error is detected exactly where the two places are not a multiple of seven apart, which covers every adjacent multi-cell upset. `check_recorded`: the pushed and the popped words carry the check the push stored, where the pop reads it.
 
-Theorem 4 is therefore complete for the whole slot: a flip in the slot word fails the next transition on it (`corruption_refuses`), a flip in a held stamp fails every transition from it (`invalid_input_refuses` with `fields_tell_tickets`), and a single-bit or adjacent double-bit flip in the job pointer fails the check at the read (`job_flip_changes_check`, `job_double_flip`). The suite exercises the last two directly: it flips each of the 64 bits of a held stamp in turn and asserts that the pop fails on every one, it flips each of the 64 bits of a stored job pointer and asserts that the pop and the replay refuse the job and mark the reserved bit, and it flips every pair of bits and asserts refusal exactly where the two are not a multiple of seven apart.
+Theorem 4 is therefore complete for the whole slot: a flip in the slot word fails the next transition on it (`corruption_refuses`), a flip in a held stamp fails every transition from it (`invalid_input_refuses` with `fields_tell_tickets`), and a single-bit or adjacent double-bit flip in the job pointer fails the check at the read (`job_flip_changes_check`, `job_double_flip`). The suite exercises the last two directly: it flips each bit of a held stamp in turn and asserts that the pop fails on every one, it flips each bit of a stored job pointer and asserts that the pop and the replay refuse the job and mark the reserved bit, and it flips every pair of bits and asserts refusal exactly where the two are not a multiple of seven apart.
 
 ### 3.11 The device arm (`Device.lean`)
 
@@ -363,7 +394,7 @@ Under nvcc one definition of every atomic, turnstile and ring function compiles 
 
 The transition systems of Sections 3.2 to 3.4, 3.9 and 3.12 take each operation as one step and never name an arm, so they hold on the device by the instantiation above. What remains for the device is Axiom A1 in its device form: that `__threadfence` orders the writes before it ahead of the reads after it at device scope, as the sequentially consistent fence does on the host. That is the same axiom under which the host arms are proved, and not a weaker one. The device suite exercises the lane's device arm where a CUDA part is present.
 
-`LaneWord.lean` also gains `fewer_ends_move_64` and `fewer_ends_move_32`: $\forall x\, n,\; n \neq 0 \land n < 2^{w-3} \Rightarrow \mathrm{generation}(x + n \cdot \mathrm{unit}) \neq \mathrm{generation}(x)$. Fewer passes than the roll always move the generation, so the drain's misread of Section 6 needs exactly the roll count of passes between its two reads of one lane, and not one fewer.
+`LaneWord.lean` also gains `fewer_ends_move`: $\forall x\, n,\; n \neq 0 \land n < 2^{w-3} \Rightarrow \mathrm{generation}(x + n \cdot \mathrm{unit}) \neq \mathrm{generation}(x)$. Fewer passes than the roll always move the generation, so the drain's misread of Section 6 needs exactly the roll count of passes between its two reads of one lane, and not one fewer.
 
 ### 3.12 The integrated algorithm (`Integrated.lean`)
 
@@ -425,7 +456,7 @@ const uintptr_t answer = work(series, context, permit);
 embed_turnstile_leave(&series->turnstiles, at);
 ```
 
-A writer (`carcer_shut`) takes the closed bit with a fetch-or, backs off on it with `embed_turnstile_backed_off` while another writer holds it, issues the fence, and drains:
+A writer (`carcer_shut`) takes the closed bit with a fetch-or, backs off on it with `embed_turnstile_backoff_step` while another writer holds it, issues the fence, and drains:
 
 ```
 EMBED_ATOMIC_ORDERED();
@@ -466,7 +497,7 @@ Three facts that read like limits are theorems, and the paper states them as suc
 
 - **Which worker runs a job.** The host orders the queue, and the stamp carries that order: epoch and ticket are the causal and temporal link of a job, and the slot records them on every transition. A worker is therefore interchangeable with any other. Where a worker's held ticket is corrupted onto another live ticket, it pops that ticket's job and the owner of that ticket finds the popped bit; the job ran once, under the stamp that the host assigned it, and the only consequence is which fungible worker ran it. `collision_detected` and `claims_at_max_one` are the whole of what the architecture has to say, and they are enough.
 - **A pass that does not leave.** `drain_waits_while_held` states the liveness condition of the drain exactly: it returns when every pass of its fence has ended, and not before. That is the contract a reader signs at the gate.
-- **The generation.** `roll_64` gives the period of the generation and `fewer_ends_move_64` proves that any count of passes short of it moves the generation. A drain's read of a lane is therefore exact at every count below $2^{w-3}$ passes between two reads, which is the bound, stated.
+- **The generation.** `roll` gives the period of the generation and `fewer_ends_move` proves that any count of passes short of it moves the generation. A drain's read of a lane is therefore exact at every count below $2^{w-3}$ passes between two reads, which is the bound, stated.
 
 The upsets that the check cannot see, a double flip a multiple of seven places apart or a triple that cancels modulo the polynomial, are not refused by the ring: the pop returns a corrupted pointer as a success. The response to those is the supervisor of Section 3.12, which kills the worker that misbehaves and frees its lane from the lane index in the popped word, and `drain_completes` proves the system drains after it does. The telemetry the supervisor needs, which worker, which ticket, when, is in the slot word.
 
