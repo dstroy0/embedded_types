@@ -221,6 +221,42 @@ void test_the_first_byte_of_a_mask_is_the_lowest_bit_set(void)
                                      "the last byte alone");
 }
 
+void test_the_mask_of_a_count_sets_that_many_first_bytes(void)
+{
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0u, (embed_u64)EMBED_LANE_MASK_OF(0u), "no bytes set no bits");
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(bit_of(0u) | bit_of(1u) | bit_of(2u), (embed_u64)EMBED_LANE_MASK_OF(3u),
+                                    "three bytes set the three lowest bits");
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE((embed_u64)EMBED_LANE_MASK_ALL, (embed_u64)EMBED_LANE_MASK_OF(EMBED_LANE_BYTES),
+                                    "a whole lane sets every byte");
+}
+
+void test_the_bytes_before_the_first_set_byte_end_there(void)
+{
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE((embed_u64)EMBED_LANE_MASK_ALL, (embed_u64)embed_lane_mask_before(0u),
+                                    "no byte set leaves every byte");
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(bit_of(0u) | bit_of(1u),
+                                    (embed_u64)embed_lane_mask_before((embed_lane_mask)(bit_of(2u) | bit_of(5u))),
+                                    "the bytes ahead of the lowest set byte");
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0u, (embed_u64)embed_lane_mask_before((embed_lane_mask)bit_of(0u)),
+                                    "a set first byte leaves none ahead of it");
+}
+
+void test_the_bytes_two_lanes_differ_in_are_the_bits_set(void)
+{
+    embed_u8 changed[EMBED_LANE_BYTES];
+    bytes_copy(changed, s_bytes, EMBED_LANE_BYTES);
+    changed[1] ^= 4u;
+    changed[EMBED_LANE_BYTES - 1u] ^= 0x40u;
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(bit_of(1u) | bit_of(EMBED_LANE_BYTES - 1u),
+                                    (embed_u64)embed_lane_bytes_differ(embed_lane_load(s_bytes),
+                                                                       embed_lane_load(changed)),
+                                    "the bytes changed are the bits set");
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0u,
+                                    (embed_u64)embed_lane_bytes_differ(embed_lane_load(s_bytes),
+                                                                       embed_lane_load(s_bytes)),
+                                    "equal lanes differ in no byte");
+}
+
 void test_the_exact_divide_by_255_holds_in_every_lane_over_every_product(void)
 {
     // The identity of the blend, with x as a * b + 128: (x + (x >> 8)) >> 8 is (a * b + 127) / 255 for every

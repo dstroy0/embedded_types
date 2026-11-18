@@ -6,6 +6,7 @@
 # through them.
 add_library(embedded_types_header_units OBJECT
   embed_atomic.c
+  embed_clock.c
   embed_compiler_directives.c
   embed_dispatch_layout.c
   embed_lane.c

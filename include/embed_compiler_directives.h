@@ -578,6 +578,35 @@
 #define EMBED_DIAGNOSTIC_IGNORE(warning_)
 #endif
 
+#if defined(__clang__) || defined(__GNUC__)
+/**
+ * @brief Expands to a pragma that gives text_ as a warning of the build, where the compiler defines __clang__ or
+ *        __GNUC__.
+ *
+ * @param[in] text_ The warning as a string literal.
+ * @note A header uses this macro in place of #warning. MSVC rejects #warning in each group, and a group that
+ *       the build skips is no exception. A pragma that MSVC does not know is not an error.
+ */
+#define EMBED_BUILD_WARNING(text_) _Pragma(EMBED_DIAGNOSTIC_STRING(GCC warning text_))
+#elif defined(_MSC_VER)
+/**
+ * @brief Expands to a pragma that gives text_ as a message of the build, where the compiler is MSVC.
+ *
+ * @param[in] text_ The warning as a string literal.
+ * @note MSVC has no pragma for a warning, and its message pragma writes the text to the output of the build.
+ */
+#define EMBED_BUILD_WARNING(text_) __pragma(message(text_))
+#else
+
+/**
+ * @brief Expands to nothing where the compiler is none of clang, GCC and MSVC.
+ *
+ * @param[in] text_ The warning as a string literal, which this arm discards.
+ * @warning The build gives no warning on this arm. The value that the warning names still applies.
+ */
+#define EMBED_BUILD_WARNING(text_)
+#endif
+
 /**
  * @brief Set to 1 where __BYTE_ORDER__ and __ORDER_BIG_ENDIAN__ both have a value and the two are
  *        equal, 0 otherwise.

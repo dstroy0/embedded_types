@@ -34,6 +34,7 @@ HEADERS = (
     "embed_dispatch_layout.h",
     "embed_atomic.h",
     "embed_turnstile.h",
+    "embed_clock.h",
     "embed_ticket_ring.h",
     "embed_lane.h",
 )
@@ -400,7 +401,7 @@ class Header:
                 self.owner = None
         elif word == "define":
             self.define(at, directive, joined)
-        elif word not in ("include", "error", "pragma", "undef"):
+        elif word not in ("include", "error", "warning", "pragma", "undef"):
             self.fail(at, "a directive the reader does not know: " + joined)
         return last + 1
 
@@ -526,6 +527,8 @@ class Header:
             return Decl("type", name, joined, start, arms, members_in(body)), at + 1
         if macro in self.templates:
             return Decl("invocation", macro, joined, start, arms), at + 1
+        if macro == "EMBED_BUILD_WARNING":
+            return None, at + 1
         self.fail(start, "a macro invocation the reader does not know: " + macro)
         return None, at + 1
 

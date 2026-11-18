@@ -608,6 +608,36 @@ Expands to nothing where the compiler defines neither `__clang__` nor `__GNUC__`
 
 > _**Warning:**_ This arm does not stop the warning. A compiler that raises it still reports it. A report is the safe direction.
 
+### `EMBED_BUILD_WARNING` { #EMBED_BUILD_WARNING }
+
+```c
+#if defined(__clang__) || defined(__GNUC__)
+#define EMBED_BUILD_WARNING(text_) _Pragma(EMBED_DIAGNOSTIC_STRING(GCC warning text_))
+#elif defined(_MSC_VER)
+#define EMBED_BUILD_WARNING(text_) __pragma(message(text_))
+#else
+#define EMBED_BUILD_WARNING(text_)
+#endif
+```
+
+Expands to a pragma that gives `text_` as a warning of the build, where the compiler defines `__clang__` or `__GNUC__`.
+
+- `[in]`: `text_` The warning as a string literal.
+
+> **Note:** A header uses this macro in place of `#warning`. MSVC rejects `#warning` in each group, and a group that the build skips is no exception. A pragma that MSVC does not know is not an error.
+
+Expands to a pragma that gives `text_` as a message of the build, where the compiler is MSVC.
+
+- `[in]`: `text_` The warning as a string literal.
+
+> **Note:** MSVC has no pragma for a warning, and its message pragma writes the text to the output of the build.
+
+Expands to nothing where the compiler is none of clang, GCC and MSVC.
+
+- `[in]`: `text_` The warning as a string literal, which this arm discards.
+
+> _**Warning:**_ The build gives no warning on this arm. The value that the warning names still applies.
+
 ### `EMBED_BIG_ENDIAN` { #EMBED_BIG_ENDIAN }
 
 ```c

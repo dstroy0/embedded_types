@@ -189,6 +189,16 @@ typedef embed_u64 embed_lane_mask;
 #endif
 
 /**
+ * @brief The mask of the first `bytes_` bytes of a lane.
+ *
+ * @param[in] bytes_ The bytes, 0 through EMBED_LANE_BYTES.
+ * @note A count of EMBED_LANE_BYTES or more gives EMBED_LANE_MASK_ALL. The shift then stays below the width of
+ *       the mask.
+ */
+#define EMBED_LANE_MASK_OF(bytes_)                                                                                     \
+    (((bytes_) >= EMBED_LANE_BYTES) ? EMBED_LANE_MASK_ALL : (embed_lane_mask)(((embed_lane_mask)1 << (bytes_)) - 1u))
+
+/**
  * @brief The index of the first byte set in a mask.
  *
  * @param mask  A mask with at least one byte set.
@@ -213,6 +223,17 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask m
     byte += ((low & 0xAAAAAAAAAAAAAAAAull) != 0u) ? 1u : 0u;
     return byte;
 #endif
+}
+
+/**
+ * @brief The bytes before the first set byte of a mask, or every byte where the mask has no set byte.
+ *
+ * @param mask  Bytes that end a walk.
+ * @return      The bytes ahead of the first one that ends it.
+ */
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_mask_before(embed_lane_mask mask)
+{
+    return (mask == 0u) ? EMBED_LANE_MASK_ALL : (embed_lane_mask)((mask & (0u - mask)) - 1u);
 }
 
 /**
@@ -559,6 +580,18 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_zero(embed_lane lane)
 {
     return embed_lane_bytes_equal(lane, embed_lane_fill_u32(0u));
+}
+
+/**
+ * @brief Which bytes two lanes differ in, one bit a byte, the lowest byte the lowest bit.
+ *
+ * @param one   A lane.
+ * @param other The lane to compare it with.
+ * @return      The mask.
+ */
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_differ(embed_lane one, embed_lane other)
+{
+    return EMBED_LANE_MASK_ALL & ~embed_lane_bytes_equal(one, other);
 }
 
 #endif

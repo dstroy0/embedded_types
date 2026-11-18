@@ -229,6 +229,19 @@ The arm the lane takes: [`EMBED_LANE_VECTOR`](#EMBED_LANE_VECTOR) is 1 and [`EMB
 
 The mask with every byte of the lane set.
 
+### `EMBED_LANE_MASK_OF` { #EMBED_LANE_MASK_OF }
+
+```c
+#define EMBED_LANE_MASK_OF(bytes_) \
+    (((bytes_) >= EMBED_LANE_BYTES) ? EMBED_LANE_MASK_ALL : (embed_lane_mask)(((embed_lane_mask)1 << (bytes_)) - 1u))
+```
+
+The mask of the first `bytes_` bytes of a lane.
+
+- `[in]`: `bytes_` The bytes, 0 through [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES).
+
+> **Note:** A count of [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES) or more gives [`EMBED_LANE_MASK_ALL`](#EMBED_LANE_MASK_ALL). The shift then stays below the width of the mask.
+
 ### `EMBED_LANE_NIBBLE_GATHER` { #EMBED_LANE_NIBBLE_GATHER }
 
 ```c
@@ -254,6 +267,18 @@ The index of the first byte set in a mask.
 \*\*Returns:\*\* The byte, counted from the first.
 
 > **Note:** The trailing zero count where the compiler has it, else the lowest bit isolated and placed by six masked steps.
+
+### `embed_lane_mask_before` { #embed_lane_mask_before }
+
+```c
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_mask_before(embed_lane_mask mask);
+```
+
+The bytes before the first set byte of a mask, or every byte where the mask has no set byte.
+
+- `mask`: Bytes that end a walk.
+
+\*\*Returns:\*\* The bytes ahead of the first one that ends it.
 
 ### `embed_lane_load_aligned` { #embed_lane_load_aligned }
 
@@ -451,5 +476,18 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_zero(embed_lane 
 Which bytes of a lane are zero, one bit a byte, the lowest byte the lowest bit.
 
 - `lane`: A lane.
+
+\*\*Returns:\*\* The mask.
+
+### `embed_lane_bytes_differ` { #embed_lane_bytes_differ }
+
+```c
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_differ(embed_lane one, embed_lane other);
+```
+
+Which bytes two lanes differ in, one bit a byte, the lowest byte the lowest bit.
+
+- `one`: A lane.
+- `other`: The lane to compare it with.
 
 \*\*Returns:\*\* The mask.
