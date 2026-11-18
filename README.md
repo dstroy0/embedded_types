@@ -37,16 +37,19 @@ step sleeps on the address of the lane word, for a time that doubles at each ste
 nanoseconds in a machine word, and the clock rolls at the width of the word. The backoff takes the
 difference of two reads of the clock, and that difference holds across the roll.
 
-The host supplies the sleep, the wake and the clock:
+The host supplies the sleep, the wake, the clock and the place of the thread that calls:
 
 ```c
 int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value old_value, embed_word nanoseconds);
 void embed_word_wake(embed_atomic_word *word);
 embed_word embed_clock_ns(void);
+embed_u32 embed_thread_place(void);
 ```
 
-On Linux that is the futex, on Windows WaitOnAddress, and on macOS `__ulock_wait`. A build that
-supplies none of the three fails at the link, and the error names them.
+On Linux the wait is the futex, on Windows WaitOnAddress, and on macOS `__ulock_wait`. The place is a
+count from 0 that each thread answers for its life. A consumer with a store for each thread indexes
+the stores by it. A build that supplies none of the four fails at the link, and the error
+names them.
 
 The Lean proofs under [`theory/`](theory) hold the lane word, the backoff, the open count, the
 queue, the drain and the sleeps. The GenMC clients under [`test/prove/`](test/prove) run the drain

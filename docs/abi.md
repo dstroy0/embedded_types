@@ -20,12 +20,13 @@ No arm has an atomic word of 16 bits. So a word of 16 bits has an `embed_atomic_
 
 ## The host hooks
 
-The turnstile calls three functions, and the host defines them:
+The turnstile calls three functions, and a consumer with a store for each thread calls a fourth. The host defines the four:
 
 ```c
 int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value old_value, embed_word nanoseconds);
 void embed_word_wake(embed_atomic_word *word);
 embed_word embed_clock_ns(void);
+embed_u32 embed_thread_place(void);
 ```
 
 [`embed_word_wait`](api/embed_turnstile.md#embed_word_wait) sleeps while `word` holds `old_value`, for `nanoseconds` at max. A limit of `EMBED_WAIT_INFINITE`, each bit of the word set, has no end. A limit of 0 answers at once. The call returns 1 where the word moved off `old_value`, and 0 where it did not.
@@ -34,7 +35,9 @@ The compare and the sleep are one step with respect to [`embed_word_wake`](api/e
 
 [`embed_clock_ns`](api/embed_turnstile.md#embed_clock_ns) gives the nanoseconds of the host modulo 2^`EMBED_WORD_BITS`. The clock rolls after about 4.29 s on a word of 32 bits, and after 65.5 µs on a word of 16 bits. The backoff takes the difference of two reads, and that difference holds across the roll.
 
-`test/support/host_wait.c` defines the three on the futex of Linux, on `WaitOnAddress` of Windows and on `__ulock_wait` of macOS. Elsewhere it sleeps for the limit. A build that defines none of the three fails at the link, and the error names them.
+[`embed_thread_place`](api/embed_turnstile.md#embed_thread_place) gives the place of the thread that calls: a count from 0 that the thread answers for its life, and that no other live thread answers. A consumer indexes its stores by the place modulo their count.
+
+`test/support/host_wait.c` defines the four on the futex of Linux, on `WaitOnAddress` of Windows and on `__ulock_wait` of macOS. Elsewhere it sleeps for the limit. A build that defines none of the four fails at the link, and the error names them.
 
 ## The values that follow the word
 

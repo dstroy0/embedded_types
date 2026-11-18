@@ -31,8 +31,8 @@
  *       Inside the first unit, 2^EMBED_TURNSTILE_UNIT_SHIFT ns, a step is a pause and no call. From one unit on, a
  *       step waits on the word for 2^(EMBED_TURNSTILE_UNIT_SHIFT + exponent) ns at max, and the exponent goes up to
  *       EMBED_TURNSTILE_EXPONENT_MAX. A wake or a moved word ends the wait first.
- * @note The host defines embed_word_wait, embed_word_wake and embed_clock_ns. A build that defines none of the three
- *       fails at the link, and the error names them.
+ * @note The host defines embed_word_wait, embed_word_wake, embed_clock_ns and embed_thread_place. A build that
+ *       defines none of the four fails at the link, and the error names them.
  * @note theory/embedded_types/EmbeddedTypes/Manifold proves the lane word, the backoff, the open count, the queue,
  *       the drain and the sleeps.
  * @warning The generation rolls after 2^(n - 3) counts, where n is the width of embed_atomic_word: 64 on a word of 64
@@ -147,6 +147,17 @@ void embed_word_wake(embed_atomic_word *word);
  *          step pauses and makes no call.
  */
 embed_word embed_clock_ns(void);
+
+/**
+ * @brief The place of the thread that calls: a count that names it among the threads of the program.
+ *
+ * @return The place, from 0. The first thread that calls answers 0, the next answers 1, and each thread answers its
+ *         own place for its life. No two live threads answer one place.
+ * @note The host defines this beside embed_word_wait. A host with one thread answers 0.
+ * @note A consumer that holds a store for each thread indexes the stores by this place, modulo the count of its stores.
+ *       Two threads whose places meet modulo that count then share one store, which is correct and slower.
+ */
+embed_u32 embed_thread_place(void);
 
 /**
  * @brief The processor's pause in a spin, a compiler barrier alone where the processor has none the compiler reaches.

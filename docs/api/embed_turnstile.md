@@ -18,7 +18,7 @@ A set of turnstiles is a manifold of lanes. Each lane is one word on a cache lin
 
 > **Note:** A backoff retains its start on the clock and its exponent in the caller's locals. No shared word holds a time. Inside the first unit, `2^EMBED_TURNSTILE_UNIT_SHIFT` ns, a step is a pause and no call. From one unit on, a step waits on the word for 2^([`EMBED_TURNSTILE_UNIT_SHIFT`](#EMBED_TURNSTILE_UNIT_SHIFT) + exponent) ns at max, and the exponent goes up to [`EMBED_TURNSTILE_EXPONENT_MAX`](#EMBED_TURNSTILE_EXPONENT_MAX_16). A wake or a moved word ends the wait first.
 
-> **Note:** The host defines [`embed_word_wait`](#embed_word_wait), [`embed_word_wake`](#embed_word_wake) and [`embed_clock_ns`](#embed_clock_ns). A build that defines none of the three fails at the link, and the error names them.
+> **Note:** The host defines [`embed_word_wait`](#embed_word_wait), [`embed_word_wake`](#embed_word_wake), [`embed_clock_ns`](#embed_clock_ns) and [`embed_thread_place`](#embed_thread_place). A build that defines none of the four fails at the link, and the error names them.
 
 > **Note:** theory/`embedded_types`/EmbeddedTypes/Manifold proves the lane word, the backoff, the open count, the queue, the drain and the sleeps.
 
@@ -203,6 +203,20 @@ The host's clock in nanoseconds, which the backoff measures its time on.
 > **Note:** The host defines this beside [`embed_word_wait`](#embed_word_wait).
 
 > _**Warning:**_ The clock rolls at the width of the word: after about 4.29 s on a word of 32 bits, and 65.5 us on a word of 16 bits. The backoff takes the difference of two reads, and that difference is correct across the roll. A step one roll or more after its start reads the time modulo the roll. Where that is below one unit, the step pauses and makes no call.
+
+### `embed_thread_place` { #embed_thread_place }
+
+```c
+embed_u32 embed_thread_place(void);
+```
+
+The place of the thread that calls: a count that names it among the threads of the program.
+
+\*\*Returns:\*\* The place, from 0. The first thread that calls answers 0, the next answers 1, and each thread answers its own place for its life. No two live threads answer one place.
+
+> **Note:** The host defines this beside [`embed_word_wait`](#embed_word_wait). A host with one thread answers 0.
+
+> **Note:** A consumer that holds a store for each thread indexes the stores by this place, modulo the count of its stores. Two threads whose places meet modulo that count then share one store, which is correct and slower.
 
 ### `embed_turnstile_backoff_begin` { #embed_turnstile_backoff_begin }
 

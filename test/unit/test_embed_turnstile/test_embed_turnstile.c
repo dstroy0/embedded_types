@@ -111,6 +111,25 @@ void test_a_sleep_of_no_time_answers_at_once(void)
     TEST_ASSERT_TRUE((host_clock_ms() - start_ms) < 100u);
 }
 
+/** @brief The place that the thread of host_threads_run answered. */
+static embed_u32 s_other_place;
+
+/** @brief The work of the other thread: its own place recorded. */
+static void other_place_recorded(void)
+{
+    s_other_place = embed_thread_place();
+}
+
+void test_a_thread_answers_one_place_and_another_thread_answers_a_different_one(void)
+{
+    const embed_u32 place = embed_thread_place();
+
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(place, embed_thread_place(), "one thread, one place");
+    s_other_place = place;
+    TEST_ASSERT_TRUE_MESSAGE(host_threads_run(other_place_recorded, 1u), "the other thread started");
+    TEST_ASSERT_TRUE_MESSAGE(s_other_place != place, "another thread, another place");
+}
+
 void test_the_clock_moves_forward(void)
 {
     const embed_word start_ns = embed_clock_ns();
