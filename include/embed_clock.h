@@ -33,6 +33,8 @@
 #include "embed_compiler_directives.h"
 #include "embed_types.h"
 
+EMBED_BEGIN_DECLS
+
 /**
  * @brief Set where this is an ARM build, in either execution state.
  *
@@ -294,8 +296,10 @@ EMBED_STATIC_ASSERT(EMBED_WORD_BITS <= EMBED_REGISTER_BITS,
 #ifndef EMBED_CLOCK_HZ
 #define EMBED_CLOCK_HZ 1000000u
 #define EMBED_UNSET_CLOCK_HZ 1
-EMBED_BUILD_WARNING(
-    "The build states no clock, so EMBED_CLOCK_HZ took the default of 1000000, and the header reads a tick as one microsecond. Each deadline is then wrong by the real frequency. Set it to the frequency of the clock this reads.")
+EMBED_BUILD_WARNING("The build states no clock, so EMBED_CLOCK_HZ took the default of 1000000.")
+EMBED_BUILD_WARNING("The header reads a tick as one microsecond.")
+EMBED_BUILD_WARNING("Each deadline is then wrong by the real frequency.")
+EMBED_BUILD_WARNING("Set EMBED_CLOCK_HZ to the frequency of the clock this reads.")
 #endif
 
 /**
@@ -311,12 +315,14 @@ EMBED_BUILD_WARNING(
 #define EMBED_UNSET_CLOCK_SOURCE 1
 #if EMBED_ARCH_CYCLE_COUNTER
 #define EMBED_CLOCK_SOURCE EMBED_CLOCK_OWN
-EMBED_BUILD_WARNING(
-    "EMBED_CLOCK_SOURCE has no value from the build and took EMBED_CLOCK_OWN, because this architecture defines a cycle counter that a port can read. Say so, or set EMBED_CLOCK_CALLER to read a clock that you run.")
+EMBED_BUILD_WARNING("EMBED_CLOCK_SOURCE has no value from the build and took EMBED_CLOCK_OWN.")
+EMBED_BUILD_WARNING("This architecture defines a cycle counter that a port can read.")
+EMBED_BUILD_WARNING("Say so, or set EMBED_CLOCK_CALLER to read a clock that you run.")
 #else
 #define EMBED_CLOCK_SOURCE EMBED_CLOCK_CALLER
-EMBED_BUILD_WARNING(
-    "EMBED_CLOCK_SOURCE has no value from the build and took EMBED_CLOCK_CALLER, because this architecture defines no cycle counter to pin a timer to. Say so, and supply the clock.")
+EMBED_BUILD_WARNING("EMBED_CLOCK_SOURCE has no value from the build and took EMBED_CLOCK_CALLER.")
+EMBED_BUILD_WARNING("This architecture defines no cycle counter to pin a timer to.")
+EMBED_BUILD_WARNING("Say so, and supply the clock.")
 #endif
 #endif
 
@@ -344,8 +350,9 @@ EMBED_BUILD_WARNING(
 #ifndef EMBED_CLOCK_CORE
 #define EMBED_CLOCK_CORE EMBED_CLOCK_CORE_DEFAULT
 #define EMBED_UNSET_CLOCK_CORE 1
-EMBED_BUILD_WARNING(
-    "EMBED_CLOCK_CORE has no value from the build and took EMBED_CLOCK_CORE_DEFAULT, which is core zero on each family. Set it to the core to pin the timer to.")
+EMBED_BUILD_WARNING("EMBED_CLOCK_CORE has no value from the build and took EMBED_CLOCK_CORE_DEFAULT.")
+EMBED_BUILD_WARNING("EMBED_CLOCK_CORE_DEFAULT is core zero on each family.")
+EMBED_BUILD_WARNING("Set EMBED_CLOCK_CORE to the core to pin the timer to.")
 #endif
 
 #else
@@ -385,5 +392,7 @@ EMBED_STATIC_ASSERT((EMBED_CLOCK_HZ % 1000000u) == 0u,
 
 EMBED_STATIC_ASSERT(EMBED_CLOCK_TICKS_PER_MICRO >= 1u,
                     "EMBED_CLOCK_HZ is below one megahertz, which cannot resolve a deadline in microseconds");
+
+EMBED_END_DECLS
 
 #endif

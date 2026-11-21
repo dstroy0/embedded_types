@@ -393,6 +393,30 @@ The class of the target: [`EMBED_TARGET_HOST`](#EMBED_TARGET_HOST), [`EMBED_TARG
 
 > **Note:** Both arms define this macro. Test it with `#if`.
 
+### `EMBED_ATOMIC_ARM` { #EMBED_ATOMIC_ARM }
+
+```c
+#if defined(__CUDA_ARCH__)
+#define EMBED_ATOMIC_ARM 1
+#elif !defined(__cplusplus) && !defined(__STDC_NO_ATOMICS__)
+#define EMBED_ATOMIC_ARM 2
+#elif EMBED_GNU_ATTRIBUTES
+#define EMBED_ATOMIC_ARM 3
+#elif defined(_MSC_VER)
+#define EMBED_ATOMIC_ARM 4
+#else
+#define EMBED_ATOMIC_ARM 0
+#endif
+```
+
+The arm of the atomics, from 0 to 4.
+
+> **Note:** 1 is CUDA's device atomics, 2 is C11 atomics, 3 is the GCC and clang builtins, and 4 is MSVC's interlocked intrinsics. 0 is a target with none of the four.
+
+> **Note:** Each arm defines this macro. Test it with `#if`. Under nvcc the host pass and the device pass each read this header, and each selects its own arm over the same word.
+
+> **Note:** `embed_atomic`.h includes the header of the arm, and stops the build at an `#error` where this macro is 0. Each other header builds on a target with no atomics.
+
 ### `EMBED_HAS_BYTE_MASK_256` { #EMBED_HAS_BYTE_MASK_256 }
 
 ```c

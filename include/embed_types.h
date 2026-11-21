@@ -83,14 +83,14 @@ typedef _Bool embed_bool;
  * @note The cast gives the macro embed_bool type. A bare 1 would have type int, and sizeof would
  *       measure it as int.
  */
-#define EMBED_TRUE ((embed_bool)1)
+#define EMBED_TRUE ((embed_bool)1u)
 
 /**
  * @brief False, cast to embed_bool.
  *
  * @note The cast gives the macro embed_bool type, for the reason given on EMBED_TRUE.
  */
-#define EMBED_FALSE ((embed_bool)0)
+#define EMBED_FALSE ((embed_bool)0u)
 
 /**
  * @brief The width of the machine word in bits, derived from the target's pointer width.

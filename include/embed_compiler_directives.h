@@ -368,6 +368,28 @@ EMBED_STATIC_ASSERT((EMBED_TARGET == EMBED_TARGET_HOST) || (EMBED_TARGET == EMBE
                     "EMBED_TARGET must be EMBED_TARGET_HOST, EMBED_TARGET_DEVICE or EMBED_TARGET_EMBEDDED");
 
 /**
+ * @brief The arm of the atomics, from 0 to 4.
+ *
+ * @note 1 is CUDA's device atomics, 2 is C11 atomics, 3 is the GCC and clang builtins, and 4 is MSVC's
+ *       interlocked intrinsics. 0 is a target with none of the four.
+ * @note Each arm defines this macro. Test it with #if. Under nvcc the host pass and the device pass each read this
+ *       header, and each selects its own arm over the same word.
+ * @note embed_atomic.h includes the header of the arm, and stops the build at an #error where this macro is 0.
+ *       Each other header builds on a target with no atomics.
+ */
+#if defined(__CUDA_ARCH__)
+#define EMBED_ATOMIC_ARM 1
+#elif !defined(__cplusplus) && !defined(__STDC_NO_ATOMICS__)
+#define EMBED_ATOMIC_ARM 2
+#elif EMBED_GNU_ATTRIBUTES
+#define EMBED_ATOMIC_ARM 3
+#elif defined(_MSC_VER)
+#define EMBED_ATOMIC_ARM 4
+#else
+#define EMBED_ATOMIC_ARM 0
+#endif
+
+/**
  * @brief Set to 1 where the target runs AVX2 and the compiler has the builtin for the mask of 32
  *        bytes, else 0. The builtin reads the sign bit of each byte into an integer.
  *

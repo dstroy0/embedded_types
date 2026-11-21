@@ -17,7 +17,7 @@ Doxygen comments in the headers. The Doxygen block on a declaration is the contr
 | [`include/embed_clock.h`](include/embed_clock.h)                             | the clock selection: the architecture family, its cycle counter and register width, the caller's clock or a counter pinned to a core, its frequency, and the scale of a tick to a microsecond |
 | [`include/embed_ticket_ring.h`](include/embed_ticket_ring.h)                 | the ticket ring: a ring of job slots that a ticket indexes, with a state machine per slot in the flag bits of its stamp, each transition one compare-and-swap inside a pass |
 | [`include/embed_atomic.h`](include/embed_atomic.h)                           | the atomic types: a 32-bit word on each target and a 64-bit word where the target has one, each with load, store, exchange, compare-and-swap, add, subtract, or, and, and raise, on the arm of the target |
-| [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | the compiler directives, feature checks, the static assertion, attribute wrappers, diagnostic pragmas, an argument count and the build warning. Also the platform directives: the byte order, the unaligned load, the widest vector register, the class of the target, and the host and device marker |
+| [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | the compiler directives, feature checks, the static assertion, attribute wrappers, diagnostic pragmas, an argument count and the build warning. Also the platform directives: the byte order, the unaligned load, the widest vector register, the class of the target, the arm of the atomics, and the host and device marker |
 | [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | the dispatch table: assertions that pin each function pointer of a struct to its slot, and the macros that call and define an entry point                            |
 | [`include/embed_types.h`](include/embed_types.h)                             | the widths: the fixed-width integers, the boolean, the word, the index, the raw word, the stored form of a 64-bit count, and the assertions that pin each one        |
 | [`include/embed_lane.h`](include/embed_lane.h)                               | the lane: the widest vector register of the target, with its loads, fills, arithmetic and byte masks, the mask of a count, the bytes before a set byte, and the bytes two lanes differ in |
@@ -82,8 +82,8 @@ supervisor.
 ### The atomic types
 
 Each atomic operation is one indivisible step on the atomics of the target. A load has acquire
-ordering, a store has release ordering, and each read-modify-write has both. The header selects one
-of four arms, one time. The arms are the device atomics of CUDA in a device pass, C11 atomics, the
+ordering, a store has release ordering, and each read-modify-write has both. `EMBED_ATOMIC_ARM` in
+the compiler directives selects one of four arms, one time. The arms are the device atomics of CUDA in a device pass, C11 atomics, the
 GCC and clang builtins, and the interlocked intrinsics of MSVC. A target with none of the four fails
 the build at an `#error`. There is no plain fallback.
 

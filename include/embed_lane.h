@@ -39,6 +39,8 @@
 
 #include "embed_types.h"
 
+EMBED_BEGIN_DECLS
+
 /**
  * @brief The lane's width in bits, derived from the target's widest vector register.
  *
@@ -287,15 +289,15 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load_aligned(const void *at
 /**
  * @brief A lane put at any address.
  *
- * @param[out] dst  The address of the EMBED_LANE_BYTES bytes to write, at any alignment.
- * @param[in]  lane The bytes.
+ * @param[out] destination The address of the EMBED_LANE_BYTES bytes to write, at any alignment.
+ * @param[in]  lane        The bytes.
  */
 #if EMBED_LANE_PLAIN
 // The store that matches the load arm above, one raw word at a time, for the same reason.
-EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *destination, embed_lane lane)
 {
     embed_lane_words view;
-    embed_raw_word *const to = (embed_raw_word *)dst;
+    embed_raw_word *const to = (embed_raw_word *)destination;
 
     view.lane = lane;
     for (size_t place = 0u; place < (EMBED_LANE_BYTES / sizeof(embed_word)); place += 1u)
@@ -304,40 +306,40 @@ EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
     }
 }
 #else
-EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *destination, embed_lane lane)
 {
-    *(embed_lane_raw *)dst = lane;
+    *(embed_lane_raw *)destination = lane;
 }
 #endif
 
 /**
  * @brief A lane put at an address aligned to the lane.
  *
- * @param[out] dst  The address of the EMBED_LANE_BYTES bytes to write, a multiple of EMBED_LANE_BYTES.
- * @param[in]  lane The bytes.
+ * @param[out] destination The address of the EMBED_LANE_BYTES bytes to write, a multiple of EMBED_LANE_BYTES.
+ * @param[in]  lane        The bytes.
  * @warning C leaves a store to an address not aligned to the lane undefined here. embed_lane_put
  *          writes to any address.
  */
-EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put_aligned(void *dst, embed_lane lane)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put_aligned(void *destination, embed_lane lane)
 {
-    *(embed_lane *)dst = lane;
+    *(embed_lane *)destination = lane;
 }
 
 /**
- * @brief Every 32-bit lane of a lane set to `val`.
+ * @brief Every 32-bit lane of a lane set to `value`.
  *
- * @param[in] val The 32-bit value.
- * @return        The lane.
+ * @param[in] value The 32-bit value.
+ * @return          The lane.
  * @note On the vector arm a scalar added to the zero vector is the scalar in every lane.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 val)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 value)
 {
 #if EMBED_LANE_VECTOR
     const embed_lane zero = {0u};
-    return zero + val;
+    return zero + value;
 #else
     embed_lane lane;
-#define EMBED_LANE_FILL_WORD(at_) lane.at[at_] = val;
+#define EMBED_LANE_FILL_WORD(at_) lane.at[at_] = value;
     EMBED_LANE_WORDS(EMBED_LANE_FILL_WORD)
 #undef EMBED_LANE_FILL_WORD
     return lane;
@@ -345,15 +347,15 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 val)
 }
 
 /**
- * @brief Every byte of a lane set to `val`.
+ * @brief Every byte of a lane set to `byte`.
  *
- * @param[in] val The byte.
- * @return        The lane.
+ * @param[in] byte The byte.
+ * @return         The lane.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_byte(embed_u8 val)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_byte(embed_u8 byte)
 {
     // Explicit cast widens the byte to 32 bits, so the product puts a copy of it in each of the four bytes
-    return embed_lane_fill_u32((embed_u32)val * 0x01010101u);
+    return embed_lane_fill_u32((embed_u32)byte * 0x01010101u);
 }
 
 /**
@@ -598,5 +600,7 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_differ(embed_lan
 {
     return EMBED_LANE_MASK_ALL & ~embed_lane_bytes_equal(one, other);
 }
+
+EMBED_END_DECLS
 
 #endif

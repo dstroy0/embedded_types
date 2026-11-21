@@ -298,26 +298,26 @@ A lane loaded from an address aligned to the lane.
 
 ```c
 #if EMBED_LANE_PLAIN
-EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *destination, embed_lane lane);
 #else
-EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *destination, embed_lane lane);
 #endif
 ```
 
 A lane put at any address.
 
-- `[out]`: dst The address of the [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES) bytes to write, at any alignment.
+- `[out]`: destination The address of the [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES) bytes to write, at any alignment.
 - `[in]`: lane The bytes.
 
 ### `embed_lane_put_aligned` { #embed_lane_put_aligned }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put_aligned(void *dst, embed_lane lane);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put_aligned(void *destination, embed_lane lane);
 ```
 
 A lane put at an address aligned to the lane.
 
-- `[out]`: dst The address of the [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES) bytes to write, a multiple of [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES).
+- `[out]`: destination The address of the [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES) bytes to write, a multiple of [`EMBED_LANE_BYTES`](#EMBED_LANE_BYTES).
 - `[in]`: lane The bytes.
 
 > _**Warning:**_ C leaves a store to an address not aligned to the lane undefined here. [`embed_lane_put`](#embed_lane_put) writes to any address.
@@ -325,12 +325,12 @@ A lane put at an address aligned to the lane.
 ### `embed_lane_fill_u32` { #embed_lane_fill_u32 }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 val);
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 value);
 ```
 
-Every 32-bit lane of a lane set to `val`.
+Every 32-bit lane of a lane set to `value`.
 
-- `[in]`: val The 32-bit value.
+- `[in]`: value The 32-bit value.
 
 \*\*Returns:\*\* The lane.
 
@@ -339,12 +339,12 @@ Every 32-bit lane of a lane set to `val`.
 ### `embed_lane_fill_byte` { #embed_lane_fill_byte }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_byte(embed_u8 val);
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_byte(embed_u8 byte);
 ```
 
-Every byte of a lane set to `val`.
+Every byte of a lane set to `byte`.
 
-- `[in]`: val The byte.
+- `[in]`: byte The byte.
 
 \*\*Returns:\*\* The lane.
 

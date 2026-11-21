@@ -189,7 +189,7 @@ A one-byte enum used only to prove [`EMBED_ENUM_BYTE`](embed_compiler_directives
 ### `EMBED_TRUE` { #EMBED_TRUE }
 
 ```c
-#define EMBED_TRUE ((embed_bool)1)
+#define EMBED_TRUE ((embed_bool)1u)
 ```
 
 True, cast to [`embed_bool`](#embed_bool).
@@ -199,7 +199,7 @@ True, cast to [`embed_bool`](#embed_bool).
 ### `EMBED_FALSE` { #EMBED_FALSE }
 
 ```c
-#define EMBED_FALSE ((embed_bool)0)
+#define EMBED_FALSE ((embed_bool)0u)
 ```
 
 False, cast to [`embed_bool`](#embed_bool).

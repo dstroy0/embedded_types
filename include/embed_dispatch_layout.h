@@ -24,6 +24,8 @@
 
 #include "embed_compiler_directives.h"
 
+EMBED_BEGIN_DECLS
+
 /**
  * @brief Expands to sizeof(void (*)(void)).
  *
@@ -760,5 +762,7 @@
     {                                                                                                                  \
         EMBED_CALL(backend_prefix_##name_, CtxType_, __VA_ARGS__);                                                     \
     }
+
+EMBED_END_DECLS
 
 #endif
