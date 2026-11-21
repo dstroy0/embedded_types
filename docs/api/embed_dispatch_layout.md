@@ -738,6 +738,8 @@ Asserts a table's members sit at consecutive slots and that nothing else is in i
 
 > _**Warning:**_ A member of some other type changes sizeof(`Table_`) and fails the size assertion.
 
+> _**Warning:**_ MSVC counts `__VA_ARGS__` as the standard does only under /Zc:preprocessor. Its C11 mode turns that option on. A C++ unit under MSVC needs it on the command line, or the count is wrong and the build stops.
+
 ### `EMBED_TABLE_STORAGE` { #EMBED_TABLE_STORAGE }
 
 ```c
@@ -807,7 +809,11 @@ Expands to its twenty-fifth argument.
 ### `EMBED_CALL` { #EMBED_CALL }
 
 ```c
+#if defined(__cplusplus)
+#define EMBED_CALL(entry_, ArgsType_, ...) entry_(embed_cfg_address(ArgsType_{__VA_ARGS__}))
+#else
 #define EMBED_CALL(entry_, ArgsType_, ...) entry_(&(ArgsType_){__VA_ARGS__})
+#endif
 ```
 
 Expands to `entry_`(&(`ArgsType_`){`__VA_ARGS__`}).
@@ -822,11 +828,13 @@ Expands to `entry_`(&(`ArgsType_`){`__VA_ARGS__`}).
 
 > **Note:** C sets to zero each member that the initializer does not name. A compound literal in an argument lives to the end of the block around it. So `entry_` can retain the pointer for the full call.
 
-> **Note:** Use this macro from C only. No revision of C++ has compound literals. GNU C++ accepts one as an extension, but its lifetime there ends at the full-expression. That breaks the \[BORROWS\] contract below.
+> **Note:** No revision of C++ has compound literals. In C++ the macro builds a braced temporary of `ArgsType_` and passes its address through [`embed_cfg_address`](#embed_cfg_address). The temporary lives to the end of the full-expression, which covers the call and no more.
+
+> **Note:** A call in C++ before C++20 gives the initializers in the order of the members, with no designators. Each call in these headers does so, and so each header compiles as C++11.
 
 > **Note:** [`EMBED_ENTRY`](#EMBED_ENTRY) and [`EMBED_ENTRY_V`](#EMBED_ENTRY_V) expand this macro at a definition site, which is a .c file that compiles as C. A C++ translation unit sees the prototype under [`EMBED_BEGIN_DECLS`](embed_compiler_directives.md#EMBED_BEGIN_DECLS) and never the expansion.
 
-> _**Warning:**_ `entry_` receives the address of the literal \[BORROWS\].
+> _**Warning:**_ `entry_` receives the address of the literal \[BORROWS\]. In C++ the address is good for the call alone, so `entry_` must not retain it.
 
 ### `EMBED_ENTRY` { #EMBED_ENTRY }
 
@@ -876,3 +884,21 @@ Defines a void entry point that forwards an argument pack.
 > **Note:** The same body as [`EMBED_ENTRY`](#EMBED_ENTRY), without the return. Two macros exist because void does not work as `ReturnType_`. With `void` there, the macro still emits `return backend(...)`, and C forbids a return with an expression in a function that returns void.
 
 > _**Warning:**_ The initializers dereference args, so it must not be NULL \[BORROWS\].
+
+## Functions
+
+### `embed_cfg_address` { #embed_cfg_address }
+
+```c
+#if defined(__cplusplus)
+extern "C++" template <typename Cfg_> EMBED_HOST_DEVICE inline const Cfg_ *embed_cfg_address(const Cfg_ &cfg);
+#endif
+```
+
+The address of a Cfg, for [`EMBED_CALL`](#EMBED_CALL) in C++, where a braced temporary has no address operator.
+
+- `[in]`: cfg The Cfg \[BORROWS\].
+
+\*\*Returns:\*\* The address of cfg, good to the end of the full-expression of the call.
+
+> **Note:** `Cfg_` is the type of the Cfg. The template has C++ linkage, inside the C guard of this header.

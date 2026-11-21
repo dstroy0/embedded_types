@@ -39,7 +39,8 @@ HEADERS = (
     "embed_lane.h",
 )
 
-SECTIONS = (("type", "Types"), ("macro", "Macros"), ("function", "Functions"), ("assert", "Assertions"))
+SECTIONS = (("type", "Types"), ("macro", "Macros"), ("function", "Functions"), ("table", "Tables"),
+            ("assert", "Assertions"))
 # The text of a tag starts at its first character that is not white space, so no two parts match one character
 TAG = re.compile(r"^@(brief|note|warning|return|param(?:\[(in|out|in,\s*out)\])?|file|author|date)\b\s*(\S.*|)$")
 IDENT = re.compile(r"[A-Za-z_]\w*")
@@ -470,6 +471,8 @@ class Header:
             return self.record(at, arms)
         if text.startswith("typedef"):
             return self.typedef(at, arms)
+        if text.startswith("static const"):
+            return self.table(at, arms)
         head = re.match(r"([A-Z][A-Z0-9_]*)\s*\(", text)
         body, end = self.parenthesized(at)
         joined = "\n".join(part.rstrip() for part in body)
@@ -504,6 +507,16 @@ class Header:
         joined = "\n".join(part.rstrip() for part in body)
         return Decl("type", typedef_name(joined), joined, start, arms), at + 1
 
+    def table(self, at, arms):
+        """The static const dispatch table that starts at `at`, and the line after it."""
+        start = at
+        body = [self.lines[at]]
+        while "};" not in code_only(body[-1]):
+            at += 1
+            body.append(self.lines[at])
+        name = IDENT.findall(code_only(body[0]).split("=")[0])[-1]
+        return Decl("table", name, "\n".join(part.rstrip() for part in body), start, arms), at + 1
+
     def parenthesized(self, at):
         """The lines from `at` to the line that closes its parentheses, and the index of that line."""
         body = [self.lines[at]]
@@ -527,7 +540,9 @@ class Header:
             return Decl("type", name, joined, start, arms, members_in(body)), at + 1
         if macro in self.templates:
             return Decl("invocation", macro, joined, start, arms), at + 1
-        if macro == "EMBED_BUILD_WARNING":
+        # A table layout asserts the slots of the type above it, and a table invocation defines a table that a block
+        # in the body of its macro documents
+        if macro in ("EMBED_BUILD_WARNING", "EMBED_TABLE_LAYOUT", "EMBED_ATOMIC_TABLE"):
             return None, at + 1
         self.fail(start, "a macro invocation the reader does not know: " + macro)
         return None, at + 1
@@ -562,6 +577,25 @@ class Header:
         body = [without_continuation(part) for part in directive[1:]]
         self.templates[name] = (params, body)
 
+    def expand_type(self, decl, params, args, comment, body, at, index):
+        """The entry of a typedef in a macro body, for the type each invocation writes, and the line after it."""
+        lines = [body[at]]
+        if not code_only(body[at]).rstrip().endswith(";"):
+            while not (lines[-1].strip().startswith("}") and lines[-1].strip().endswith(";")):
+                at += 1
+                lines.append(body[at])
+        text = substitute("\n".join(line.rstrip() for line in lines), params, args)
+        name = IDENT.findall(code_only(text.split("\n")[-1]).split("}")[-1])[-1]
+        key = (decl.name, index)
+        entry = self.by_name.get(key)
+        if entry is None:
+            entry = Entry(parse_block(comment, decl.line, 0))
+            self.entries.append(entry)
+            self.by_name[key] = entry
+        entry.add(Decl("type", name, text, decl.line, decl.stack, members_in(text.split("\n"))))
+        self.by_name.setdefault(name, entry)
+        return at + 1
+
     def expand(self, decl):
         """An entry for each block in a macro body, with the function each invocation writes."""
         params, body = self.templates[decl.name]
@@ -577,6 +611,10 @@ class Header:
                     comment.append(body[at])
                 comment[-1] = comment[-1][: comment[-1].index("*/")]
                 at += 1
+                if body[at].strip().startswith("typedef"):
+                    at = self.expand_type(decl, params, args, comment, body, at, index)
+                    index += 1
+                    continue
                 signature = []
                 while body[at].strip() != "{":
                     signature.append(body[at].strip())

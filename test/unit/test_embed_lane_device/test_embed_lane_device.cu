@@ -42,7 +42,8 @@ __global__ static void lane_copy_kernel(const embed_u8 *from, embed_u8 *to, embe
     const embed_u32 lane = (blockIdx.x * blockDim.x) + threadIdx.x;
     if (lane < lanes)
     {
-        embed_lane_put(to + (lane * EMBED_LANE_BYTES), embed_lane_load(from + (lane * EMBED_LANE_BYTES)));
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, to + (lane * EMBED_LANE_BYTES),
+                   EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, from + (lane * EMBED_LANE_BYTES)));
     }
 }
 
@@ -51,7 +52,8 @@ __global__ static void lane_fill_kernel(embed_u8 val, embed_u8 *to, embed_u32 la
     const embed_u32 lane = (blockIdx.x * blockDim.x) + threadIdx.x;
     if (lane < lanes)
     {
-        embed_lane_put(to + (lane * EMBED_LANE_BYTES), embed_lane_fill_byte(val));
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, to + (lane * EMBED_LANE_BYTES),
+                   EMBED_CALL(embed_lane_fill_byte, EmbedLaneFillByteCfg, val));
     }
 }
 
@@ -60,9 +62,12 @@ __global__ static void lane_divide_kernel(const embed_u32 *x, embed_u32 *divided
     const embed_u32 lane = (blockIdx.x * blockDim.x) + threadIdx.x;
     if (lane < lanes)
     {
-        const embed_lane loaded = embed_lane_load(x + (lane * EMBED_LANE_U32S));
-        const embed_lane biased = embed_lane_add_u32(loaded, embed_lane_shift_right_u32(loaded, 8u));
-        embed_lane_put(divided + (lane * EMBED_LANE_U32S), embed_lane_shift_right_u32(biased, 8u));
+        const embed_lane loaded = EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, x + (lane * EMBED_LANE_U32S));
+        const embed_lane biased =
+            EMBED_CALL(embed_lane_add_u32, EmbedLaneAddU32Cfg, loaded,
+                       EMBED_CALL(embed_lane_shift_right_u32, EmbedLaneShiftRightU32Cfg, loaded, 8u));
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, divided + (lane * EMBED_LANE_U32S),
+                   EMBED_CALL(embed_lane_shift_right_u32, EmbedLaneShiftRightU32Cfg, biased, 8u));
     }
 }
 
@@ -75,16 +80,21 @@ __global__ static void lane_arithmetic_kernel(const embed_u32 *one, const embed_
     if (lane < lanes)
     {
         const embed_u32 at = lane * EMBED_LANE_U32S;
-        const embed_lane a = embed_lane_load(one + at);
-        const embed_lane b = embed_lane_load(other + at);
-        embed_lane_put(out_and + at, embed_lane_and(a, b));
-        embed_lane_put(out_or + at, embed_lane_or(a, b));
-        embed_lane_put(out_xor + at, embed_lane_xor(a, b));
-        embed_lane_put(out_add + at, embed_lane_add_u32(a, b));
-        embed_lane_put(out_sub + at, embed_lane_sub_u32(a, b));
-        embed_lane_put(out_mul + at, embed_lane_mul_u32(a, b));
-        embed_lane_put(out_left + at, embed_lane_shift_left_u32(a, count));
-        embed_lane_put(out_right + at, embed_lane_shift_right_u32(a, count));
+        const embed_lane a = EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, one + at);
+        const embed_lane b = EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, other + at);
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, out_and + at, EMBED_CALL(embed_lane_and, EmbedLaneAndCfg, a, b));
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, out_or + at, EMBED_CALL(embed_lane_or, EmbedLaneOrCfg, a, b));
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, out_xor + at, EMBED_CALL(embed_lane_xor, EmbedLaneXorCfg, a, b));
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, out_add + at,
+                   EMBED_CALL(embed_lane_add_u32, EmbedLaneAddU32Cfg, a, b));
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, out_sub + at,
+                   EMBED_CALL(embed_lane_sub_u32, EmbedLaneSubU32Cfg, a, b));
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, out_mul + at,
+                   EMBED_CALL(embed_lane_mul_u32, EmbedLaneMulU32Cfg, a, b));
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, out_left + at,
+                   EMBED_CALL(embed_lane_shift_left_u32, EmbedLaneShiftLeftU32Cfg, a, count));
+        EMBED_CALL(embed_lane_put, EmbedLanePutCfg, out_right + at,
+                   EMBED_CALL(embed_lane_shift_right_u32, EmbedLaneShiftRightU32Cfg, a, count));
     }
 }
 
@@ -94,12 +104,13 @@ __global__ static void lane_masks_kernel(const embed_u8 *one, const embed_u8 *ot
     const embed_u32 lane = (blockIdx.x * blockDim.x) + threadIdx.x;
     if (lane < lanes)
     {
-        const embed_lane a = embed_lane_load(one + (lane * EMBED_LANE_BYTES));
-        const embed_lane b = embed_lane_load(other + (lane * EMBED_LANE_BYTES));
-        const embed_lane_mask zeros = embed_lane_bytes_zero(a);
-        equal[lane] = embed_lane_bytes_equal(a, b);
+        const embed_lane a = EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, one + (lane * EMBED_LANE_BYTES));
+        const embed_lane b = EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, other + (lane * EMBED_LANE_BYTES));
+        const embed_lane_mask zeros = EMBED_CALL(embed_lane_bytes_zero, EmbedLaneBytesZeroCfg, a);
+        equal[lane] = EMBED_CALL(embed_lane_bytes_equal, EmbedLaneBytesEqualCfg, a, b);
         zero[lane] = zeros;
-        first_zero[lane] = (zeros != 0u) ? embed_lane_mask_first(zeros) : 0xffffffffu;
+        first_zero[lane] =
+            (zeros != 0u) ? EMBED_CALL(embed_lane_mask_first, EmbedLaneMaskFirstCfg, zeros) : 0xffffffffu;
     }
 }
 

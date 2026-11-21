@@ -38,32 +38,35 @@ static embed_atomic_word s_genmc_wakes;
 /** @brief The clock, in nanoseconds. */
 static embed_atomic_word s_genmc_clock;
 
-int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value old_value, embed_word nanoseconds)
+int embed_word_wait(const EmbedWordWaitCfg *args)
 {
-    const embed_atomic_word_value wake_count = embed_atomic_word_load(&s_genmc_wakes);
+    const embed_atomic_word_value wake_count =
+        EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = &s_genmc_wakes);
 
     // Explicit casts retain the low 32 bits of each value, the bits the futex compares
-    if ((uint32_t)embed_atomic_word_load(word) != (uint32_t)old_value)
+    if ((uint32_t)EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = args->word) !=
+        (uint32_t)args->old_value)
     {
         return 1;
     }
-    if (nanoseconds == 0u)
+    if (args->nanoseconds == 0u)
     {
         return 0;
     }
     // A loop that reads only the count of wakes. The spin-assume of GenMC takes it as a wait, and its liveness check
     // reports an execution in which no wake ever ends the wait
-    while (embed_atomic_word_load(&s_genmc_wakes) == wake_count)
+    while (EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = &s_genmc_wakes) == wake_count)
     {
         // The condition reads the count of wakes, and the loop has no other step
     }
     return 0;
 }
 
-void embed_word_wake(embed_atomic_word *word)
+void embed_word_wake(const EmbedWordWakeCfg *args)
 {
-    (void)word;
-    (void)embed_atomic_word_fetch_add(&s_genmc_wakes, 1u);
+    (void)args->word;
+    (void)EMBED_CALL(embed_atomic_word_table.fetch_add, EmbedAtomicWordFetchAddCfg, .word = &s_genmc_wakes,
+                     .value = 1u);
 }
 
 embed_word embed_clock_ns(void)
@@ -71,7 +74,9 @@ embed_word embed_clock_ns(void)
     const embed_atomic_word_value step = (embed_atomic_word_value)1u << EMBED_TURNSTILE_UNIT_SHIFT;
 
     // Explicit cast takes the clock modulo the word, which is the contract of the clock
-    return (embed_word)(embed_atomic_word_fetch_add(&s_genmc_clock, step) + step);
+    return (embed_word)(EMBED_CALL(embed_atomic_word_table.fetch_add, EmbedAtomicWordFetchAddCfg,
+                                   .word = &s_genmc_clock, .value = step) +
+                        step);
 }
 
 #endif

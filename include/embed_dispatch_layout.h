@@ -643,6 +643,9 @@ EMBED_BEGIN_DECLS
  * @note EMBED_CAT builds the arity line's name from EMBED_NARG's count of the member list. The
  *       caller writes each member once.
  * @warning A member of some other type changes sizeof(Table_) and fails the size assertion.
+ * @warning MSVC counts __VA_ARGS__ as the standard does only under /Zc:preprocessor. Its C11 mode turns that
+ *          option on. A C++ unit under MSVC needs it on the command line, or the count is wrong and the build
+ *          stops.
  */
 #define EMBED_TABLE_LAYOUT(Table_, ...)                                                                                \
     EMBED_CAT(EMBED_TABLE_SLOTS_, EMBED_NARG(__VA_ARGS__))(Table_, __VA_ARGS__)                                        \
@@ -712,15 +715,34 @@ EMBED_BEGIN_DECLS
  * @note C sets to zero each member that the initializer does not name. A compound literal in an
  *       argument lives to the end of the block around it. So entry_ can retain the pointer for the full
  *       call.
- * @note Use this macro from C only. No revision of C++ has compound literals. GNU C++ accepts one as
- *       an extension, but its lifetime there ends at the full-expression. That breaks the [BORROWS]
- *       contract below.
+ * @note No revision of C++ has compound literals. In C++ the macro builds a braced temporary of ArgsType_ and
+ *       passes its address through embed_cfg_address. The temporary lives to the end of the full-expression, which
+ *       covers the call and no more.
+ * @note A call in C++ before C++20 gives the initializers in the order of the members, with no designators.
+ *       Each call in these headers does so, and so each header compiles as C++11.
  * @note EMBED_ENTRY and EMBED_ENTRY_V expand this macro at a definition site, which is a .c file that
  *       compiles as C. A C++ translation unit sees the prototype under EMBED_BEGIN_DECLS and never
  *       the expansion.
- * @warning entry_ receives the address of the literal [BORROWS].
+ * @warning entry_ receives the address of the literal [BORROWS]. In C++ the address is good for the call
+ *          alone, so entry_ must not retain it.
  */
+#if defined(__cplusplus)
+#define EMBED_CALL(entry_, ArgsType_, ...) entry_(embed_cfg_address(ArgsType_{__VA_ARGS__}))
+
+/**
+ * @brief The address of a Cfg, for EMBED_CALL in C++, where a braced temporary has no address operator.
+ *
+ * @param[in] cfg The Cfg [BORROWS].
+ * @return        The address of cfg, good to the end of the full-expression of the call.
+ * @note Cfg_ is the type of the Cfg. The template has C++ linkage, inside the C guard of this header.
+ */
+extern "C++" template <typename Cfg_> EMBED_HOST_DEVICE inline const Cfg_ *embed_cfg_address(const Cfg_ &cfg)
+{
+    return &cfg;
+}
+#else
 #define EMBED_CALL(entry_, ArgsType_, ...) entry_(&(ArgsType_){__VA_ARGS__})
+#endif
 
 /**
  * @brief Defines an entry point that returns a value and forwards an argument pack.

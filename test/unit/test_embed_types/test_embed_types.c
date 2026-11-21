@@ -179,10 +179,16 @@ void test_a_stored_count_reads_back_each_count_that_a_set_writes(void)
 {
     embed_stored_u64 stored = {0};
 
-    embed_stored_u64_set(&stored, 0x0123456789ABCDEFULL);
-    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x0123456789ABCDEFULL, embed_stored_u64_get(&stored), "a count with both halves");
-    embed_stored_u64_set(&stored, 0x0123456700000001ULL);
-    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x0123456700000001ULL, embed_stored_u64_get(&stored), "the same upper half");
-    embed_stored_u64_set(&stored, 0x00000000FFFFFFFFULL);
-    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x00000000FFFFFFFFULL, embed_stored_u64_get(&stored), "a count below 2^32");
+    EMBED_CALL(embed_stored_u64_table.set, EmbedStoredU64SetCfg, .stored = &stored, .count = 0x0123456789ABCDEFULL);
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x0123456789ABCDEFULL,
+                                    EMBED_CALL(embed_stored_u64_table.get, EmbedStoredU64GetCfg, .stored = &stored),
+                                    "a count with both halves");
+    EMBED_CALL(embed_stored_u64_table.set, EmbedStoredU64SetCfg, .stored = &stored, .count = 0x0123456700000001ULL);
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x0123456700000001ULL,
+                                    EMBED_CALL(embed_stored_u64_table.get, EmbedStoredU64GetCfg, .stored = &stored),
+                                    "the same upper half");
+    EMBED_CALL(embed_stored_u64_table.set, EmbedStoredU64SetCfg, .stored = &stored, .count = 0x00000000FFFFFFFFULL);
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x00000000FFFFFFFFULL,
+                                    EMBED_CALL(embed_stored_u64_table.get, EmbedStoredU64GetCfg, .stored = &stored),
+                                    "a count below 2^32");
 }

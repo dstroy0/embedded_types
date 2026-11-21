@@ -44,13 +44,18 @@ static void *worker(void *unused)
     void *job = NULL;
     (void)unused;
     // Explicit casts carry the address of a local of this worker as the integer that the entry takes
-    const unsigned int place = embed_turnstile_enter(&s_set, (embed_atomic_uptr_value)(uintptr_t)&found_stamp);
+    const unsigned int place = EMBED_CALL(embed_turnstile_table.enter, EmbedTurnstileEnterCfg, .set = &s_set,
+                                          .address = (embed_atomic_uptr_value)(uintptr_t)&found_stamp);
 
-    if (embed_ticket_ring_pop(&s_ring, embed_ticket_stamp(1u, 0u), place, &job, &found_stamp))
+    if (EMBED_CALL(embed_ticket_ring_table.pop, EmbedTicketRingPopCfg, .ring = &s_ring,
+                   .stamp =
+                       EMBED_CALL(embed_ticket_ring_table.ticket_stamp, EmbedTicketStampCfg, .epoch = 1u, .ticket = 0u),
+                   .lane_place = place, .job = &job, .found_stamp = &found_stamp))
     {
         // The pop that succeeds reads the job of the push, and its count completes before the pass ends
         assert(job == &s_job);
-        (void)embed_atomic_u32_fetch_add(&s_landed_pops, 1u);
+        (void)EMBED_CALL(embed_atomic_u32_table.fetch_add, EmbedAtomicU32FetchAddCfg, .word = &s_landed_pops,
+                         .value = 1u);
     }
     else
     {
@@ -58,7 +63,7 @@ static void *worker(void *unused)
         assert(job == NULL);
         assert((found_stamp & EMBED_TICKET_PUSHED_BIT) != 0u);
     }
-    embed_turnstile_leave(&s_set, place);
+    EMBED_CALL(embed_turnstile_table.leave, EmbedTurnstileLeaveCfg, .set = &s_set, .place = place);
     return NULL;
 }
 
@@ -67,15 +72,19 @@ static void *writer(void *unused)
 {
     embed_word found_stamp = 0u;
     (void)unused;
-    const embed_word slot_stamp = embed_atomic_word_load(&s_slots[0].stamp);
+    const embed_word slot_stamp =
+        EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = &s_slots[0].stamp);
 
     if ((slot_stamp & EMBED_TICKET_POPPED_BIT) != 0u)
     {
         // The pass of the observed pop started before the drain, so the drain waits for it, and its count is complete
         // when the release runs
-        assert(embed_ticket_ring_drain_release(&s_set, &s_ring, embed_ticket_stamp(1u, 0u), &found_stamp));
-        assert(embed_atomic_u32_load(&s_landed_pops) == 1u);
-        embed_atomic_u32_store(&s_release_mark, 1u);
+        assert(EMBED_CALL(
+            embed_ticket_ring_table.drain_release, EmbedTicketRingDrainReleaseCfg, .set = &s_set, .ring = &s_ring,
+            .stamp = EMBED_CALL(embed_ticket_ring_table.ticket_stamp, EmbedTicketStampCfg, .epoch = 1u, .ticket = 0u),
+            .found_stamp = &found_stamp));
+        assert(EMBED_CALL(embed_atomic_u32_table.load, EmbedAtomicU32LoadCfg, .word = &s_landed_pops) == 1u);
+        EMBED_CALL(embed_atomic_u32_table.store, EmbedAtomicU32StoreCfg, .word = &s_release_mark, .value = 1u);
     }
     return NULL;
 }
@@ -84,14 +93,19 @@ int main(void)
 {
     pthread_t threads[3];
     embed_word found_stamp = 0u;
-    const embed_word stamp = embed_ticket_stamp(1u, 0u);
+    const embed_word stamp =
+        EMBED_CALL(embed_ticket_ring_table.ticket_stamp, EmbedTicketStampCfg, .epoch = 1u, .ticket = 0u);
     const embed_word life_bits = EMBED_TICKET_GRANTED_BIT | EMBED_TICKET_PUSHED_BIT | EMBED_TICKET_POPPED_BIT;
 
-    embed_ticket_ring_begin(&s_ring, s_slots, 0u);
-    assert(embed_ticket_ring_grant(&s_ring, stamp, &found_stamp));
-    assert(!embed_ticket_ring_grant(&s_ring, stamp, &found_stamp));
-    assert(embed_ticket_ring_push(&s_ring, stamp, &s_job, &found_stamp));
-    assert(!embed_ticket_ring_push(&s_ring, stamp, &s_job, &found_stamp));
+    EMBED_CALL(embed_ticket_ring_table.begin, EmbedTicketRingBeginCfg, .ring = &s_ring, .slots = s_slots, .shift = 0u);
+    assert(EMBED_CALL(embed_ticket_ring_table.grant, EmbedTicketRingGrantCfg, .ring = &s_ring, .stamp = stamp,
+                      .found_stamp = &found_stamp));
+    assert(!EMBED_CALL(embed_ticket_ring_table.grant, EmbedTicketRingGrantCfg, .ring = &s_ring, .stamp = stamp,
+                       .found_stamp = &found_stamp));
+    assert(EMBED_CALL(embed_ticket_ring_table.push, EmbedTicketRingPushCfg, .ring = &s_ring, .stamp = stamp,
+                      .job = &s_job, .found_stamp = &found_stamp));
+    assert(!EMBED_CALL(embed_ticket_ring_table.push, EmbedTicketRingPushCfg, .ring = &s_ring, .stamp = stamp,
+                       .job = &s_job, .found_stamp = &found_stamp));
 
     (void)pthread_create(&threads[0], NULL, worker, NULL);
     (void)pthread_create(&threads[1], NULL, worker, NULL);
@@ -101,25 +115,31 @@ int main(void)
         (void)pthread_join(threads[thread_index], NULL);
     }
     // One pop of the two landed, and the other failed
-    assert(embed_atomic_u32_load(&s_landed_pops) == 1u);
+    assert(EMBED_CALL(embed_atomic_u32_table.load, EmbedAtomicU32LoadCfg, .word = &s_landed_pops) == 1u);
     // The release landed where the drain ran after the pop, and the slot stamp then carries every flag of the life
-    const embed_word slot_stamp = embed_atomic_word_load(&s_slots[0].stamp);
+    const embed_word slot_stamp =
+        EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = &s_slots[0].stamp);
 
     assert((slot_stamp & life_bits) == life_bits);
-    assert(((slot_stamp & EMBED_TICKET_RELEASED_BIT) != 0u) == (embed_atomic_u32_load(&s_release_mark) == 1u));
-    assert(embed_ticket_fields_of_stamp(slot_stamp) == stamp);
-    assert(embed_ticket_lane_of_stamp(slot_stamp) < EMBED_TURNSTILE_LANES);
+    assert(((slot_stamp & EMBED_TICKET_RELEASED_BIT) != 0u) ==
+           (EMBED_CALL(embed_atomic_u32_table.load, EmbedAtomicU32LoadCfg, .word = &s_release_mark) == 1u));
+    assert(EMBED_CALL(embed_ticket_ring_table.ticket_fields_of_stamp, EmbedTicketFieldsOfStampCfg,
+                      .stamp = slot_stamp) == stamp);
+    assert(EMBED_CALL(embed_ticket_ring_table.ticket_lane_of_stamp, EmbedTicketLaneOfStampCfg, .stamp = slot_stamp) <
+           EMBED_TURNSTILE_LANES);
     // Each pass ended: each lane is free, or closed above the open count, and the queue is empty
-    const unsigned int open_lane_count = embed_turnstile_open_lane_count(&s_set);
+    const unsigned int open_lane_count =
+        EMBED_CALL(embed_turnstile_table.open_lane_count, EmbedTurnstileOpenLaneCountCfg, .set = &s_set);
 
     for (unsigned int place = 0u; place < 2u; place += 1u)
     {
-        const embed_atomic_word_value lane_word = embed_atomic_word_load(&s_set.lanes[place].word);
+        const embed_atomic_word_value lane_word =
+            EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = &s_set.lanes[place].word);
         const embed_atomic_word_value state = lane_word & (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT);
 
         assert((state == 0u) ||
                ((state == (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT)) && (place >= open_lane_count)));
     }
-    assert(embed_atomic_u32_load(&s_set.queue_length) == 0u);
+    assert(EMBED_CALL(embed_atomic_u32_table.load, EmbedAtomicU32LoadCfg, .word = &s_set.queue_length) == 0u);
     return 0;
 }

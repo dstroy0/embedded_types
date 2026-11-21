@@ -21,13 +21,40 @@ No arm has an atomic word of 16 bits. So a word of 16 bits has an `embed_atomic_
 
 [`EMBED_ATOMIC_HAS_64`](api/embed_atomic.md#EMBED_ATOMIC_HAS_64) is 0 under MSVC on a 32-bit target, and 1 on every other target. MSVC gives its 64-bit interlocked intrinsics only to its 64-bit targets. Where the macro is 0, the header defines no 64-bit atomic word. Each use of `embed_atomic_u64` then stops the compile of its file, and the error names the cause. A word, a `size_t` or a `uintptr_t` of 64 bits on such a target stops the build at an `#error`.
 
+## The call
+
+Each function takes one parameter, a pointer to a `const` Cfg of its own. The Cfg is a struct of the parameters of that function, and each member is `const`. A C caller builds the Cfg as a compound literal at the call with `EMBED_CALL`:
+
+```c
+const unsigned int place = EMBED_CALL(embed_turnstile_table.enter, EmbedTurnstileEnterCfg, .set = &set,
+                                      .address = (embed_atomic_uptr_value)(uintptr_t)&worker);
+```
+
+Each header has a dispatch table of its public functions, a `static const` struct of function pointers. `EMBED_TABLE_LAYOUT` asserts the slots of each table. The optimizer folds a call through a table to a direct call. Link-time optimization does the same across translation units. This build turns it on with `EMBEDDED_TYPES_LTO`, and a consumer sets `-flto` or `CMAKE_INTERPROCEDURAL_OPTIMIZATION` for its own build.
+
+The tables of the atomics are `embed_atomic_u32_table` and `embed_atomic_u64_table`. The word, the size and the pointer have aliases of them, as `embed_atomic_word_table` is. A function with no parameter, such as `embed_clock_ns`, takes no Cfg.
+
+In C++, `EMBED_CALL` builds a braced temporary. Before C++20, its initializers go in the order of the members, with no designators. Under MSVC, a C++ unit needs `/Zc:preprocessor` for `EMBED_TABLE_LAYOUT`. A CUDA kernel has no table, and calls each function by its name.
+
 ## The host hooks
 
 The turnstile calls three functions, and a consumer with a store for each thread calls a fourth. The host defines the four:
 
 ```c
-int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value old_value, embed_word nanoseconds);
-void embed_word_wake(embed_atomic_word *word);
+typedef struct
+{
+    embed_atomic_word *const word;
+    const embed_atomic_word_value old_value;
+    const embed_word nanoseconds;
+} EmbedWordWaitCfg;
+
+typedef struct
+{
+    embed_atomic_word *const word;
+} EmbedWordWakeCfg;
+
+int embed_word_wait(const EmbedWordWaitCfg *args);
+void embed_word_wake(const EmbedWordWakeCfg *args);
 embed_word embed_clock_ns(void);
 embed_u32 embed_thread_place(void);
 ```

@@ -200,22 +200,28 @@ typedef embed_u64 embed_lane_mask;
 #define EMBED_LANE_MASK_OF(bytes_)                                                                                     \
     (((bytes_) >= EMBED_LANE_BYTES) ? EMBED_LANE_MASK_ALL : (embed_lane_mask)(((embed_lane_mask)1u << (bytes_)) - 1u))
 
+/** @brief The parameters of embed_lane_mask_first. */
+typedef struct
+{
+    const embed_lane_mask mask; /**< A mask with at least one byte set. */
+} EmbedLaneMaskFirstCfg;
+
 /**
  * @brief The index of the first byte set in a mask.
  *
- * @param[in] mask A mask with at least one byte set.
+ * @param[in] args The parameters, as EmbedLaneMaskFirstCfg holds them [BORROWS].
  * @return         The byte, counted from the first.
  * @note The trailing zero count where the compiler has it, else the lowest bit isolated and placed by six masked
  *       steps.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask mask)
+EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(const EmbedLaneMaskFirstCfg *args)
 {
 #if EMBED_HAS_BUILTIN(__builtin_ctzll)
     // Explicit casts widen the mask to the builtin's operand and read its count, below 64, as unsigned
-    return (embed_u32)__builtin_ctzll((unsigned long long)mask);
+    return (embed_u32)__builtin_ctzll((unsigned long long)args->mask);
 #else
     // Explicit casts widen the mask to 64 bits, so the negation keeps the lowest set bit alone at each mask width
-    const unsigned long long low = (unsigned long long)mask & (0ull - (unsigned long long)mask);
+    const unsigned long long low = (unsigned long long)args->mask & (0ull - (unsigned long long)args->mask);
     embed_u32 byte = 0u;
 
     byte += ((low & 0xFFFFFFFF00000000ull) != 0u) ? 32u : 0u;
@@ -228,37 +234,55 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask m
 #endif
 }
 
+/** @brief The parameters of embed_lane_mask_before. */
+typedef struct
+{
+    const embed_lane_mask mask; /**< Bytes that end a walk. */
+} EmbedLaneMaskBeforeCfg;
+
 /**
  * @brief The bytes before the first set byte of a mask, or every byte where the mask has no set byte.
  *
- * @param[in] mask Bytes that end a walk.
+ * @param[in] args The parameters, as EmbedLaneMaskBeforeCfg holds them [BORROWS].
  * @return         The bytes ahead of the first one that ends it.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_mask_before(embed_lane_mask mask)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_mask_before(const EmbedLaneMaskBeforeCfg *args)
 {
-    return (mask == 0u) ? EMBED_LANE_MASK_ALL : (embed_lane_mask)((mask & (0u - mask)) - 1u);
+    return (args->mask == 0u) ? EMBED_LANE_MASK_ALL : (embed_lane_mask)((args->mask & (0u - args->mask)) - 1u);
 }
 
-/**
- * @brief A lane loaded from any address.
- *
- * @param[in] at The address of the EMBED_LANE_BYTES bytes to read, at any alignment.
- * @return       The bytes as a lane.
- */
 #if EMBED_LANE_PLAIN
-// The portable lane is a struct, and a struct cannot take the raw attributes. So this arm reads the lane one raw
-// word at a time, as for the word. The raw word has both attributes on every compiler that has them. The union
-// gives the lane a view as words, which C defines, so no pointer casts between the two types.
+/**
+ * @brief The lane and the same bytes as words, for the load and the put of the portable arm.
+ *
+ * @note The portable lane is a struct, and a struct cannot take the raw attributes. So this arm reads the lane one
+ *       raw word at a time, as for the word. The raw word has both attributes on every compiler that has them. The
+ *       union gives the lane a view as words, which C defines, so no pointer casts between the two types.
+ */
 typedef union
 {
     embed_lane lane;                                         /**< The lane. */
     embed_word words[EMBED_LANE_BYTES / sizeof(embed_word)]; /**< The same bytes as words. */
 } embed_lane_words;
+#endif
 
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
+/** @brief The parameters of embed_lane_load. */
+typedef struct
+{
+    const void *const at; /**< The address of the EMBED_LANE_BYTES bytes to read, at any alignment. */
+} EmbedLaneLoadCfg;
+
+/**
+ * @brief A lane loaded from any address.
+ *
+ * @param[in] args The parameters, as EmbedLaneLoadCfg holds them [BORROWS].
+ * @return         The bytes as a lane.
+ */
+#if EMBED_LANE_PLAIN
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const EmbedLaneLoadCfg *args)
 {
     embed_lane_words view;
-    const embed_raw_word *const from = (const embed_raw_word *)at;
+    const embed_raw_word *const from = (const embed_raw_word *)args->at;
 
     for (size_t place = 0u; place < (EMBED_LANE_BYTES / sizeof(embed_word)); place += 1u)
     {
@@ -267,251 +291,329 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
     return view.lane;
 }
 #else
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const EmbedLaneLoadCfg *args)
 {
-    return *(const embed_lane_raw *)at;
+    return *(const embed_lane_raw *)args->at;
 }
 #endif
+
+/** @brief The parameters of embed_lane_load_aligned. */
+typedef struct
+{
+    const void *const at; /**< The address of the EMBED_LANE_BYTES bytes to read, a multiple of EMBED_LANE_BYTES. */
+} EmbedLaneLoadAlignedCfg;
 
 /**
  * @brief A lane loaded from an address aligned to the lane.
  *
- * @param[in] at The address of the EMBED_LANE_BYTES bytes to read, a multiple of EMBED_LANE_BYTES.
- * @return       The bytes as a lane.
+ * @param[in] args The parameters, as EmbedLaneLoadAlignedCfg holds them [BORROWS].
+ * @return         The bytes as a lane.
  * @warning C leaves a load from an address not aligned to the lane undefined here. embed_lane_load
  *          reads from any address.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load_aligned(const void *at)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load_aligned(const EmbedLaneLoadAlignedCfg *args)
 {
-    return *(const embed_lane *)at;
+    return *(const embed_lane *)args->at;
 }
+
+/** @brief The parameters of embed_lane_put. */
+typedef struct
+{
+    void *const destination; /**< The address of the EMBED_LANE_BYTES bytes to write, at any alignment. */
+    const embed_lane lane;   /**< The bytes. */
+} EmbedLanePutCfg;
 
 /**
  * @brief A lane put at any address.
  *
- * @param[out] destination The address of the EMBED_LANE_BYTES bytes to write, at any alignment.
- * @param[in]  lane        The bytes.
+ * @param[in] args The parameters, as EmbedLanePutCfg holds them [BORROWS].
  */
 #if EMBED_LANE_PLAIN
 // The store that matches the load arm above, one raw word at a time, for the same reason.
-EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *destination, embed_lane lane)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(const EmbedLanePutCfg *args)
 {
     embed_lane_words view;
-    embed_raw_word *const to = (embed_raw_word *)destination;
+    embed_raw_word *const to = (embed_raw_word *)args->destination;
 
-    view.lane = lane;
+    view.lane = args->lane;
     for (size_t place = 0u; place < (EMBED_LANE_BYTES / sizeof(embed_word)); place += 1u)
     {
         to[place] = view.words[place];
     }
 }
 #else
-EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *destination, embed_lane lane)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(const EmbedLanePutCfg *args)
 {
-    *(embed_lane_raw *)destination = lane;
+    *(embed_lane_raw *)args->destination = args->lane;
 }
 #endif
+
+/** @brief The parameters of embed_lane_put_aligned. */
+typedef struct
+{
+    void *const destination; /**< The address of the EMBED_LANE_BYTES bytes to write, a multiple of EMBED_LANE_BYTES. */
+    const embed_lane lane;   /**< The bytes. */
+} EmbedLanePutAlignedCfg;
 
 /**
  * @brief A lane put at an address aligned to the lane.
  *
- * @param[out] destination The address of the EMBED_LANE_BYTES bytes to write, a multiple of EMBED_LANE_BYTES.
- * @param[in]  lane        The bytes.
+ * @param[in] args The parameters, as EmbedLanePutAlignedCfg holds them [BORROWS].
  * @warning C leaves a store to an address not aligned to the lane undefined here. embed_lane_put
  *          writes to any address.
  */
-EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put_aligned(void *destination, embed_lane lane)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put_aligned(const EmbedLanePutAlignedCfg *args)
 {
-    *(embed_lane *)destination = lane;
+    *(embed_lane *)args->destination = args->lane;
 }
+
+/** @brief The parameters of embed_lane_fill_u32. */
+typedef struct
+{
+    const embed_u32 value; /**< The 32-bit value. */
+} EmbedLaneFillU32Cfg;
 
 /**
  * @brief Every 32-bit lane of a lane set to `value`.
  *
- * @param[in] value The 32-bit value.
- * @return          The lane.
+ * @param[in] args The parameters, as EmbedLaneFillU32Cfg holds them [BORROWS].
+ * @return         The lane.
  * @note On the vector arm a scalar added to the zero vector is the scalar in every lane.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 value)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(const EmbedLaneFillU32Cfg *args)
 {
 #if EMBED_LANE_VECTOR
     const embed_lane zero = {0u};
-    return zero + value;
+    return zero + args->value;
 #else
     embed_lane lane;
-#define EMBED_LANE_FILL_WORD(at_) lane.at[at_] = value;
+#define EMBED_LANE_FILL_WORD(at_) lane.at[at_] = args->value;
     EMBED_LANE_WORDS(EMBED_LANE_FILL_WORD)
 #undef EMBED_LANE_FILL_WORD
     return lane;
 #endif
 }
 
+/** @brief The parameters of embed_lane_fill_byte. */
+typedef struct
+{
+    const embed_u8 byte; /**< The byte. */
+} EmbedLaneFillByteCfg;
+
 /**
  * @brief Every byte of a lane set to `byte`.
  *
- * @param[in] byte The byte.
+ * @param[in] args The parameters, as EmbedLaneFillByteCfg holds them [BORROWS].
  * @return         The lane.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_byte(embed_u8 byte)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_byte(const EmbedLaneFillByteCfg *args)
 {
     // Explicit cast widens the byte to 32 bits, so the product puts a copy of it in each of the four bytes
-    return embed_lane_fill_u32((embed_u32)byte * 0x01010101u);
+    return EMBED_CALL(embed_lane_fill_u32, EmbedLaneFillU32Cfg, (embed_u32)args->byte * 0x01010101u);
 }
+
+/** @brief The parameters of embed_lane_and. */
+typedef struct
+{
+    const embed_lane one;   /**< A lane. */
+    const embed_lane other; /**< A lane. */
+} EmbedLaneAndCfg;
 
 /**
  * @brief The bitwise and of two lanes.
  *
- * @param[in] one   A lane.
- * @param[in] other A lane.
- * @return          The and.
+ * @param[in] args The parameters, as EmbedLaneAndCfg holds them [BORROWS].
+ * @return         The and.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_and(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_and(const EmbedLaneAndCfg *args)
 {
 #if EMBED_LANE_VECTOR
-    return one & other;
+    return args->one & args->other;
 #else
     embed_lane lane;
-#define EMBED_LANE_AND_WORD(at_) lane.at[at_] = one.at[at_] & other.at[at_];
+#define EMBED_LANE_AND_WORD(at_) lane.at[at_] = args->one.at[at_] & args->other.at[at_];
     EMBED_LANE_WORDS(EMBED_LANE_AND_WORD)
 #undef EMBED_LANE_AND_WORD
     return lane;
 #endif
 }
 
+/** @brief The parameters of embed_lane_or. */
+typedef struct
+{
+    const embed_lane one;   /**< A lane. */
+    const embed_lane other; /**< A lane. */
+} EmbedLaneOrCfg;
+
 /**
  * @brief The bitwise or of two lanes.
  *
- * @param[in] one   A lane.
- * @param[in] other A lane.
- * @return          The or.
+ * @param[in] args The parameters, as EmbedLaneOrCfg holds them [BORROWS].
+ * @return         The or.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_or(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_or(const EmbedLaneOrCfg *args)
 {
 #if EMBED_LANE_VECTOR
-    return one | other;
+    return args->one | args->other;
 #else
     embed_lane lane;
-#define EMBED_LANE_OR_WORD(at_) lane.at[at_] = one.at[at_] | other.at[at_];
+#define EMBED_LANE_OR_WORD(at_) lane.at[at_] = args->one.at[at_] | args->other.at[at_];
     EMBED_LANE_WORDS(EMBED_LANE_OR_WORD)
 #undef EMBED_LANE_OR_WORD
     return lane;
 #endif
 }
 
+/** @brief The parameters of embed_lane_xor. */
+typedef struct
+{
+    const embed_lane one;   /**< A lane. */
+    const embed_lane other; /**< A lane. */
+} EmbedLaneXorCfg;
+
 /**
  * @brief The bitwise exclusive or of two lanes.
  *
- * @param[in] one   A lane.
- * @param[in] other A lane.
- * @return          The exclusive or.
+ * @param[in] args The parameters, as EmbedLaneXorCfg holds them [BORROWS].
+ * @return         The exclusive or.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_xor(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_xor(const EmbedLaneXorCfg *args)
 {
 #if EMBED_LANE_VECTOR
-    return one ^ other;
+    return args->one ^ args->other;
 #else
     embed_lane lane;
-#define EMBED_LANE_XOR_WORD(at_) lane.at[at_] = one.at[at_] ^ other.at[at_];
+#define EMBED_LANE_XOR_WORD(at_) lane.at[at_] = args->one.at[at_] ^ args->other.at[at_];
     EMBED_LANE_WORDS(EMBED_LANE_XOR_WORD)
 #undef EMBED_LANE_XOR_WORD
     return lane;
 #endif
 }
 
+/** @brief The parameters of embed_lane_add_u32. */
+typedef struct
+{
+    const embed_lane one;   /**< A lane. */
+    const embed_lane other; /**< A lane. */
+} EmbedLaneAddU32Cfg;
+
 /**
  * @brief The 32-bit lanes of two lanes added, each with wrap around at 32 bits.
  *
- * @param[in] one   A lane.
- * @param[in] other A lane.
- * @return          The sums.
+ * @param[in] args The parameters, as EmbedLaneAddU32Cfg holds them [BORROWS].
+ * @return         The sums.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_add_u32(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_add_u32(const EmbedLaneAddU32Cfg *args)
 {
 #if EMBED_LANE_VECTOR
-    return one + other;
+    return args->one + args->other;
 #else
     embed_lane lane;
-#define EMBED_LANE_ADD_U32_WORD(at_) lane.at[at_] = one.at[at_] + other.at[at_];
+#define EMBED_LANE_ADD_U32_WORD(at_) lane.at[at_] = args->one.at[at_] + args->other.at[at_];
     EMBED_LANE_WORDS(EMBED_LANE_ADD_U32_WORD)
 #undef EMBED_LANE_ADD_U32_WORD
     return lane;
 #endif
 }
 
+/** @brief The parameters of embed_lane_sub_u32. */
+typedef struct
+{
+    const embed_lane one;   /**< A lane. */
+    const embed_lane other; /**< A lane. */
+} EmbedLaneSubU32Cfg;
+
 /**
  * @brief The 32-bit lanes of `other` taken from those of `one`, each with wrap around at 32 bits.
  *
- * @param[in] one   A lane.
- * @param[in] other A lane.
- * @return          The differences.
+ * @param[in] args The parameters, as EmbedLaneSubU32Cfg holds them [BORROWS].
+ * @return         The differences.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_sub_u32(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_sub_u32(const EmbedLaneSubU32Cfg *args)
 {
 #if EMBED_LANE_VECTOR
-    return one - other;
+    return args->one - args->other;
 #else
     embed_lane lane;
-#define EMBED_LANE_SUB_U32_WORD(at_) lane.at[at_] = one.at[at_] - other.at[at_];
+#define EMBED_LANE_SUB_U32_WORD(at_) lane.at[at_] = args->one.at[at_] - args->other.at[at_];
     EMBED_LANE_WORDS(EMBED_LANE_SUB_U32_WORD)
 #undef EMBED_LANE_SUB_U32_WORD
     return lane;
 #endif
 }
 
+/** @brief The parameters of embed_lane_mul_u32. */
+typedef struct
+{
+    const embed_lane one;   /**< A lane. */
+    const embed_lane other; /**< A lane. */
+} EmbedLaneMulU32Cfg;
+
 /**
  * @brief The 32-bit lanes of two lanes multiplied, the low 32 bits of each product retained.
  *
- * @param[in] one   A lane.
- * @param[in] other A lane.
- * @return          The products' low halves.
+ * @param[in] args The parameters, as EmbedLaneMulU32Cfg holds them [BORROWS].
+ * @return         The products' low halves.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_mul_u32(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_mul_u32(const EmbedLaneMulU32Cfg *args)
 {
 #if EMBED_LANE_VECTOR
-    return one * other;
+    return args->one * args->other;
 #else
     embed_lane lane;
-#define EMBED_LANE_MUL_U32_WORD(at_) lane.at[at_] = one.at[at_] * other.at[at_];
+#define EMBED_LANE_MUL_U32_WORD(at_) lane.at[at_] = args->one.at[at_] * args->other.at[at_];
     EMBED_LANE_WORDS(EMBED_LANE_MUL_U32_WORD)
 #undef EMBED_LANE_MUL_U32_WORD
     return lane;
 #endif
 }
 
+/** @brief The parameters of embed_lane_shift_right_u32. */
+typedef struct
+{
+    const embed_lane lane; /**< A lane. */
+    const embed_u32 count; /**< The bits, below 32. */
+} EmbedLaneShiftRightU32Cfg;
+
 /**
  * @brief The 32-bit lanes of a lane shifted right by `count` bits, zeros shifted in.
  *
- * @param[in] lane  A lane.
- * @param[in] count The bits, below 32.
- * @return          The shifted lanes.
+ * @param[in] args The parameters, as EmbedLaneShiftRightU32Cfg holds them [BORROWS].
+ * @return         The shifted lanes.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_right_u32(embed_lane lane, embed_u32 count)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_right_u32(const EmbedLaneShiftRightU32Cfg *args)
 {
 #if EMBED_LANE_VECTOR
-    return lane >> count;
+    return args->lane >> args->count;
 #else
     embed_lane shifted;
-#define EMBED_LANE_SHIFT_RIGHT_U32_WORD(at_) shifted.at[at_] = lane.at[at_] >> count;
+#define EMBED_LANE_SHIFT_RIGHT_U32_WORD(at_) shifted.at[at_] = args->lane.at[at_] >> args->count;
     EMBED_LANE_WORDS(EMBED_LANE_SHIFT_RIGHT_U32_WORD)
 #undef EMBED_LANE_SHIFT_RIGHT_U32_WORD
     return shifted;
 #endif
 }
 
+/** @brief The parameters of embed_lane_shift_left_u32. */
+typedef struct
+{
+    const embed_lane lane; /**< A lane. */
+    const embed_u32 count; /**< The bits, below 32. */
+} EmbedLaneShiftLeftU32Cfg;
+
 /**
  * @brief The 32-bit lanes of a lane shifted left by `count` bits, zeros shifted in.
  *
- * @param[in] lane  A lane.
- * @param[in] count The bits, below 32.
- * @return          The shifted lanes.
+ * @param[in] args The parameters, as EmbedLaneShiftLeftU32Cfg holds them [BORROWS].
+ * @return         The shifted lanes.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane lane, embed_u32 count)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_left_u32(const EmbedLaneShiftLeftU32Cfg *args)
 {
 #if EMBED_LANE_VECTOR
-    return lane << count;
+    return args->lane << args->count;
 #else
     embed_lane shifted;
-#define EMBED_LANE_SHIFT_LEFT_U32_WORD(at_) shifted.at[at_] = lane.at[at_] << count;
+#define EMBED_LANE_SHIFT_LEFT_U32_WORD(at_) shifted.at[at_] = args->lane.at[at_] << args->count;
     EMBED_LANE_WORDS(EMBED_LANE_SHIFT_LEFT_U32_WORD)
 #undef EMBED_LANE_SHIFT_LEFT_U32_WORD
     return shifted;
@@ -528,12 +630,18 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane l
  */
 #define EMBED_LANE_NIBBLE_GATHER 0x01020408u
 
+/** @brief The parameters of embed_lane_bytes_equal. */
+typedef struct
+{
+    const embed_lane one;   /**< A lane. */
+    const embed_lane other; /**< A lane. */
+} EmbedLaneBytesEqualCfg;
+
 /**
  * @brief Which bytes of two lanes are equal, one bit a byte, the lowest byte the lowest bit.
  *
- * @param[in] one   A lane.
- * @param[in] other A lane.
- * @return          The mask.
+ * @param[in] args The parameters, as EmbedLaneBytesEqualCfg holds them [BORROWS].
+ * @return         The mask.
  * @note On the vector arm, the code compares the bytes as a byte vector, and each equal byte becomes
  *       all ones. Where the compiler has the byte mask builtin for the width of the lane, it reads the
  *       mask in one instruction. That builtin is EMBED_BYTE_MASK_256 or EMBED_BYTE_MASK_128. Otherwise
@@ -541,12 +649,12 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane l
  *       code reads out the nibbles. On the portable arm, each 32-bit lane finds its zero bytes by the
  *       carry test of the word, and gathers them the same way.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(const EmbedLaneBytesEqualCfg *args)
 {
     embed_lane_mask mask = 0u;
 #if EMBED_LANE_VECTOR
     // Explicit casts view each lane as its bytes, and read the signed bytes of the compare, 0 or -1, as 0 or 0xFF
-    const embed_lane_bytes equal = (embed_lane_bytes)((embed_lane_bytes)one == (embed_lane_bytes)other);
+    const embed_lane_bytes equal = (embed_lane_bytes)((embed_lane_bytes)args->one == (embed_lane_bytes)args->other);
 #if EMBED_HAS_BYTE_MASK_256 && (EMBED_LANE_BITS == 256)
     // Explicit casts read the builtin's int as the 32 unsigned bits it holds
     mask = (embed_lane_mask)(embed_u32)EMBED_BYTE_MASK_256((embed_lane_chars)equal);
@@ -555,8 +663,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
     mask = (embed_lane_mask)(embed_u32)EMBED_BYTE_MASK_128((embed_lane_chars)equal);
 #else
     // Explicit cast views the bytes as the 32-bit lanes again, and the and keeps one bit of each byte
-    const embed_lane bits = (embed_lane)equal & embed_lane_fill_u32(0x01010101u);
-    const embed_lane nibbles = (bits * embed_lane_fill_u32(EMBED_LANE_NIBBLE_GATHER)) >> 24u;
+    const embed_lane bits = (embed_lane)equal & EMBED_CALL(embed_lane_fill_u32, EmbedLaneFillU32Cfg, 0x01010101u);
+    const embed_lane nibbles =
+        (bits * EMBED_CALL(embed_lane_fill_u32, EmbedLaneFillU32Cfg, EMBED_LANE_NIBBLE_GATHER)) >> 24u;
     // Explicit cast widens the four bits of each 32-bit lane to the mask, before the shift to their place
 #define EMBED_LANE_NIBBLE_WORD(at_) mask |= (embed_lane_mask)nibbles[at_] << (4u * (at_));
     EMBED_LANE_WORDS(EMBED_LANE_NIBBLE_WORD)
@@ -566,8 +675,8 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
     // A byte of the difference of a word is zero where its high bit is clear after the carry test. The sum
     // carries out of each byte that holds a bit, and the complement retains the other bytes.
 #define EMBED_LANE_ZERO_BYTES(at_)                                                                                     \
-    ((~((((one.at[at_] ^ other.at[at_]) & 0x7f7f7f7fu) + 0x7f7f7f7fu) | (one.at[at_] ^ other.at[at_]) |                \
-        0x7f7f7f7fu)) >>                                                                                               \
+    ((~((((args->one.at[at_] ^ args->other.at[at_]) & 0x7f7f7f7fu) + 0x7f7f7f7fu) |                                    \
+        (args->one.at[at_] ^ args->other.at[at_]) | 0x7f7f7f7fu)) >>                                                   \
      7u)
 #define EMBED_LANE_EQUAL_WORD(at_)                                                                                     \
     mask |= (embed_lane_mask)((EMBED_LANE_ZERO_BYTES(at_) * EMBED_LANE_NIBBLE_GATHER) >> 24u) << (4u * (at_));
@@ -578,28 +687,100 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
     return mask;
 }
 
+/** @brief The parameters of embed_lane_bytes_zero. */
+typedef struct
+{
+    const embed_lane lane; /**< A lane. */
+} EmbedLaneBytesZeroCfg;
+
 /**
  * @brief Which bytes of a lane are zero, one bit a byte, the lowest byte the lowest bit.
  *
- * @param[in] lane A lane.
+ * @param[in] args The parameters, as EmbedLaneBytesZeroCfg holds them [BORROWS].
  * @return         The mask.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_zero(embed_lane lane)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_zero(const EmbedLaneBytesZeroCfg *args)
 {
-    return embed_lane_bytes_equal(lane, embed_lane_fill_u32(0u));
+    return EMBED_CALL(embed_lane_bytes_equal, EmbedLaneBytesEqualCfg, args->lane,
+                      EMBED_CALL(embed_lane_fill_u32, EmbedLaneFillU32Cfg, 0u));
 }
+
+/** @brief The parameters of embed_lane_bytes_differ. */
+typedef struct
+{
+    const embed_lane one;   /**< A lane. */
+    const embed_lane other; /**< The lane to compare it with. */
+} EmbedLaneBytesDifferCfg;
 
 /**
  * @brief Which bytes two lanes differ in, one bit a byte, the lowest byte the lowest bit.
  *
- * @param[in] one   A lane.
- * @param[in] other The lane to compare it with.
- * @return          The mask.
+ * @param[in] args The parameters, as EmbedLaneBytesDifferCfg holds them [BORROWS].
+ * @return         The mask.
  */
-EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_differ(embed_lane one, embed_lane other)
+EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_differ(const EmbedLaneBytesDifferCfg *args)
 {
-    return EMBED_LANE_MASK_ALL & ~embed_lane_bytes_equal(one, other);
+    return EMBED_LANE_MASK_ALL & ~EMBED_CALL(embed_lane_bytes_equal, EmbedLaneBytesEqualCfg, args->one, args->other);
 }
+
+/**
+ * @brief The dispatch table of embed_lane.h: one member for each public function, in the order of the header.
+ *
+ * @note EMBED_TABLE_LAYOUT asserts that the members sit at consecutive EMBED_FUNCTION_POINTER_BYTES offsets.
+ */
+typedef struct
+{
+    embed_u32 (*mask_first)(const EmbedLaneMaskFirstCfg *args);           /**< embed_lane_mask_first. */
+    embed_lane_mask (*mask_before)(const EmbedLaneMaskBeforeCfg *args);   /**< embed_lane_mask_before. */
+    embed_lane (*load)(const EmbedLaneLoadCfg *args);                     /**< embed_lane_load. */
+    embed_lane (*load_aligned)(const EmbedLaneLoadAlignedCfg *args);      /**< embed_lane_load_aligned. */
+    void (*put)(const EmbedLanePutCfg *args);                             /**< embed_lane_put. */
+    void (*put_aligned)(const EmbedLanePutAlignedCfg *args);              /**< embed_lane_put_aligned. */
+    embed_lane (*fill_u32)(const EmbedLaneFillU32Cfg *args);              /**< embed_lane_fill_u32. */
+    embed_lane (*fill_byte)(const EmbedLaneFillByteCfg *args);            /**< embed_lane_fill_byte. */
+    embed_lane (*bitwise_and)(const EmbedLaneAndCfg *args);               /**< embed_lane_and. */
+    embed_lane (*bitwise_or)(const EmbedLaneOrCfg *args);                 /**< embed_lane_or. */
+    embed_lane (*bitwise_xor)(const EmbedLaneXorCfg *args);               /**< embed_lane_xor. */
+    embed_lane (*add_u32)(const EmbedLaneAddU32Cfg *args);                /**< embed_lane_add_u32. */
+    embed_lane (*sub_u32)(const EmbedLaneSubU32Cfg *args);                /**< embed_lane_sub_u32. */
+    embed_lane (*mul_u32)(const EmbedLaneMulU32Cfg *args);                /**< embed_lane_mul_u32. */
+    embed_lane (*shift_right_u32)(const EmbedLaneShiftRightU32Cfg *args); /**< embed_lane_shift_right_u32. */
+    embed_lane (*shift_left_u32)(const EmbedLaneShiftLeftU32Cfg *args);   /**< embed_lane_shift_left_u32. */
+    embed_lane_mask (*bytes_equal)(const EmbedLaneBytesEqualCfg *args);   /**< embed_lane_bytes_equal. */
+    embed_lane_mask (*bytes_zero)(const EmbedLaneBytesZeroCfg *args);     /**< embed_lane_bytes_zero. */
+    embed_lane_mask (*bytes_differ)(const EmbedLaneBytesDifferCfg *args); /**< embed_lane_bytes_differ. */
+} EmbedLaneNs;
+EMBED_TABLE_LAYOUT(EmbedLaneNs, mask_first, mask_before, load, load_aligned, put, put_aligned, fill_u32, fill_byte,
+                   bitwise_and, bitwise_or, bitwise_xor, add_u32, sub_u32, mul_u32, shift_right_u32, shift_left_u32,
+                   bytes_equal, bytes_zero, bytes_differ);
+
+#if !defined(__CUDA_ARCH__)
+/**
+ * @brief The table of embed_lane.h. A call through it folds to a direct call under the optimizer and LTO.
+ *
+ * @note The device pass of CUDA has no table, because a kernel cannot read the address of a host function. A
+ *       kernel calls each function by its name.
+ */
+static const EmbedLaneNs embed_lane_table = {embed_lane_mask_first,
+                                             embed_lane_mask_before,
+                                             embed_lane_load,
+                                             embed_lane_load_aligned,
+                                             embed_lane_put,
+                                             embed_lane_put_aligned,
+                                             embed_lane_fill_u32,
+                                             embed_lane_fill_byte,
+                                             embed_lane_and,
+                                             embed_lane_or,
+                                             embed_lane_xor,
+                                             embed_lane_add_u32,
+                                             embed_lane_sub_u32,
+                                             embed_lane_mul_u32,
+                                             embed_lane_shift_right_u32,
+                                             embed_lane_shift_left_u32,
+                                             embed_lane_bytes_equal,
+                                             embed_lane_bytes_zero,
+                                             embed_lane_bytes_differ};
+#endif
 
 EMBED_END_DECLS
 

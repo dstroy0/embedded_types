@@ -35,13 +35,16 @@ static embed_atomic_word s_released;
 static void *worker(void *unused)
 {
     (void)unused;
-    const unsigned int place = embed_turnstile_enter(&s_set, 0u);
-    const embed_atomic_word_value published_word = embed_atomic_word_load(&s_published);
-    const embed_atomic_word_value release_word = embed_atomic_word_load(&s_released);
+    const unsigned int place =
+        EMBED_CALL(embed_turnstile_table.enter, EmbedTurnstileEnterCfg, .set = &s_set, .address = 0u);
+    const embed_atomic_word_value published_word =
+        EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = &s_published);
+    const embed_atomic_word_value release_word =
+        EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = &s_released);
 
     // A pass that reads the old word reads it before its release
     assert((published_word != 0u) || (release_word == 0u));
-    embed_turnstile_leave(&s_set, place);
+    EMBED_CALL(embed_turnstile_table.leave, EmbedTurnstileLeaveCfg, .set = &s_set, .place = place);
     return NULL;
 }
 
@@ -49,9 +52,9 @@ static void *worker(void *unused)
 static void *writer(void *unused)
 {
     (void)unused;
-    embed_atomic_word_store(&s_published, 1u);
-    embed_turnstiles_drain(&s_set);
-    embed_atomic_word_store(&s_released, 1u);
+    EMBED_CALL(embed_atomic_word_table.store, EmbedAtomicWordStoreCfg, .word = &s_published, .value = 1u);
+    EMBED_CALL(embed_turnstile_table.drain, EmbedTurnstilesDrainCfg, .set = &s_set);
+    EMBED_CALL(embed_atomic_word_table.store, EmbedAtomicWordStoreCfg, .word = &s_released, .value = 1u);
     return NULL;
 }
 
@@ -67,16 +70,18 @@ int main(void)
         (void)pthread_join(threads[thread_index], NULL);
     }
     // Each pass ended: each lane is free, or closed above the open count, and the queue is empty
-    const unsigned int open_lane_count = embed_turnstile_open_lane_count(&s_set);
+    const unsigned int open_lane_count =
+        EMBED_CALL(embed_turnstile_table.open_lane_count, EmbedTurnstileOpenLaneCountCfg, .set = &s_set);
 
     for (unsigned int place = 0u; place < 2u; place += 1u)
     {
-        const embed_atomic_word_value lane_word = embed_atomic_word_load(&s_set.lanes[place].word);
+        const embed_atomic_word_value lane_word =
+            EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = &s_set.lanes[place].word);
         const embed_atomic_word_value state = lane_word & (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT);
 
         assert((state == 0u) ||
                ((state == (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT)) && (place >= open_lane_count)));
     }
-    assert(embed_atomic_u32_load(&s_set.queue_length) == 0u);
+    assert(EMBED_CALL(embed_atomic_u32_table.load, EmbedAtomicU32LoadCfg, .word = &s_set.queue_length) == 0u);
     return 0;
 }

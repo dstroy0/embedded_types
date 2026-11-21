@@ -62,6 +62,466 @@ A ring: its index mask, `2^shift` - 1, on a cache line of its own, and its slot 
 - `mask`: `2^shift` - 1.
 - `slots`: `2^shift` slots.
 
+### `EmbedTicketStampCfg` { #EmbedTicketStampCfg }
+
+```c
+typedef struct
+{
+    const embed_word epoch;  /**< The epoch, of which the stamp keeps the low EMBED_TICKET_EPOCH_BITS bits. */
+    const embed_word ticket; /**< The ticket, of which the stamp keeps the low EMBED_TICKET_BITS bits. */
+} EmbedTicketStampCfg;
+```
+
+The parameters of [`embed_ticket_stamp`](#embed_ticket_stamp).
+
+- `epoch`: The epoch, of which the stamp keeps the low [`EMBED_TICKET_EPOCH_BITS`](#EMBED_TICKET_BITS) bits.
+- `ticket`: The ticket, of which the stamp keeps the low [`EMBED_TICKET_BITS`](#EMBED_TICKET_BITS) bits.
+
+### `EmbedTicketOfStampCfg` { #EmbedTicketOfStampCfg }
+
+```c
+typedef struct
+{
+    const embed_word stamp; /**< The stamp. */
+} EmbedTicketOfStampCfg;
+```
+
+The parameters of [`embed_ticket_of_stamp`](#embed_ticket_of_stamp).
+
+- `stamp`: The stamp.
+
+### `EmbedEpochOfStampCfg` { #EmbedEpochOfStampCfg }
+
+```c
+typedef struct
+{
+    const embed_word stamp; /**< The stamp. */
+} EmbedEpochOfStampCfg;
+```
+
+The parameters of [`embed_epoch_of_stamp`](#embed_epoch_of_stamp).
+
+- `stamp`: The stamp.
+
+### `EmbedTicketFlagsOfStampCfg` { #EmbedTicketFlagsOfStampCfg }
+
+```c
+typedef struct
+{
+    const embed_word stamp; /**< The stamp. */
+} EmbedTicketFlagsOfStampCfg;
+```
+
+The parameters of [`embed_ticket_flags_of_stamp`](#embed_ticket_flags_of_stamp).
+
+- `stamp`: The stamp.
+
+### `EmbedTicketLaneOfStampCfg` { #EmbedTicketLaneOfStampCfg }
+
+```c
+typedef struct
+{
+    const embed_word stamp; /**< The stamp of a slot after its pop. */
+} EmbedTicketLaneOfStampCfg;
+```
+
+The parameters of [`embed_ticket_lane_of_stamp`](#embed_ticket_lane_of_stamp).
+
+- `stamp`: The stamp of a slot after its pop.
+
+### `EmbedTicketJobCheckCfg` { #EmbedTicketJobCheckCfg }
+
+```c
+typedef struct
+{
+    const void *const job; /**< The job pointer. */
+} EmbedTicketJobCheckCfg;
+```
+
+The parameters of [`embed_ticket_job_check`](#embed_ticket_job_check).
+
+- `job`: The job pointer.
+
+### `EmbedTicketJobCheckBitsCfg` { #EmbedTicketJobCheckBitsCfg }
+
+```c
+typedef struct
+{
+    const void *const job; /**< The job pointer. */
+} EmbedTicketJobCheckBitsCfg;
+```
+
+The parameters of [`embed_ticket_job_check_bits`](#embed_ticket_job_check_bits).
+
+- `job`: The job pointer.
+
+### `EmbedTicketFieldsOfStampCfg` { #EmbedTicketFieldsOfStampCfg }
+
+```c
+typedef struct
+{
+    const embed_word stamp; /**< The stamp. */
+} EmbedTicketFieldsOfStampCfg;
+```
+
+The parameters of [`embed_ticket_fields_of_stamp`](#embed_ticket_fields_of_stamp).
+
+- `stamp`: The stamp.
+
+### `EmbedTicketRingBeginCfg` { #EmbedTicketRingBeginCfg }
+
+```c
+typedef struct
+{
+    EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    EmbedTicketRingSlot *const
+        slots;                /**< The slot array [BORROWS], 2^shift slots, zero-initialized, which the caller owns. */
+    const unsigned int shift; /**< The slot count as a power of two, at max EMBED_TICKET_RING_SHIFT_MAX. */
+} EmbedTicketRingBeginCfg;
+```
+
+The parameters of [`embed_ticket_ring_begin`](#embed_ticket_ring_begin).
+
+- `ring`: The ring \[BORROWS\].
+- `slots`: The slot array \[BORROWS\], `2^shift` slots, zero-initialized, which the caller owns.
+- `shift`: The slot count as a power of two, at max [`EMBED_TICKET_RING_SHIFT_MAX`](#EMBED_TICKET_RING_SHIFT_MAX).
+
+### `EmbedTicketRingPlaceCfg` { #EmbedTicketRingPlaceCfg }
+
+```c
+typedef struct
+{
+    const EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    const embed_word stamp;            /**< The stamp. */
+} EmbedTicketRingPlaceCfg;
+```
+
+The parameters of [`embed_ticket_ring_place`](#embed_ticket_ring_place).
+
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The stamp.
+
+### `EmbedTicketRingSlotCfg` { #EmbedTicketRingSlotCfg }
+
+```c
+typedef struct
+{
+    const EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    const embed_word stamp;            /**< The stamp. */
+} EmbedTicketRingSlotCfg;
+```
+
+The parameters of [`embed_ticket_ring_slot`](#embed_ticket_ring_slot).
+
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The stamp.
+
+### `EmbedTicketRingExpectedStampCfg` { #EmbedTicketRingExpectedStampCfg }
+
+```c
+typedef struct
+{
+    const embed_word stamp; /**< The input stamp, as the caller holds it. */
+    const embed_word flags; /**< The flag bits of the transitions before this one. */
+} EmbedTicketRingExpectedStampCfg;
+```
+
+The parameters of [`embed_ticket_ring_expected_stamp`](#embed_ticket_ring_expected_stamp).
+
+- `stamp`: The input stamp, as the caller holds it.
+- `flags`: The flag bits of the transitions before this one.
+
+### `EmbedTicketRingGuardedStampCfg` { #EmbedTicketRingGuardedStampCfg }
+
+```c
+typedef struct
+{
+    const embed_word current_stamp; /**< The current value of the slot word. */
+    const embed_word valid_mask;    /**< All ones where the state test passed, all zeros where it did not. */
+} EmbedTicketRingGuardedStampCfg;
+```
+
+The parameters of [`embed_ticket_ring_guarded_stamp`](#embed_ticket_ring_guarded_stamp).
+
+- `current_stamp`: The current value of the slot word.
+- `valid_mask`: All ones where the state test passed, all zeros where it did not.
+
+### `EmbedTicketRingTransitionCfg` { #EmbedTicketRingTransitionCfg }
+
+```c
+typedef struct
+{
+    EmbedTicketRingSlot *const slot; /**< The slot [BORROWS]. */
+    const embed_word expected_stamp; /**< The expected stamp. */
+    const embed_word new_stamp;      /**< The new stamp: the expected stamp with the flag bit of the transition. */
+    embed_word *const found_stamp;   /**< The stamp that the compare found in the slot [BORROWS]: the expected stamp on
+                                        success, the current stamp on failure. */
+} EmbedTicketRingTransitionCfg;
+```
+
+The parameters of [`embed_ticket_ring_transition`](#embed_ticket_ring_transition).
+
+- `slot`: The slot \[BORROWS\].
+- `expected_stamp`: The expected stamp.
+- `new_stamp`: The new stamp: the expected stamp with the flag bit of the transition.
+
+### `EmbedTicketRingGrantCfg` { #EmbedTicketRingGrantCfg }
+
+```c
+typedef struct
+{
+    const EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    const embed_word stamp;            /**< The input stamp, flag bits clear. */
+    embed_word *const found_stamp;     /**< The stamp that the compare found in the slot [BORROWS]. */
+} EmbedTicketRingGrantCfg;
+```
+
+The parameters of [`embed_ticket_ring_grant`](#embed_ticket_ring_grant).
+
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The input stamp, flag bits clear.
+- `found_stamp`: The stamp that the compare found in the slot \[BORROWS\].
+
+### `EmbedTicketRingPushCfg` { #EmbedTicketRingPushCfg }
+
+```c
+typedef struct
+{
+    const EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    const embed_word stamp;            /**< The input stamp of a granted slot. */
+    void *const job;                   /**< The job [BORROWS]. */
+    embed_word *const found_stamp;     /**< The stamp that the compare found in the slot [BORROWS]. */
+} EmbedTicketRingPushCfg;
+```
+
+The parameters of [`embed_ticket_ring_push`](#embed_ticket_ring_push).
+
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The input stamp of a granted slot.
+- `job`: The job \[BORROWS\].
+- `found_stamp`: The stamp that the compare found in the slot \[BORROWS\].
+
+### `EmbedTicketRingJobVerifyCfg` { #EmbedTicketRingJobVerifyCfg }
+
+```c
+typedef struct
+{
+    const EmbedTicketRingSlot *const slot; /**< The slot [BORROWS]. */
+    const embed_word current_stamp;        /**< The stamp of the slot before the transition. */
+    void **const job; /**< The job where the check matches [BORROWS], and NULL where it does not. */
+    embed_word *const
+        found_stamp; /**< The stamp, with the reserved bit set where the check does not match [BORROWS]. */
+} EmbedTicketRingJobVerifyCfg;
+```
+
+The parameters of [`embed_ticket_ring_job_verify`](#embed_ticket_ring_job_verify).
+
+- `slot`: The slot \[BORROWS\].
+- `current_stamp`: The stamp of the slot before the transition.
+- `job`: The job where the check matches \[BORROWS\], and NULL where it does not.
+- `found_stamp`: The stamp, with the reserved bit set where the check does not match \[BORROWS\].
+
+### `EmbedTicketRingPopCfg` { #EmbedTicketRingPopCfg }
+
+```c
+typedef struct
+{
+    const EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    const embed_word stamp;            /**< The input stamp of a pushed slot. */
+    const unsigned int
+        lane_place;   /**< The place of the lane of the pass of the caller, as embed_turnstile_enter returned it. */
+    void **const job; /**< The job on success [BORROWS], and NULL on failure. */
+    embed_word *const found_stamp; /**< The stamp that the compare found in the slot [BORROWS], with the reserved bit
+                                      set where the job pointer failed its check. */
+} EmbedTicketRingPopCfg;
+```
+
+The parameters of [`embed_ticket_ring_pop`](#embed_ticket_ring_pop).
+
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The input stamp of a pushed slot.
+- `lane_place`: The place of the lane of the pass of the caller, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) returned it.
+- `job`: The job on success \[BORROWS\], and NULL on failure.
+
+### `EmbedTicketRingReplayCfg` { #EmbedTicketRingReplayCfg }
+
+```c
+typedef struct
+{
+    const EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    const embed_word stamp;            /**< The input stamp of a popped slot. */
+    void **const job;                  /**< The job on success [BORROWS], and NULL on failure. */
+    embed_word *const found_stamp;     /**< The stamp that the compare found in the slot [BORROWS]. */
+} EmbedTicketRingReplayCfg;
+```
+
+The parameters of [`embed_ticket_ring_replay`](#embed_ticket_ring_replay).
+
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The input stamp of a popped slot.
+- `job`: The job on success \[BORROWS\], and NULL on failure.
+- `found_stamp`: The stamp that the compare found in the slot \[BORROWS\].
+
+### `EmbedTicketRingReleaseCfg` { #EmbedTicketRingReleaseCfg }
+
+```c
+typedef struct
+{
+    const EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    const embed_word stamp;            /**< The input stamp of a popped slot. */
+    embed_word *const found_stamp;     /**< The stamp that the compare found in the slot [BORROWS]. */
+} EmbedTicketRingReleaseCfg;
+```
+
+The parameters of [`embed_ticket_ring_release`](#embed_ticket_ring_release).
+
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The input stamp of a popped slot.
+- `found_stamp`: The stamp that the compare found in the slot \[BORROWS\].
+
+### `EmbedTicketRingPassGrantCfg` { #EmbedTicketRingPassGrantCfg }
+
+```c
+typedef struct
+{
+    EmbedTurnstiles *const set;            /**< The turnstiles over the ring [BORROWS]. */
+    const embed_atomic_uptr_value address; /**< The address of the worker, as embed_turnstile_enter takes it. */
+    const EmbedTicketRing *const ring;     /**< The ring [BORROWS]. */
+    const embed_word stamp;                /**< The input stamp, flag bits clear. */
+    embed_word *const found_stamp;         /**< The stamp that the compare found in the slot [BORROWS]. */
+} EmbedTicketRingPassGrantCfg;
+```
+
+The parameters of [`embed_ticket_ring_pass_grant`](#embed_ticket_ring_pass_grant).
+
+- `set`: The turnstiles over the ring \[BORROWS\].
+- `address`: The address of the worker, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) takes it.
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The input stamp, flag bits clear.
+- `found_stamp`: The stamp that the compare found in the slot \[BORROWS\].
+
+### `EmbedTicketRingPassPushCfg` { #EmbedTicketRingPassPushCfg }
+
+```c
+typedef struct
+{
+    EmbedTurnstiles *const set;            /**< The turnstiles over the ring [BORROWS]. */
+    const embed_atomic_uptr_value address; /**< The address of the worker, as embed_turnstile_enter takes it. */
+    const EmbedTicketRing *const ring;     /**< The ring [BORROWS]. */
+    const embed_word stamp;                /**< The input stamp of a granted slot. */
+    void *const job;                       /**< The job [BORROWS]. */
+    embed_word *const found_stamp;         /**< The stamp that the compare found in the slot [BORROWS]. */
+} EmbedTicketRingPassPushCfg;
+```
+
+The parameters of [`embed_ticket_ring_pass_push`](#embed_ticket_ring_pass_push).
+
+- `set`: The turnstiles over the ring \[BORROWS\].
+- `address`: The address of the worker, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) takes it.
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The input stamp of a granted slot.
+- `job`: The job \[BORROWS\].
+- `found_stamp`: The stamp that the compare found in the slot \[BORROWS\].
+
+### `EmbedTicketRingPassPopCfg` { #EmbedTicketRingPassPopCfg }
+
+```c
+typedef struct
+{
+    EmbedTurnstiles *const set;            /**< The turnstiles over the ring [BORROWS]. */
+    const embed_atomic_uptr_value address; /**< The address of the worker, as embed_turnstile_enter takes it. */
+    const EmbedTicketRing *const ring;     /**< The ring [BORROWS]. */
+    const embed_word stamp;                /**< The input stamp of a pushed slot. */
+    void **const job;                      /**< The job on success [BORROWS], and NULL on failure. */
+    embed_word *const found_stamp;         /**< The stamp that the compare found in the slot [BORROWS]. */
+} EmbedTicketRingPassPopCfg;
+```
+
+The parameters of [`embed_ticket_ring_pass_pop`](#embed_ticket_ring_pass_pop).
+
+- `set`: The turnstiles over the ring \[BORROWS\].
+- `address`: The address of the worker, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) takes it.
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The input stamp of a pushed slot.
+- `job`: The job on success \[BORROWS\], and NULL on failure.
+- `found_stamp`: The stamp that the compare found in the slot \[BORROWS\].
+
+### `EmbedTicketRingPassReplayCfg` { #EmbedTicketRingPassReplayCfg }
+
+```c
+typedef struct
+{
+    EmbedTurnstiles *const set;            /**< The turnstiles over the ring [BORROWS]. */
+    const embed_atomic_uptr_value address; /**< The address of the worker, as embed_turnstile_enter takes it. */
+    const EmbedTicketRing *const ring;     /**< The ring [BORROWS]. */
+    const embed_word stamp;                /**< The input stamp of a popped slot. */
+    void **const job;                      /**< The job on success [BORROWS], and NULL on failure. */
+    embed_word *const found_stamp;         /**< The stamp that the compare found in the slot [BORROWS]. */
+} EmbedTicketRingPassReplayCfg;
+```
+
+The parameters of [`embed_ticket_ring_pass_replay`](#embed_ticket_ring_pass_replay).
+
+- `set`: The turnstiles over the ring \[BORROWS\].
+- `address`: The address of the worker, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) takes it.
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The input stamp of a popped slot.
+- `job`: The job on success \[BORROWS\], and NULL on failure.
+- `found_stamp`: The stamp that the compare found in the slot \[BORROWS\].
+
+### `EmbedTicketRingDrainReleaseCfg` { #EmbedTicketRingDrainReleaseCfg }
+
+```c
+typedef struct
+{
+    EmbedTurnstiles *const set;        /**< The turnstiles over the ring [BORROWS]. */
+    const EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    const embed_word stamp;            /**< The input stamp of a popped slot. */
+    embed_word *const found_stamp;     /**< The stamp that the compare found in the slot [BORROWS]. */
+} EmbedTicketRingDrainReleaseCfg;
+```
+
+The parameters of [`embed_ticket_ring_drain_release`](#embed_ticket_ring_drain_release).
+
+- `set`: The turnstiles over the ring \[BORROWS\].
+- `ring`: The ring \[BORROWS\].
+- `stamp`: The input stamp of a popped slot.
+- `found_stamp`: The stamp that the compare found in the slot \[BORROWS\].
+
+### `EmbedTicketRingNs` { #EmbedTicketRingNs }
+
+```c
+typedef struct
+{
+    embed_word (*ticket_stamp)(const EmbedTicketStampCfg *args);                   /**< embed_ticket_stamp. */
+    embed_word (*ticket_of_stamp)(const EmbedTicketOfStampCfg *args);              /**< embed_ticket_of_stamp. */
+    embed_word (*epoch_of_stamp)(const EmbedEpochOfStampCfg *args);                /**< embed_epoch_of_stamp. */
+    embed_u16 (*ticket_flags_of_stamp)(const EmbedTicketFlagsOfStampCfg *args);    /**< embed_ticket_flags_of_stamp. */
+    unsigned int (*ticket_lane_of_stamp)(const EmbedTicketLaneOfStampCfg *args);   /**< embed_ticket_lane_of_stamp. */
+    embed_word (*ticket_job_check)(const EmbedTicketJobCheckCfg *args);            /**< embed_ticket_job_check. */
+    embed_word (*ticket_job_check_bits)(const EmbedTicketJobCheckBitsCfg *args);   /**< embed_ticket_job_check_bits. */
+    embed_word (*ticket_fields_of_stamp)(const EmbedTicketFieldsOfStampCfg *args); /**< embed_ticket_fields_of_stamp. */
+    void (*begin)(const EmbedTicketRingBeginCfg *args);                            /**< embed_ticket_ring_begin. */
+    embed_word (*place)(const EmbedTicketRingPlaceCfg *args);                      /**< embed_ticket_ring_place. */
+    embed_bool (*grant)(const EmbedTicketRingGrantCfg *args);                      /**< embed_ticket_ring_grant. */
+    embed_bool (*push)(const EmbedTicketRingPushCfg *args);                        /**< embed_ticket_ring_push. */
+    embed_bool (*pop)(const EmbedTicketRingPopCfg *args);                          /**< embed_ticket_ring_pop. */
+    embed_bool (*replay)(const EmbedTicketRingReplayCfg *args);                    /**< embed_ticket_ring_replay. */
+    embed_bool (*release)(const EmbedTicketRingReleaseCfg *args);                  /**< embed_ticket_ring_release. */
+    embed_bool (*pass_grant)(const EmbedTicketRingPassGrantCfg *args);             /**< embed_ticket_ring_pass_grant. */
+    embed_bool (*pass_push)(const EmbedTicketRingPassPushCfg *args);               /**< embed_ticket_ring_pass_push. */
+    embed_bool (*pass_pop)(const EmbedTicketRingPassPopCfg *args);                 /**< embed_ticket_ring_pass_pop. */
+    embed_bool (*pass_replay)(const EmbedTicketRingPassReplayCfg *args);     /**< embed_ticket_ring_pass_replay. */
+    embed_bool (*drain_release)(const EmbedTicketRingDrainReleaseCfg *args); /**< embed_ticket_ring_drain_release. */
+} EmbedTicketRingNs;
+```
+
+The dispatch table of `embed_ticket_ring`.h: one member for each public function, in the order of the header.
+
+> **Note:** [`EMBED_TABLE_LAYOUT`](embed_dispatch_layout.md#EMBED_TABLE_LAYOUT) asserts that the members sit at consecutive [`EMBED_FUNCTION_POINTER_BYTES`](embed_dispatch_layout.md#EMBED_FUNCTION_POINTER_BYTES) offsets.
+
+- `args`: [`embed_ticket_stamp`](#embed_ticket_stamp).
+
 ## Macros
 
 ### `EMBED_TICKET_BITS_32` { #EMBED_TICKET_BITS_32 }
@@ -149,13 +609,12 @@ The max slot count as a shift: `2^EMBED_TICKET_RING_SHIFT_MAX` slots, below the 
 ### `embed_ticket_stamp` { #embed_ticket_stamp }
 
 ```c
-EMBED_INLINE embed_word embed_ticket_stamp(embed_word epoch, embed_word ticket);
+EMBED_INLINE embed_word embed_ticket_stamp(const EmbedTicketStampCfg *args);
 ```
 
 The stamp of an epoch and a ticket, with the flag bits clear.
 
-- `[in]`: epoch The epoch, of which the stamp keeps the low [`EMBED_TICKET_EPOCH_BITS`](#EMBED_TICKET_BITS) bits.
-- `[in]`: ticket The ticket, of which the stamp keeps the low [`EMBED_TICKET_BITS`](#EMBED_TICKET_BITS) bits.
+- `[in]`: args The parameters, as EmbedTicketStampCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The stamp.
 
@@ -164,60 +623,60 @@ The stamp of an epoch and a ticket, with the flag bits clear.
 ### `embed_ticket_of_stamp` { #embed_ticket_of_stamp }
 
 ```c
-EMBED_INLINE embed_word embed_ticket_of_stamp(embed_word stamp);
+EMBED_INLINE embed_word embed_ticket_of_stamp(const EmbedTicketOfStampCfg *args);
 ```
 
 The ticket field of a stamp.
 
-- `[in]`: stamp The stamp.
+- `[in]`: args The parameters, as EmbedTicketOfStampCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The low [`EMBED_TICKET_BITS`](#EMBED_TICKET_BITS) bits.
 
 ### `embed_epoch_of_stamp` { #embed_epoch_of_stamp }
 
 ```c
-EMBED_INLINE embed_word embed_epoch_of_stamp(embed_word stamp);
+EMBED_INLINE embed_word embed_epoch_of_stamp(const EmbedEpochOfStampCfg *args);
 ```
 
 The epoch field of a stamp.
 
-- `[in]`: stamp The stamp.
+- `[in]`: args The parameters, as EmbedEpochOfStampCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The high [`EMBED_TICKET_EPOCH_BITS`](#EMBED_TICKET_BITS) bits, shifted down.
 
 ### `embed_ticket_flags_of_stamp` { #embed_ticket_flags_of_stamp }
 
 ```c
-EMBED_INLINE embed_u16 embed_ticket_flags_of_stamp(embed_word stamp);
+EMBED_INLINE embed_u16 embed_ticket_flags_of_stamp(const EmbedTicketFlagsOfStampCfg *args);
 ```
 
 The flag field of a stamp, the lane index included.
 
-- `[in]`: stamp The stamp.
+- `[in]`: args The parameters, as EmbedTicketFlagsOfStampCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The 16 bits from [`EMBED_TICKET_FLAG_SHIFT`](#EMBED_TICKET_BITS) up.
 
 ### `embed_ticket_lane_of_stamp` { #embed_ticket_lane_of_stamp }
 
 ```c
-EMBED_INLINE unsigned int embed_ticket_lane_of_stamp(embed_word stamp);
+EMBED_INLINE unsigned int embed_ticket_lane_of_stamp(const EmbedTicketLaneOfStampCfg *args);
 ```
 
 The lane index of the pass that performed the pop, from the stamp of the slot.
 
-- `[in]`: stamp The stamp of a slot after its pop.
+- `[in]`: args The parameters, as EmbedTicketLaneOfStampCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The lane index, seven bits.
 
 ### `embed_ticket_job_check` { #embed_ticket_job_check }
 
 ```c
-EMBED_INLINE embed_word embed_ticket_job_check(const void *job);
+EMBED_INLINE embed_word embed_ticket_job_check(const EmbedTicketJobCheckCfg *args);
 ```
 
 The three-bit cyclic redundancy check of a job pointer: its bits as a polynomial, modulo x^3 + x + 1.
 
-- `[in]`: job The job pointer.
+- `[in]`: args The parameters, as EmbedTicketJobCheckCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The remainder, three bits.
 
@@ -228,77 +687,72 @@ The three-bit cyclic redundancy check of a job pointer: its bits as a polynomial
 ### `embed_ticket_job_check_bits` { #embed_ticket_job_check_bits }
 
 ```c
-EMBED_INLINE embed_word embed_ticket_job_check_bits(const void *job);
+EMBED_INLINE embed_word embed_ticket_job_check_bits(const EmbedTicketJobCheckBitsCfg *args);
 ```
 
 The check bits that the push stores for a job pointer: the check where the build verifies it, 0 where not.
 
-- `[in]`: job The job pointer.
+- `[in]`: args The parameters, as EmbedTicketJobCheckBitsCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The check at [`EMBED_TICKET_CHECK_SHIFT`](#EMBED_TICKET_CHECK_SHIFT), or 0.
 
 ### `embed_ticket_fields_of_stamp` { #embed_ticket_fields_of_stamp }
 
 ```c
-EMBED_INLINE embed_word embed_ticket_fields_of_stamp(embed_word stamp);
+EMBED_INLINE embed_word embed_ticket_fields_of_stamp(const EmbedTicketFieldsOfStampCfg *args);
 ```
 
 The epoch and ticket fields of a stamp, with the flag field cleared.
 
-- `[in]`: stamp The stamp.
+- `[in]`: args The parameters, as EmbedTicketFieldsOfStampCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The stamp with the 16 flag bits clear.
 
 ### `embed_ticket_ring_begin` { #embed_ticket_ring_begin }
 
 ```c
-EMBED_INLINE void embed_ticket_ring_begin(EmbedTicketRing *ring, EmbedTicketRingSlot *slots, unsigned int shift);
+EMBED_INLINE void embed_ticket_ring_begin(const EmbedTicketRingBeginCfg *args);
 ```
 
 Initializes the ring over a slot array of `2^shift` slots.
 
-- `[out]`: ring The ring \[BORROWS\].
-- `[in]`: slots The slot array \[BORROWS\], `2^shift` slots, zero-initialized, which the caller owns.
-- `[in]`: shift The slot count as a power of two, at max [`EMBED_TICKET_RING_SHIFT_MAX`](#EMBED_TICKET_RING_SHIFT_MAX).
+- `[in]`: args The parameters, as EmbedTicketRingBeginCfg holds them \[BORROWS\].
 
 > **Note:** The slot count is a power of two by construction, so the index is a mask and not a modulo.
 
 ### `embed_ticket_ring_place` { #embed_ticket_ring_place }
 
 ```c
-EMBED_INLINE embed_word embed_ticket_ring_place(const EmbedTicketRing *ring, embed_word stamp);
+EMBED_INLINE embed_word embed_ticket_ring_place(const EmbedTicketRingPlaceCfg *args);
 ```
 
 The slot index of the ticket of a stamp.
 
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The stamp.
+- `[in]`: args The parameters, as EmbedTicketRingPlaceCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The low shift bits of the ticket.
 
 ### `embed_ticket_ring_slot` { #embed_ticket_ring_slot }
 
 ```c
-EMBED_INLINE EmbedTicketRingSlot *embed_ticket_ring_slot(const EmbedTicketRing *ring, embed_word stamp);
+EMBED_INLINE EmbedTicketRingSlot *embed_ticket_ring_slot(const EmbedTicketRingSlotCfg *args);
 ```
 
 The slot of a stamp.
 
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The stamp.
+- `[in]`: args The parameters, as EmbedTicketRingSlotCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The slot at the index of the ticket \[BORROWS\].
 
 ### `embed_ticket_ring_expected_stamp` { #embed_ticket_ring_expected_stamp }
 
 ```c
-EMBED_INLINE embed_word embed_ticket_ring_expected_stamp(embed_word stamp, embed_word flags);
+EMBED_INLINE embed_word embed_ticket_ring_expected_stamp(const EmbedTicketRingExpectedStampCfg *args);
 ```
 
 The expected stamp of a transition: the input stamp with the flag bits of the transitions before it.
 
-- `[in]`: stamp The input stamp, as the caller holds it.
-- `[in]`: flags The flag bits of the transitions before this one.
+- `[in]`: args The parameters, as EmbedTicketRingExpectedStampCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The expected stamp.
 
@@ -307,13 +761,12 @@ The expected stamp of a transition: the input stamp with the flag bits of the tr
 ### `embed_ticket_ring_guarded_stamp` { #embed_ticket_ring_guarded_stamp }
 
 ```c
-EMBED_INLINE embed_word embed_ticket_ring_guarded_stamp(embed_word current_stamp, embed_word valid_mask);
+EMBED_INLINE embed_word embed_ticket_ring_guarded_stamp(const EmbedTicketRingGuardedStampCfg *args);
 ```
 
 The expected stamp of a transition that read the current stamp first. It is the current stamp where the state test passed, and the current stamp with the reserved bit inverted where it did not.
 
-- `[in]`: `current_stamp` The current value of the slot word.
-- `[in]`: `valid_mask` All ones where the state test passed, all zeros where it did not.
+- `[in]`: args The parameters, as EmbedTicketRingGuardedStampCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The expected stamp.
 
@@ -322,30 +775,24 @@ The expected stamp of a transition that read the current stamp first. It is the 
 ### `embed_ticket_ring_transition` { #embed_ticket_ring_transition }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_transition(EmbedTicketRingSlot *slot, embed_word expected_stamp,
-                                                     embed_word new_stamp, embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_transition(const EmbedTicketRingTransitionCfg *args);
 ```
 
 One transition of a slot: a compare-and-swap from the expected stamp to the new stamp.
 
-- `[in,out]`: slot The slot \[BORROWS\].
-- `[in]`: `expected_stamp` The expected stamp.
-- `[in]`: `new_stamp` The new stamp: the expected stamp with the flag bit of the transition.
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\]: the expected stamp on success, the current stamp on failure.
+- `[in]`: args The parameters, as EmbedTicketRingTransitionCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
 ### `embed_ticket_ring_grant` { #embed_ticket_ring_grant }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_grant(const EmbedTicketRing *ring, embed_word stamp, embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_grant(const EmbedTicketRingGrantCfg *args);
 ```
 
 The grant transition: the stamp with the granted bit, from a zero word or from a released word.
 
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The input stamp, flag bits clear.
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\].
+- `[in]`: args The parameters, as EmbedTicketRingGrantCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
@@ -356,16 +803,12 @@ The grant transition: the stamp with the granted bit, from a zero word or from a
 ### `embed_ticket_ring_push` { #embed_ticket_ring_push }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_push(const EmbedTicketRing *ring, embed_word stamp, void *job,
-                                               embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_push(const EmbedTicketRingPushCfg *args);
 ```
 
 The push transition: the job pointer stored, then the pushed bit added to the granted word.
 
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The input stamp of a granted slot.
-- `[in]`: job The job \[BORROWS\].
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\].
+- `[in]`: args The parameters, as EmbedTicketRingPushCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
@@ -376,16 +819,12 @@ The push transition: the job pointer stored, then the pushed bit added to the gr
 ### `embed_ticket_ring_job_verify` { #embed_ticket_ring_job_verify }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_job_verify(const EmbedTicketRingSlot *slot, embed_word current_stamp,
-                                                     void **job, embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_job_verify(const EmbedTicketRingJobVerifyCfg *args);
 ```
 
 The job pointer of a slot after a successful read transition, verified against the check bits of the word.
 
-- `[in]`: slot The slot \[BORROWS\].
-- `[in]`: `current_stamp` The stamp of the slot before the transition.
-- `[out]`: job The job where the check matches \[BORROWS\], and NULL where it does not.
-- `[out]`: `found_stamp` The stamp, with the reserved bit set where the check does not match \[BORROWS\].
+- `[in]`: args The parameters, as EmbedTicketRingJobVerifyCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) where the check matches, or where the build does not verify it.
 
@@ -394,17 +833,12 @@ The job pointer of a slot after a successful read transition, verified against t
 ### `embed_ticket_ring_pop` { #embed_ticket_ring_pop }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_pop(const EmbedTicketRing *ring, embed_word stamp, unsigned int lane_place,
-                                              void **job, embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_pop(const EmbedTicketRingPopCfg *args);
 ```
 
 The pop transition: the popped bit and the lane index added to the pushed word, and the job pointer read.
 
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The input stamp of a pushed slot.
-- `[in]`: `lane_place` The place of the lane of the pass of the caller, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) returned it.
-- `[out]`: job The job on success \[BORROWS\], and NULL on failure.
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\], with the reserved bit set where the job pointer failed its check.
+- `[in]`: args The parameters, as EmbedTicketRingPopCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
@@ -415,16 +849,12 @@ The pop transition: the popped bit and the lane index added to the pushed word, 
 ### `embed_ticket_ring_replay` { #embed_ticket_ring_replay }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_replay(const EmbedTicketRing *ring, embed_word stamp, void **job,
-                                                 embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_replay(const EmbedTicketRingReplayCfg *args);
 ```
 
 The replay transition: the replayed bit added to the popped word, and the job pointer read again.
 
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The input stamp of a popped slot.
-- `[out]`: job The job on success \[BORROWS\], and NULL on failure.
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\].
+- `[in]`: args The parameters, as EmbedTicketRingReplayCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
@@ -433,15 +863,12 @@ The replay transition: the replayed bit added to the popped word, and the job po
 ### `embed_ticket_ring_release` { #embed_ticket_ring_release }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_release(const EmbedTicketRing *ring, embed_word stamp,
-                                                  embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_release(const EmbedTicketRingReleaseCfg *args);
 ```
 
 The release transition: the released bit added to the popped word, replayed or not.
 
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The input stamp of a popped slot.
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\].
+- `[in]`: args The parameters, as EmbedTicketRingReleaseCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
@@ -450,92 +877,94 @@ The release transition: the released bit added to the popped word, replayed or n
 ### `embed_ticket_ring_pass_grant` { #embed_ticket_ring_pass_grant }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_pass_grant(EmbedTurnstiles *set, embed_atomic_uptr_value address,
-                                                     const EmbedTicketRing *ring, embed_word stamp,
-                                                     embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_pass_grant(const EmbedTicketRingPassGrantCfg *args);
 ```
 
 The grant transition inside a pass: enter at address, grant, leave.
 
-- `[in,out]`: set The turnstiles over the ring \[BORROWS\].
-- `[in]`: address The address of the worker, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) takes it.
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The input stamp, flag bits clear.
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\].
+- `[in]`: args The parameters, as EmbedTicketRingPassGrantCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
 ### `embed_ticket_ring_pass_push` { #embed_ticket_ring_pass_push }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_pass_push(EmbedTurnstiles *set, embed_atomic_uptr_value address,
-                                                    const EmbedTicketRing *ring, embed_word stamp, void *job,
-                                                    embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_pass_push(const EmbedTicketRingPassPushCfg *args);
 ```
 
 The push transition inside a pass: enter at address, push, leave.
 
-- `[in,out]`: set The turnstiles over the ring \[BORROWS\].
-- `[in]`: address The address of the worker, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) takes it.
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The input stamp of a granted slot.
-- `[in]`: job The job \[BORROWS\].
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\].
+- `[in]`: args The parameters, as EmbedTicketRingPassPushCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
 ### `embed_ticket_ring_pass_pop` { #embed_ticket_ring_pass_pop }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_pass_pop(EmbedTurnstiles *set, embed_atomic_uptr_value address,
-                                                   const EmbedTicketRing *ring, embed_word stamp, void **job,
-                                                   embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_pass_pop(const EmbedTicketRingPassPopCfg *args);
 ```
 
 The pop transition inside a pass: enter at address, pop with the lane index of that pass, leave.
 
-- `[in,out]`: set The turnstiles over the ring \[BORROWS\].
-- `[in]`: address The address of the worker, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) takes it.
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The input stamp of a pushed slot.
-- `[out]`: job The job on success \[BORROWS\], and NULL on failure.
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\].
+- `[in]`: args The parameters, as EmbedTicketRingPassPopCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
 ### `embed_ticket_ring_pass_replay` { #embed_ticket_ring_pass_replay }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_pass_replay(EmbedTurnstiles *set, embed_atomic_uptr_value address,
-                                                      const EmbedTicketRing *ring, embed_word stamp, void **job,
-                                                      embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_pass_replay(const EmbedTicketRingPassReplayCfg *args);
 ```
 
 The replay transition inside a pass: enter at address, replay, leave.
 
-- `[in,out]`: set The turnstiles over the ring \[BORROWS\].
-- `[in]`: address The address of the worker, as [`embed_turnstile_enter`](embed_turnstile.md#embed_turnstile_enter) takes it.
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The input stamp of a popped slot.
-- `[out]`: job The job on success \[BORROWS\], and NULL on failure.
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\].
+- `[in]`: args The parameters, as EmbedTicketRingPassReplayCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
 ### `embed_ticket_ring_drain_release` { #embed_ticket_ring_drain_release }
 
 ```c
-EMBED_INLINE embed_bool embed_ticket_ring_drain_release(EmbedTurnstiles *set, const EmbedTicketRing *ring,
-                                                        embed_word stamp, embed_word *found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_drain_release(const EmbedTicketRingDrainReleaseCfg *args);
 ```
 
 The release transition after a drain: drain set, then release the stamp.
 
-- `[in,out]`: set The turnstiles over the ring \[BORROWS\].
-- `[in]`: ring The ring \[BORROWS\].
-- `[in]`: stamp The input stamp of a popped slot.
-- `[out]`: `found_stamp` The stamp that the compare found in the slot \[BORROWS\].
+- `[in]`: args The parameters, as EmbedTicketRingDrainReleaseCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* [`EMBED_TRUE`](embed_types.md#EMBED_TRUE) on success.
 
 > **Note:** The writer calls this after it observed the popped bit and replaced what the slot referenced. The pass of that pop started before the drain, so the drain waits for it, and the release follows.
+
+## Tables
+
+### `embed_ticket_ring_table` { #embed_ticket_ring_table }
+
+```c
+#if !defined(__CUDA_ARCH__)
+static const EmbedTicketRingNs embed_ticket_ring_table = {embed_ticket_stamp,
+                                                          embed_ticket_of_stamp,
+                                                          embed_epoch_of_stamp,
+                                                          embed_ticket_flags_of_stamp,
+                                                          embed_ticket_lane_of_stamp,
+                                                          embed_ticket_job_check,
+                                                          embed_ticket_job_check_bits,
+                                                          embed_ticket_fields_of_stamp,
+                                                          embed_ticket_ring_begin,
+                                                          embed_ticket_ring_place,
+                                                          embed_ticket_ring_grant,
+                                                          embed_ticket_ring_push,
+                                                          embed_ticket_ring_pop,
+                                                          embed_ticket_ring_replay,
+                                                          embed_ticket_ring_release,
+                                                          embed_ticket_ring_pass_grant,
+                                                          embed_ticket_ring_pass_push,
+                                                          embed_ticket_ring_pass_pop,
+                                                          embed_ticket_ring_pass_replay,
+                                                          embed_ticket_ring_drain_release};
+#endif
+```
+
+The table of `embed_ticket_ring`.h. A call through it folds to a direct call under the optimizer and LTO.
+
+> **Note:** The device pass of CUDA has no table, because a kernel cannot read the address of a host function. A kernel calls each function by its name.

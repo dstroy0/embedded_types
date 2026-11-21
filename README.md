@@ -42,8 +42,20 @@ difference of two reads of the clock, and that difference holds across the roll.
 The host supplies the sleep, the wake, the clock and the place of the thread that calls:
 
 ```c
-int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value old_value, embed_word nanoseconds);
-void embed_word_wake(embed_atomic_word *word);
+typedef struct
+{
+    embed_atomic_word *const word;
+    const embed_atomic_word_value old_value;
+    const embed_word nanoseconds;
+} EmbedWordWaitCfg;
+
+typedef struct
+{
+    embed_atomic_word *const word;
+} EmbedWordWakeCfg;
+
+int embed_word_wait(const EmbedWordWaitCfg *args);
+void embed_word_wake(const EmbedWordWakeCfg *args);
 embed_word embed_clock_ns(void);
 embed_u32 embed_thread_place(void);
 ```
@@ -139,6 +151,21 @@ states each value that follows the width of the word, and each macro that a buil
 
 This section states the interface of the eight headers. [The ABI](docs/abi.md) holds the same facts,
 with a link to the contract of each name.
+
+### The call
+
+Each function takes one parameter, a pointer to a `const` Cfg of its own. The Cfg is a struct of the parameters of that function, and each member is `const`. A C caller builds the Cfg as a compound literal at the call with `EMBED_CALL`:
+
+```c
+const unsigned int place = EMBED_CALL(embed_turnstile_table.enter, EmbedTurnstileEnterCfg, .set = &set,
+                                      .address = (embed_atomic_uptr_value)(uintptr_t)&worker);
+```
+
+Each header has a dispatch table of its public functions, a `static const` struct of function pointers. `EMBED_TABLE_LAYOUT` asserts the slots of each table. The optimizer folds a call through a table to a direct call. Link-time optimization does the same across translation units. This build turns it on with `EMBEDDED_TYPES_LTO`, and a consumer sets `-flto` or `CMAKE_INTERPROCEDURAL_OPTIMIZATION` for its own build.
+
+The tables of the atomics are `embed_atomic_u32_table` and `embed_atomic_u64_table`. The word, the size and the pointer have aliases of them, as `embed_atomic_word_table` is. A function with no parameter, such as `embed_clock_ns`, takes no Cfg.
+
+In C++, `EMBED_CALL` builds a braced temporary. Before C++20, its initializers go in the order of the members, with no designators. Under MSVC, a C++ unit needs `/Zc:preprocessor` for `EMBED_TABLE_LAYOUT`. A CUDA kernel has no table, and calls each function by its name.
 
 ### The atomic words
 

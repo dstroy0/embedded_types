@@ -33,13 +33,15 @@ static void *worker(void *unused)
     (void)unused;
     for (unsigned int pass_index = 0u; pass_index < 2u; pass_index += 1u)
     {
-        const unsigned int place = embed_turnstile_enter(&s_set, 0u);
+        const unsigned int place =
+            EMBED_CALL(embed_turnstile_table.enter, EmbedTurnstileEnterCfg, .set = &s_set, .address = 0u);
         const embed_atomic_word_value state =
-            embed_atomic_word_load(&s_set.lanes[place].word) & (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT);
+            EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = &s_set.lanes[place].word) &
+            (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT);
 
         // The lane that a pass holds is open: it has the busy bit and not the closed bit
         assert(state == EMBED_TURNSTILE_BUSY_BIT);
-        embed_turnstile_leave(&s_set, place);
+        EMBED_CALL(embed_turnstile_table.leave, EmbedTurnstileLeaveCfg, .set = &s_set, .place = place);
     }
     return NULL;
 }
@@ -48,7 +50,7 @@ static void *worker(void *unused)
 static void *writer(void *unused)
 {
     (void)unused;
-    embed_turnstiles_drain(&s_set);
+    EMBED_CALL(embed_turnstile_table.drain, EmbedTurnstilesDrainCfg, .set = &s_set);
     return NULL;
 }
 
@@ -64,17 +66,19 @@ int main(void)
         (void)pthread_join(threads[thread_index], NULL);
     }
     // Each pass ended: each lane below the open count is free, each lane above it is free or closed
-    const unsigned int open_lane_count = embed_turnstile_open_lane_count(&s_set);
+    const unsigned int open_lane_count =
+        EMBED_CALL(embed_turnstile_table.open_lane_count, EmbedTurnstileOpenLaneCountCfg, .set = &s_set);
 
     for (unsigned int place = 0u; place < 2u; place += 1u)
     {
         const embed_atomic_word_value state =
-            embed_atomic_word_load(&s_set.lanes[place].word) & (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT);
+            EMBED_CALL(embed_atomic_word_table.load, EmbedAtomicWordLoadCfg, .word = &s_set.lanes[place].word) &
+            (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT);
 
         assert((place < open_lane_count)
                    ? (state == 0u)
                    : ((state == 0u) || (state == (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT))));
     }
-    assert(embed_atomic_u32_load(&s_set.queue_length) == 0u);
+    assert(EMBED_CALL(embed_atomic_u32_table.load, EmbedAtomicU32LoadCfg, .word = &s_set.queue_length) == 0u);
     return 0;
 }

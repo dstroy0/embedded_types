@@ -263,8 +263,10 @@ TREES = {
     "build-cov": {
         "what": "instrumented for gcov, with always_inline off",
         # --coverage on the compile and the link. The atomic update retains each count exact under the threads
-        # of the suites. test/support/coverage_inline.h gives each header function one body in each unit.
+        # of the suites. test/support/coverage_inline.h gives each header function one body in each unit. LTO is
+        # off, so that each count stays with the line of the source it counts.
         "args": [
+            "-DEMBEDDED_TYPES_LTO=OFF",
             "-DCMAKE_C_FLAGS=--coverage -fprofile-update=atomic -O0 -g -include "
             + os.path.join(ROOT, "test", "support", "coverage_inline.h"),
             "-DCMAKE_EXE_LINKER_FLAGS=--coverage",

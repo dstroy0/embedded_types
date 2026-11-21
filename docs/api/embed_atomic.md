@@ -64,6 +64,224 @@ The 64-bit word on a target whose arm has none. Each use of the type stops the c
 
 - `value`: The word.
 
+### `EmbedAtomicCasU32Cfg` { #EmbedAtomicCasU32Cfg }
+
+```c
+#if (EMBED_ATOMIC_ARM == 1) || (EMBED_ATOMIC_ARM == 4)
+typedef struct
+{
+    embed_atomic_u32 *const word; /**< The word [BORROWS]. */
+    embed_u32 *const expected;    /**< The word that the caller expects, and then the word found [BORROWS]. */
+    const embed_u32 value;        /**< The word that the swap writes. */
+} EmbedAtomicCasU32Cfg;
+#endif
+```
+
+The parameters of [`embed_atomic_cas_u32`](#embed_atomic_cas_u32).
+
+- `word`: The word \[BORROWS\].
+- `expected`: The word that the caller expects, and then the word found \[BORROWS\].
+- `value`: The word that the swap writes.
+
+### `EmbedAtomicCasU64Cfg` { #EmbedAtomicCasU64Cfg }
+
+```c
+#if (EMBED_ATOMIC_ARM == 1) || (EMBED_ATOMIC_ARM == 4)
+#if EMBED_ATOMIC_HAS_64
+typedef struct
+{
+    embed_atomic_u64 *const word; /**< The word [BORROWS]. */
+    embed_u64 *const expected;    /**< The word that the caller expects, and then the word found [BORROWS]. */
+    const embed_u64 value;        /**< The word that the swap writes. */
+} EmbedAtomicCasU64Cfg;
+#endif
+#endif
+```
+
+The parameters of [`embed_atomic_cas_u64`](#embed_atomic_cas_u64).
+
+- `word`: The word \[BORROWS\].
+- `expected`: The word that the caller expects, and then the word found \[BORROWS\].
+- `value`: The word that the swap writes.
+
+### `EmbedAtomicU32LoadCfg` { #EmbedAtomicU32LoadCfg }
+
+```c
+    typedef struct
+    {
+        const embed_atomic_u32 *const word; /**< The word [BORROWS]. */
+    } EmbedAtomicU32LoadCfg;
+#if EMBED_ATOMIC_HAS_64
+    typedef struct
+    {
+        const embed_atomic_u64 *const word; /**< The word [BORROWS]. */
+    } EmbedAtomicU64LoadCfg;
+#endif
+```
+
+The parameters of the load.
+
+- `word`: The word \[BORROWS\].
+
+### `EmbedAtomicU32ValueCfg` { #EmbedAtomicU32ValueCfg }
+
+```c
+    typedef struct
+    {
+        embed_atomic_u32 *const word; /**< The word [BORROWS]. */
+        const embed_u32 value;                /**< The value of the operation. */
+    } EmbedAtomicU32ValueCfg;
+#if EMBED_ATOMIC_HAS_64
+    typedef struct
+    {
+        embed_atomic_u64 *const word; /**< The word [BORROWS]. */
+        const embed_u64 value;                /**< The value of the operation. */
+    } EmbedAtomicU64ValueCfg;
+#endif
+```
+
+The parameters of an operation that writes value into the word or combines it with the word.
+
+- `word`: The word \[BORROWS\].
+- `value`: The value of the operation.
+
+### `EmbedAtomicU32StoreCfg` { #EmbedAtomicU32StoreCfg }
+
+```c
+    typedef EmbedAtomicU32ValueCfg EmbedAtomicU32StoreCfg;
+#if EMBED_ATOMIC_HAS_64
+    typedef EmbedAtomicU64ValueCfg EmbedAtomicU64StoreCfg;
+#endif
+```
+
+The parameters of the store.
+
+### `EmbedAtomicU32ExchangeCfg` { #EmbedAtomicU32ExchangeCfg }
+
+```c
+    typedef EmbedAtomicU32ValueCfg EmbedAtomicU32ExchangeCfg;
+#if EMBED_ATOMIC_HAS_64
+    typedef EmbedAtomicU64ValueCfg EmbedAtomicU64ExchangeCfg;
+#endif
+```
+
+The parameters of the exchange.
+
+### `EmbedAtomicU32FetchAddCfg` { #EmbedAtomicU32FetchAddCfg }
+
+```c
+    typedef EmbedAtomicU32ValueCfg EmbedAtomicU32FetchAddCfg;
+#if EMBED_ATOMIC_HAS_64
+    typedef EmbedAtomicU64ValueCfg EmbedAtomicU64FetchAddCfg;
+#endif
+```
+
+The parameters of the fetch-add.
+
+### `EmbedAtomicU32FetchSubCfg` { #EmbedAtomicU32FetchSubCfg }
+
+```c
+    typedef EmbedAtomicU32ValueCfg EmbedAtomicU32FetchSubCfg;
+#if EMBED_ATOMIC_HAS_64
+    typedef EmbedAtomicU64ValueCfg EmbedAtomicU64FetchSubCfg;
+#endif
+```
+
+The parameters of the fetch-subtract.
+
+### `EmbedAtomicU32FetchOrCfg` { #EmbedAtomicU32FetchOrCfg }
+
+```c
+    typedef EmbedAtomicU32ValueCfg EmbedAtomicU32FetchOrCfg;
+#if EMBED_ATOMIC_HAS_64
+    typedef EmbedAtomicU64ValueCfg EmbedAtomicU64FetchOrCfg;
+#endif
+```
+
+The parameters of the fetch-or.
+
+### `EmbedAtomicU32FetchAndCfg` { #EmbedAtomicU32FetchAndCfg }
+
+```c
+    typedef EmbedAtomicU32ValueCfg EmbedAtomicU32FetchAndCfg;
+#if EMBED_ATOMIC_HAS_64
+    typedef EmbedAtomicU64ValueCfg EmbedAtomicU64FetchAndCfg;
+#endif
+```
+
+The parameters of the fetch-and.
+
+### `EmbedAtomicU32RaiseCfg` { #EmbedAtomicU32RaiseCfg }
+
+```c
+    typedef EmbedAtomicU32ValueCfg EmbedAtomicU32RaiseCfg;
+#if EMBED_ATOMIC_HAS_64
+    typedef EmbedAtomicU64ValueCfg EmbedAtomicU64RaiseCfg;
+#endif
+```
+
+The parameters of the raise.
+
+### `EmbedAtomicU32SwapIfCfg` { #EmbedAtomicU32SwapIfCfg }
+
+```c
+    typedef struct
+    {
+        embed_atomic_u32 *const word; /**< The word [BORROWS]. */
+        embed_u32 *const expected;            /**< The word that the caller expects, and then the word found [BORROWS]. */
+        const embed_u32 value;                /**< The word that the swap writes. */
+    } EmbedAtomicU32SwapIfCfg;
+#if EMBED_ATOMIC_HAS_64
+    typedef struct
+    {
+        embed_atomic_u64 *const word; /**< The word [BORROWS]. */
+        embed_u64 *const expected;            /**< The word that the caller expects, and then the word found [BORROWS]. */
+        const embed_u64 value;                /**< The word that the swap writes. */
+    } EmbedAtomicU64SwapIfCfg;
+#endif
+```
+
+The parameters of the compare-and-swap.
+
+- `word`: The word \[BORROWS\].
+- `expected`: The word that the caller expects, and then the word found \[BORROWS\].
+- `value`: The word that the swap writes.
+
+### `EmbedAtomicU32Ns` { #EmbedAtomicU32Ns }
+
+```c
+    typedef struct
+    {
+        embed_u32 (*load)(const EmbedAtomicU32LoadCfg *args);           /**< The load. */
+        void (*store)(const EmbedAtomicU32StoreCfg *args);          /**< The store. */
+        embed_u32 (*exchange)(const EmbedAtomicU32ExchangeCfg *args);   /**< The exchange. */
+        embed_bool (*swap_if)(const EmbedAtomicU32SwapIfCfg *args); /**< The compare-and-swap. */
+        embed_u32 (*fetch_add)(const EmbedAtomicU32FetchAddCfg *args);  /**< The fetch-add. */
+        embed_u32 (*fetch_sub)(const EmbedAtomicU32FetchSubCfg *args);  /**< The fetch-subtract. */
+        embed_u32 (*fetch_or)(const EmbedAtomicU32FetchOrCfg *args);    /**< The fetch-or. */
+        embed_u32 (*fetch_and)(const EmbedAtomicU32FetchAndCfg *args);  /**< The fetch-and. */
+        embed_u32 (*raise)(const EmbedAtomicU32RaiseCfg *args);         /**< The raise. */
+    } EmbedAtomicU32Ns;
+#if EMBED_ATOMIC_HAS_64
+    typedef struct
+    {
+        embed_u64 (*load)(const EmbedAtomicU64LoadCfg *args);           /**< The load. */
+        void (*store)(const EmbedAtomicU64StoreCfg *args);          /**< The store. */
+        embed_u64 (*exchange)(const EmbedAtomicU64ExchangeCfg *args);   /**< The exchange. */
+        embed_bool (*swap_if)(const EmbedAtomicU64SwapIfCfg *args); /**< The compare-and-swap. */
+        embed_u64 (*fetch_add)(const EmbedAtomicU64FetchAddCfg *args);  /**< The fetch-add. */
+        embed_u64 (*fetch_sub)(const EmbedAtomicU64FetchSubCfg *args);  /**< The fetch-subtract. */
+        embed_u64 (*fetch_or)(const EmbedAtomicU64FetchOrCfg *args);    /**< The fetch-or. */
+        embed_u64 (*fetch_and)(const EmbedAtomicU64FetchAndCfg *args);  /**< The fetch-and. */
+        embed_u64 (*raise)(const EmbedAtomicU64RaiseCfg *args);         /**< The raise. */
+    } EmbedAtomicU64Ns;
+#endif
+```
+
+The dispatch table of the operations of one width, in the order of the header.
+
+- `args`: The load.
+
 ### `embed_atomic_word` { #embed_atomic_word }
 
 ```c
@@ -91,6 +309,40 @@ typedef embed_u32 embed_atomic_word_value;
 The plain integer [`embed_atomic_word`](#embed_atomic_word) holds and its operations take and answer.
 
 The plain integer [`embed_atomic_word`](#embed_atomic_word) holds and its operations take and answer.
+
+### `EmbedAtomicWordLoadCfg` { #EmbedAtomicWordLoadCfg }
+
+```c
+#if EMBED_WORD_BITS == 64
+typedef EmbedAtomicU64LoadCfg EmbedAtomicWordLoadCfg;
+typedef EmbedAtomicU64StoreCfg EmbedAtomicWordStoreCfg;
+typedef EmbedAtomicU64ExchangeCfg EmbedAtomicWordExchangeCfg;
+typedef EmbedAtomicU64SwapIfCfg EmbedAtomicWordSwapIfCfg;
+typedef EmbedAtomicU64FetchAddCfg EmbedAtomicWordFetchAddCfg;
+typedef EmbedAtomicU64FetchSubCfg EmbedAtomicWordFetchSubCfg;
+typedef EmbedAtomicU64FetchOrCfg EmbedAtomicWordFetchOrCfg;
+typedef EmbedAtomicU64FetchAndCfg EmbedAtomicWordFetchAndCfg;
+typedef EmbedAtomicU64RaiseCfg EmbedAtomicWordRaiseCfg;
+typedef EmbedAtomicU64Ns EmbedAtomicWordNs;
+#define embed_atomic_word_table embed_atomic_u64_table
+#else
+typedef EmbedAtomicU32LoadCfg EmbedAtomicWordLoadCfg;
+typedef EmbedAtomicU32StoreCfg EmbedAtomicWordStoreCfg;
+typedef EmbedAtomicU32ExchangeCfg EmbedAtomicWordExchangeCfg;
+typedef EmbedAtomicU32SwapIfCfg EmbedAtomicWordSwapIfCfg;
+typedef EmbedAtomicU32FetchAddCfg EmbedAtomicWordFetchAddCfg;
+typedef EmbedAtomicU32FetchSubCfg EmbedAtomicWordFetchSubCfg;
+typedef EmbedAtomicU32FetchOrCfg EmbedAtomicWordFetchOrCfg;
+typedef EmbedAtomicU32FetchAndCfg EmbedAtomicWordFetchAndCfg;
+typedef EmbedAtomicU32RaiseCfg EmbedAtomicWordRaiseCfg;
+typedef EmbedAtomicU32Ns EmbedAtomicWordNs;
+#define embed_atomic_word_table embed_atomic_u32_table
+#endif
+```
+
+The Cfg of each operation of [`embed_atomic_word`](#embed_atomic_word), and its table: those of [`embed_atomic_u64`](#embed_atomic_u64).
+
+The Cfg of each operation of [`embed_atomic_word`](#embed_atomic_word), and its table: those of [`embed_atomic_u32`](#embed_atomic_u32).
 
 ### `embed_atomic_usize` { #embed_atomic_usize }
 
@@ -120,6 +372,40 @@ The plain integer [`embed_atomic_usize`](#embed_atomic_usize) holds and its oper
 
 The plain integer [`embed_atomic_usize`](#embed_atomic_usize) holds and its operations take and answer.
 
+### `EmbedAtomicUsizeLoadCfg` { #EmbedAtomicUsizeLoadCfg }
+
+```c
+#if SIZE_MAX == 0xFFFFFFFFFFFFFFFFu
+typedef EmbedAtomicU64LoadCfg EmbedAtomicUsizeLoadCfg;
+typedef EmbedAtomicU64StoreCfg EmbedAtomicUsizeStoreCfg;
+typedef EmbedAtomicU64ExchangeCfg EmbedAtomicUsizeExchangeCfg;
+typedef EmbedAtomicU64SwapIfCfg EmbedAtomicUsizeSwapIfCfg;
+typedef EmbedAtomicU64FetchAddCfg EmbedAtomicUsizeFetchAddCfg;
+typedef EmbedAtomicU64FetchSubCfg EmbedAtomicUsizeFetchSubCfg;
+typedef EmbedAtomicU64FetchOrCfg EmbedAtomicUsizeFetchOrCfg;
+typedef EmbedAtomicU64FetchAndCfg EmbedAtomicUsizeFetchAndCfg;
+typedef EmbedAtomicU64RaiseCfg EmbedAtomicUsizeRaiseCfg;
+typedef EmbedAtomicU64Ns EmbedAtomicUsizeNs;
+#define embed_atomic_usize_table embed_atomic_u64_table
+#else
+typedef EmbedAtomicU32LoadCfg EmbedAtomicUsizeLoadCfg;
+typedef EmbedAtomicU32StoreCfg EmbedAtomicUsizeStoreCfg;
+typedef EmbedAtomicU32ExchangeCfg EmbedAtomicUsizeExchangeCfg;
+typedef EmbedAtomicU32SwapIfCfg EmbedAtomicUsizeSwapIfCfg;
+typedef EmbedAtomicU32FetchAddCfg EmbedAtomicUsizeFetchAddCfg;
+typedef EmbedAtomicU32FetchSubCfg EmbedAtomicUsizeFetchSubCfg;
+typedef EmbedAtomicU32FetchOrCfg EmbedAtomicUsizeFetchOrCfg;
+typedef EmbedAtomicU32FetchAndCfg EmbedAtomicUsizeFetchAndCfg;
+typedef EmbedAtomicU32RaiseCfg EmbedAtomicUsizeRaiseCfg;
+typedef EmbedAtomicU32Ns EmbedAtomicUsizeNs;
+#define embed_atomic_usize_table embed_atomic_u32_table
+#endif
+```
+
+The Cfg of each operation of [`embed_atomic_usize`](#embed_atomic_usize), and its table: those of [`embed_atomic_u64`](#embed_atomic_u64).
+
+The Cfg of each operation of [`embed_atomic_usize`](#embed_atomic_usize), and its table: those of [`embed_atomic_u32`](#embed_atomic_u32).
+
 ### `embed_atomic_uptr` { #embed_atomic_uptr }
 
 ```c
@@ -147,6 +433,30 @@ typedef embed_u32 embed_atomic_uptr_value;
 The plain integer [`embed_atomic_uptr`](#embed_atomic_uptr) holds and its operations take and answer.
 
 The plain integer [`embed_atomic_uptr`](#embed_atomic_uptr) holds and its operations take and answer.
+
+### `EmbedAtomicUptrLoadCfg` { #EmbedAtomicUptrLoadCfg }
+
+```c
+#if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
+typedef EmbedAtomicU64LoadCfg EmbedAtomicUptrLoadCfg;
+typedef EmbedAtomicU64StoreCfg EmbedAtomicUptrStoreCfg;
+typedef EmbedAtomicU64ExchangeCfg EmbedAtomicUptrExchangeCfg;
+typedef EmbedAtomicU64SwapIfCfg EmbedAtomicUptrSwapIfCfg;
+typedef EmbedAtomicU64Ns EmbedAtomicUptrNs;
+#define embed_atomic_uptr_table embed_atomic_u64_table
+#else
+typedef EmbedAtomicU32LoadCfg EmbedAtomicUptrLoadCfg;
+typedef EmbedAtomicU32StoreCfg EmbedAtomicUptrStoreCfg;
+typedef EmbedAtomicU32ExchangeCfg EmbedAtomicUptrExchangeCfg;
+typedef EmbedAtomicU32SwapIfCfg EmbedAtomicUptrSwapIfCfg;
+typedef EmbedAtomicU32Ns EmbedAtomicUptrNs;
+#define embed_atomic_uptr_table embed_atomic_u32_table
+#endif
+```
+
+The Cfg of each operation of [`embed_atomic_uptr`](#embed_atomic_uptr), and its table: those of [`embed_atomic_u64`](#embed_atomic_u64).
+
+The Cfg of each operation of [`embed_atomic_uptr`](#embed_atomic_uptr), and its table: those of [`embed_atomic_u32`](#embed_atomic_u32).
 
 ## Macros
 
@@ -279,43 +589,76 @@ The primitives of the MSVC arm, on the interlocked intrinsics.
 ### `EMBED_ATOMIC_OPERATIONS` { #EMBED_ATOMIC_OPERATIONS }
 
 ```c
-#define EMBED_ATOMIC_OPERATIONS(name_, type_, exchange_, swap_if_, add_, or_, and_) \
-    /** @brief The word, with acquire ordering: no later read moves ahead of it. */ \
-    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_load(const embed_atomic_##name_ *word) \
+#define EMBED_ATOMIC_OPERATIONS(name_, Width_, type_, exchange_, swap_if_, add_, or_, and_) \
+    /** @brief The parameters of the load. */ \
+    typedef struct \
     { \
-        const type_ found = EMBED_ATOMIC_LOAD(word); \
+        const embed_atomic_##name_ *const word; /**< The word [BORROWS]. */ \
+    } EmbedAtomic##Width_##LoadCfg; \
+    /** @brief The parameters of an operation that writes value into the word or combines it with the word. */ \
+    typedef struct \
+    { \
+        embed_atomic_##name_ *const word; /**< The word [BORROWS]. */ \
+        const type_ value;                /**< The value of the operation. */ \
+    } EmbedAtomic##Width_##ValueCfg; \
+    /** @brief The parameters of the store. */ \
+    typedef EmbedAtomic##Width_##ValueCfg EmbedAtomic##Width_##StoreCfg; \
+    /** @brief The parameters of the exchange. */ \
+    typedef EmbedAtomic##Width_##ValueCfg EmbedAtomic##Width_##ExchangeCfg; \
+    /** @brief The parameters of the fetch-add. */ \
+    typedef EmbedAtomic##Width_##ValueCfg EmbedAtomic##Width_##FetchAddCfg; \
+    /** @brief The parameters of the fetch-subtract. */ \
+    typedef EmbedAtomic##Width_##ValueCfg EmbedAtomic##Width_##FetchSubCfg; \
+    /** @brief The parameters of the fetch-or. */ \
+    typedef EmbedAtomic##Width_##ValueCfg EmbedAtomic##Width_##FetchOrCfg; \
+    /** @brief The parameters of the fetch-and. */ \
+    typedef EmbedAtomic##Width_##ValueCfg EmbedAtomic##Width_##FetchAndCfg; \
+    /** @brief The parameters of the raise. */ \
+    typedef EmbedAtomic##Width_##ValueCfg EmbedAtomic##Width_##RaiseCfg; \
+    /** @brief The parameters of the compare-and-swap. */ \
+    typedef struct \
+    { \
+        embed_atomic_##name_ *const word; /**< The word [BORROWS]. */ \
+        type_ *const expected;            /**< The word that the caller expects, and then the word found [BORROWS]. */ \
+        const type_ value;                /**< The word that the swap writes. */ \
+    } EmbedAtomic##Width_##SwapIfCfg; \
+    /** @brief The word, with acquire ordering: no later read moves ahead of it. */ \
+    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_load(const EmbedAtomic##Width_##LoadCfg *args) \
+    { \
+        const type_ found = EMBED_ATOMIC_LOAD(args->word); \
         EMBED_ATOMIC_FENCE(); \
         return found; \
     } \
     /** @brief The word set to value, with release ordering: every earlier write is out before it. */ \
-    EMBED_HOST_DEVICE EMBED_INLINE void embed_atomic_##name_##_store(embed_atomic_##name_ *word, type_ value) \
+    EMBED_HOST_DEVICE EMBED_INLINE void embed_atomic_##name_##_store(const EmbedAtomic##Width_##StoreCfg *args) \
     { \
         EMBED_ATOMIC_FENCE(); \
-        EMBED_ATOMIC_STORE(word, value); \
+        EMBED_ATOMIC_STORE(args->word, args->value); \
     } \
     /** @brief The word set to value, and the word before. */ \
-    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_exchange(embed_atomic_##name_ *word, type_ value) \
+    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_exchange(const EmbedAtomic##Width_##ExchangeCfg *args) \
     { \
         EMBED_ATOMIC_FENCE(); \
-        const type_ found = exchange_(word, value); \
+        const type_ found = exchange_(args->word, args->value); \
         EMBED_ATOMIC_FENCE(); \
         return found; \
     } \
     /** @brief The word set to value where it holds *expected, else *expected set to what it holds. */ \
-    EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_##name_##_swap_if(embed_atomic_##name_ *word, \
-                                                                             type_ *expected, type_ value) \
+    EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_##name_##_swap_if( \
+        const EmbedAtomic##Width_##SwapIfCfg *args) \
     { \
         EMBED_ATOMIC_FENCE(); \
-        const embed_bool swapped = swap_if_(word, expected, value); \
+        const embed_bool swapped = swap_if_(args->word, args->expected, args->value); \
         EMBED_ATOMIC_FENCE(); \
         return swapped; \
     } \
     /** @brief value added to the word, with wrap around, and the word before the add. \
      *  @warning A sum past the max of type_ wraps modulo the width of the word, and nothing reports it. */ \
-    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_fetch_add(embed_atomic_##name_ *word, type_ value) \
+    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_fetch_add( \
+        const EmbedAtomic##Width_##FetchAddCfg *args) \
     { \
         EMBED_ATOMIC_FENCE(); \
-        const type_ found = add_(word, value); \
+        const type_ found = add_(args->word, args->value); \
         EMBED_ATOMIC_FENCE(); \
         return found; \
     } \
@@ -323,51 +666,88 @@ The primitives of the MSVC arm, on the interlocked intrinsics.
      *  @warning A value above the word wraps modulo the width of the word, and nothing reports it. \
      *  @note The add of the two's complement is the subtract, because the add of each arm wraps. The cast holds \
      *        the complement at the width of type_. */ \
-    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_fetch_sub(embed_atomic_##name_ *word, type_ value) \
+    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_fetch_sub( \
+        const EmbedAtomic##Width_##FetchSubCfg *args) \
     { \
-        return embed_atomic_##name_##_fetch_add(word, (type_)(0u - value)); \
+        return EMBED_CALL(embed_atomic_##name_##_fetch_add, EmbedAtomic##Width_##FetchAddCfg, args->word, \
+                          (type_)(0u - args->value)); \
     } \
     /** @brief The word ored with value, and the word before the or. */ \
-    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_fetch_or(embed_atomic_##name_ *word, type_ value) \
+    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_fetch_or(const EmbedAtomic##Width_##FetchOrCfg *args) \
     { \
         EMBED_ATOMIC_FENCE(); \
-        const type_ found = or_(word, value); \
+        const type_ found = or_(args->word, args->value); \
         EMBED_ATOMIC_FENCE(); \
         return found; \
     } \
     /** @brief The word anded with value, and the word before the and. */ \
-    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_fetch_and(embed_atomic_##name_ *word, type_ value) \
+    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_fetch_and( \
+        const EmbedAtomic##Width_##FetchAndCfg *args) \
     { \
         EMBED_ATOMIC_FENCE(); \
-        const type_ found = and_(word, value); \
+        const type_ found = and_(args->word, args->value); \
         EMBED_ATOMIC_FENCE(); \
         return found; \
     } \
     /** @brief The word raised to value where value is above it, by a swap, and the word before. \
      *  @note A swap that fails puts the word that another context wrote in found, and the test runs again on it. */ \
-    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_raise(embed_atomic_##name_ *word, type_ value) \
+    EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_raise(const EmbedAtomic##Width_##RaiseCfg *args) \
     { \
-        type_ found = embed_atomic_##name_##_load(word); \
+        type_ found = EMBED_CALL(embed_atomic_##name_##_load, EmbedAtomic##Width_##LoadCfg, args->word); \
         embed_bool raised = EMBED_FALSE; \
-        while ((found < value) && !raised) \
+        while ((found < args->value) && !raised) \
         { \
-            raised = embed_atomic_##name_##_swap_if(word, &found, value); \
+            raised = EMBED_CALL(embed_atomic_##name_##_swap_if, EmbedAtomic##Width_##SwapIfCfg, args->word, &found, \
+                                args->value); \
         } \
         return found; \
-    }
+    } \
+    /** @brief The dispatch table of the operations of one width, in the order of the header. */ \
+    typedef struct \
+    { \
+        type_ (*load)(const EmbedAtomic##Width_##LoadCfg *args);           /**< The load. */ \
+        void (*store)(const EmbedAtomic##Width_##StoreCfg *args);          /**< The store. */ \
+        type_ (*exchange)(const EmbedAtomic##Width_##ExchangeCfg *args);   /**< The exchange. */ \
+        embed_bool (*swap_if)(const EmbedAtomic##Width_##SwapIfCfg *args); /**< The compare-and-swap. */ \
+        type_ (*fetch_add)(const EmbedAtomic##Width_##FetchAddCfg *args);  /**< The fetch-add. */ \
+        type_ (*fetch_sub)(const EmbedAtomic##Width_##FetchSubCfg *args);  /**< The fetch-subtract. */ \
+        type_ (*fetch_or)(const EmbedAtomic##Width_##FetchOrCfg *args);    /**< The fetch-or. */ \
+        type_ (*fetch_and)(const EmbedAtomic##Width_##FetchAndCfg *args);  /**< The fetch-and. */ \
+        type_ (*raise)(const EmbedAtomic##Width_##RaiseCfg *args);         /**< The raise. */ \
+    } EmbedAtomic##Width_##Ns; \
+    EMBED_TABLE_LAYOUT(EmbedAtomic##Width_##Ns, load, store, exchange, swap_if, fetch_add, fetch_sub, fetch_or, \
+                       fetch_and, raise);
 ```
 
-Defines the operations over one atomic width. `name_` is the suffix and `type_` the word. The other five parameters are the primitives of the arm for that width.
+Defines the operations over one atomic width, the Cfg of each and the dispatch table type. `name_` is the suffix, `Width_` the same suffix in the case of a type, and `type_` the word. The other five parameters are the primitives of the arm for that width.
 
 > **Note:** One text for both widths and each arm. A width or an arm cannot drift from the others.
 
 > **Note:** The compare-and-swap uses the primitive of the arm where the arm has one, and the exchange where it does not. The C11 arm and the builtin arm use the generic call below.
 
+> **Note:** [`EMBED_ATOMIC_TABLE`](#EMBED_ATOMIC_TABLE) defines the table object of the width, apart from this macro, because the device pass of CUDA has no table.
+
+### `EMBED_ATOMIC_TABLE` { #EMBED_ATOMIC_TABLE }
+
+```c
+#define EMBED_ATOMIC_TABLE(name_, Width_) \
+    static const EmbedAtomic##Width_##Ns embed_atomic_##name_##_table = { \
+        embed_atomic_##name_##_load,     embed_atomic_##name_##_store,     embed_atomic_##name_##_exchange, \
+        embed_atomic_##name_##_swap_if,  embed_atomic_##name_##_fetch_add, embed_atomic_##name_##_fetch_sub, \
+        embed_atomic_##name_##_fetch_or, embed_atomic_##name_##_fetch_and, embed_atomic_##name_##_raise}
+```
+
+Defines the dispatch table of one atomic width. A call through it folds to a direct call under the optimizer and LTO.
+
+- `[in]`: `name_` The suffix of the width.
+- `[in]`: `Width_` The same suffix in the case of a type.
+
 ### `EMBED_ATOMIC_CAS_32` { #EMBED_ATOMIC_CAS_32 }
 
 ```c
 #if (EMBED_ATOMIC_ARM == 1) || (EMBED_ATOMIC_ARM == 4)
-#define EMBED_ATOMIC_CAS_32(word_, expected_, value_) embed_atomic_cas_u32(word_, expected_, value_)
+#define EMBED_ATOMIC_CAS_32(word_, expected_, value_) \
+    EMBED_CALL(embed_atomic_cas_u32, EmbedAtomicCasU32Cfg, (word_), (expected_), (value_))
 #elif EMBED_ATOMIC_ARM == 2
 #define EMBED_ATOMIC_CAS_32(word_, expected_, value_) \
     ((embed_bool)atomic_compare_exchange_strong_explicit(&(word_)->value, (expected_), (value_), memory_order_acq_rel, \
@@ -396,7 +776,8 @@ The compare-and-swap of the builtin arm, the strong form, with the orders of the
 ```c
 #if (EMBED_ATOMIC_ARM == 1) || (EMBED_ATOMIC_ARM == 4)
 #if EMBED_ATOMIC_HAS_64
-#define EMBED_ATOMIC_CAS_64(word_, expected_, value_) embed_atomic_cas_u64(word_, expected_, value_)
+#define EMBED_ATOMIC_CAS_64(word_, expected_, value_) \
+    EMBED_CALL(embed_atomic_cas_u64, EmbedAtomicCasU64Cfg, (word_), (expected_), (value_))
 #endif
 #elif EMBED_ATOMIC_ARM == 2
 #define EMBED_ATOMIC_CAS_64(word_, expected_, value_) EMBED_ATOMIC_CAS_32(word_, expected_, value_)
@@ -493,16 +874,13 @@ The operations of [`embed_atomic_uptr`](#embed_atomic_uptr), each the operation 
 
 ```c
 #if (EMBED_ATOMIC_ARM == 1) || (EMBED_ATOMIC_ARM == 4)
-EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u32(embed_atomic_u32 *word, embed_u32 *expected,
-                                                               embed_u32 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u32(const EmbedAtomicCasU32Cfg *args);
 #endif
 ```
 
 The 32-bit compare-and-swap of an arm whose primitive answers the word that it found.
 
-- `[in,out]`: word The word \[BORROWS\].
-- `[in,out]`: expected The word that the caller expects, and after the call the word that the primitive found \[BORROWS\].
-- `[in]`: value The word that the swap writes.
+- `[in]`: args The parameters, as EmbedAtomicCasU32Cfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* 1 where the swap occurred, 0 where it did not.
 
@@ -511,26 +889,23 @@ The 32-bit compare-and-swap of an arm whose primitive answers the word that it f
 ```c
 #if (EMBED_ATOMIC_ARM == 1) || (EMBED_ATOMIC_ARM == 4)
 #if EMBED_ATOMIC_HAS_64
-EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u64(embed_atomic_u64 *word, embed_u64 *expected,
-                                                               embed_u64 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u64(const EmbedAtomicCasU64Cfg *args);
 #endif
 #endif
 ```
 
 The 64-bit compare-and-swap of an arm whose primitive answers the word that it found.
 
-- `[in,out]`: word The word \[BORROWS\].
-- `[in,out]`: expected The word that the caller expects, and after the call the word that the primitive found \[BORROWS\].
-- `[in]`: value The word that the swap writes.
+- `[in]`: args The parameters, as EmbedAtomicCasU64Cfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* 1 where the swap occurred, 0 where it did not.
 
 ### `embed_atomic_u32_load` { #embed_atomic_u32_load }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_load(const embed_atomic_u32 *word);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_load(const EmbedAtomicU32LoadCfg *args);
 #if EMBED_ATOMIC_HAS_64
-EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_load(const embed_atomic_u64 *word);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_load(const EmbedAtomicU64LoadCfg *args);
 #endif
 ```
 
@@ -539,9 +914,9 @@ The word, with acquire ordering: no later read moves ahead of it.
 ### `embed_atomic_u32_store` { #embed_atomic_u32_store }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE void embed_atomic_u32_store(embed_atomic_u32 *word, embed_u32 value);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_atomic_u32_store(const EmbedAtomicU32StoreCfg *args);
 #if EMBED_ATOMIC_HAS_64
-EMBED_HOST_DEVICE EMBED_INLINE void embed_atomic_u64_store(embed_atomic_u64 *word, embed_u64 value);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_atomic_u64_store(const EmbedAtomicU64StoreCfg *args);
 #endif
 ```
 
@@ -550,9 +925,9 @@ The word set to value, with release ordering: every earlier write is out before 
 ### `embed_atomic_u32_exchange` { #embed_atomic_u32_exchange }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_exchange(embed_atomic_u32 *word, embed_u32 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_exchange(const EmbedAtomicU32ExchangeCfg *args);
 #if EMBED_ATOMIC_HAS_64
-EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_exchange(embed_atomic_u64 *word, embed_u64 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_exchange(const EmbedAtomicU64ExchangeCfg *args);
 #endif
 ```
 
@@ -561,9 +936,9 @@ The word set to value, and the word before.
 ### `embed_atomic_u32_swap_if` { #embed_atomic_u32_swap_if }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_u32_swap_if(embed_atomic_u32 *word, embed_u32 *expected, embed_u32 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_u32_swap_if( const EmbedAtomicU32SwapIfCfg *args);
 #if EMBED_ATOMIC_HAS_64
-EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_u64_swap_if(embed_atomic_u64 *word, embed_u64 *expected, embed_u64 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_u64_swap_if( const EmbedAtomicU64SwapIfCfg *args);
 #endif
 ```
 
@@ -572,9 +947,9 @@ The word set to value where it holds \*expected, else \*expected set to what it 
 ### `embed_atomic_u32_fetch_add` { #embed_atomic_u32_fetch_add }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_add(embed_atomic_u32 *word, embed_u32 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_add( const EmbedAtomicU32FetchAddCfg *args);
 #if EMBED_ATOMIC_HAS_64
-EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_add(embed_atomic_u64 *word, embed_u64 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_add( const EmbedAtomicU64FetchAddCfg *args);
 #endif
 ```
 
@@ -585,9 +960,9 @@ value added to the word, with wrap around, and the word before the add.
 ### `embed_atomic_u32_fetch_sub` { #embed_atomic_u32_fetch_sub }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_sub(embed_atomic_u32 *word, embed_u32 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_sub( const EmbedAtomicU32FetchSubCfg *args);
 #if EMBED_ATOMIC_HAS_64
-EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_sub(embed_atomic_u64 *word, embed_u64 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_sub( const EmbedAtomicU64FetchSubCfg *args);
 #endif
 ```
 
@@ -600,9 +975,9 @@ value taken from the word, with wrap around, and the word before the subtract.
 ### `embed_atomic_u32_fetch_or` { #embed_atomic_u32_fetch_or }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_or(embed_atomic_u32 *word, embed_u32 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_or(const EmbedAtomicU32FetchOrCfg *args);
 #if EMBED_ATOMIC_HAS_64
-EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_or(embed_atomic_u64 *word, embed_u64 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_or(const EmbedAtomicU64FetchOrCfg *args);
 #endif
 ```
 
@@ -611,9 +986,9 @@ The word ored with value, and the word before the or.
 ### `embed_atomic_u32_fetch_and` { #embed_atomic_u32_fetch_and }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_and(embed_atomic_u32 *word, embed_u32 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_fetch_and( const EmbedAtomicU32FetchAndCfg *args);
 #if EMBED_ATOMIC_HAS_64
-EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_and(embed_atomic_u64 *word, embed_u64 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_fetch_and( const EmbedAtomicU64FetchAndCfg *args);
 #endif
 ```
 
@@ -622,9 +997,9 @@ The word anded with value, and the word before the and.
 ### `embed_atomic_u32_raise` { #embed_atomic_u32_raise }
 
 ```c
-EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_raise(embed_atomic_u32 *word, embed_u32 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_atomic_u32_raise(const EmbedAtomicU32RaiseCfg *args);
 #if EMBED_ATOMIC_HAS_64
-EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_raise(embed_atomic_u64 *word, embed_u64 value);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_atomic_u64_raise(const EmbedAtomicU64RaiseCfg *args);
 #endif
 ```
 

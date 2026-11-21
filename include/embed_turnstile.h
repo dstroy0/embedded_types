@@ -132,27 +132,39 @@ typedef struct
     unsigned int exponent; /**< The exponent of the next wait, from 0 to EMBED_TURNSTILE_EXPONENT_MAX. */
 } EmbedTurnstileBackoff;
 
+/** @brief The parameters of embed_word_wait. */
+typedef struct
+{
+    embed_atomic_word *const word;           /**< The word slept on [BORROWS]. */
+    const embed_atomic_word_value old_value; /**< The value of the word that the caller read last. */
+    const embed_word nanoseconds; /**< The max the sleep lasts. 0 answers at once with no sleep and no system call. */
+} EmbedWordWaitCfg;
+
 /**
  * @brief A sleep on word while it holds old_value, at max nanoseconds, EMBED_WAIT_INFINITE for no end, and none at
  *        all for 0.
  *
- * @param[in] word        The word slept on [BORROWS].
- * @param[in] old_value   The value of the word that the caller read last.
- * @param[in] nanoseconds The max the sleep lasts. 0 answers at once with no sleep and no system call.
- * @return                1 where the word moved off old_value, 0 where it did not. A sleep is free to end early, so
- *                        a sleeper tests what it waits for in a loop.
+ * @param[in] args The parameters, as EmbedWordWaitCfg holds them [BORROWS].
+ * @return         1 where the word moved off old_value, 0 where it did not. A sleep is free to end early, so
+ *                 a sleeper tests what it waits for in a loop.
  * @note The host defines this function on its address wait. That is a futex on Linux, WaitOnAddress on Windows, and
  *       __ulock_wait on macOS. Where the system has none, it is a timed sleep.
  */
-int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value old_value, embed_word nanoseconds);
+int embed_word_wait(const EmbedWordWaitCfg *args);
+
+/** @brief The parameters of embed_word_wake. */
+typedef struct
+{
+    embed_atomic_word *const word; /**< The word [BORROWS]. */
+} EmbedWordWakeCfg;
 
 /**
  * @brief Every thread asleep on word woken.
  *
- * @param[in] word The word [BORROWS].
+ * @param[in] args The parameters, as EmbedWordWakeCfg holds them [BORROWS].
  * @note The host defines this beside embed_word_wait.
  */
-void embed_word_wake(embed_atomic_word *word);
+void embed_word_wake(const EmbedWordWakeCfg *args);
 
 /**
  * @brief The host's clock in nanoseconds, which the backoff measures its time on.
@@ -191,16 +203,32 @@ embed_u32 embed_thread_place(void);
 #endif
 #endif
 
+/** @brief The parameters of embed_turnstile_backoff_begin. */
+typedef struct
+{
+    EmbedTurnstileBackoff *const backoff; /**< The backoff [BORROWS]. */
+} EmbedTurnstileBackoffBeginCfg;
+
 /**
  * @brief The start of a backoff: the clock read, and the exponent at 0.
  *
- * @param[out] backoff The backoff [BORROWS].
+ * @param[in] args The parameters, as EmbedTurnstileBackoffBeginCfg holds them [BORROWS].
  */
-EMBED_INLINE void embed_turnstile_backoff_begin(EmbedTurnstileBackoff *backoff)
+EMBED_INLINE void embed_turnstile_backoff_begin(const EmbedTurnstileBackoffBeginCfg *args)
 {
-    backoff->start_ns = embed_clock_ns();
-    backoff->exponent = 0u;
+    args->backoff->start_ns = embed_clock_ns();
+    args->backoff->exponent = 0u;
 }
+
+/** @brief The parameters of embed_turnstile_backoff_step. */
+typedef struct
+{
+    embed_atomic_word *const word;             /**< The word [BORROWS]. */
+    const embed_atomic_word_value old_value;   /**< The value of the word that the caller read last. */
+    const embed_atomic_word_value sleeper_bit; /**< The sleeper bit of the word. */
+    EmbedTurnstileBackoff *const backoff;      /**< The backoff [BORROWS]. */
+    const embed_bool sleep_allowed; /**< True where old_value lets the caller sleep, false for a pause alone. */
+} EmbedTurnstileBackoffStepCfg;
 
 /**
  * @brief One step of a backoff on word, which the caller last read as old_value.
@@ -209,66 +237,83 @@ EMBED_INLINE void embed_turnstile_backoff_begin(EmbedTurnstileBackoff *backoff)
  * that is all. Otherwise the step sets `sleeper_bit` on the word, and the host waits on the word for the limit of the
  * exponent. Then the exponent goes up by one, to EMBED_TURNSTILE_EXPONENT_MAX at max.
  *
- * @param[in]     word          The word [BORROWS].
- * @param[in]     old_value     The value of the word that the caller read last.
- * @param[in]     sleeper_bit   The sleeper bit of the word.
- * @param[in,out] backoff       The backoff [BORROWS].
- * @param[in]     sleep_allowed True where old_value lets the caller sleep, false for a pause alone.
+ * @param[in] args The parameters, as EmbedTurnstileBackoffStepCfg holds them [BORROWS].
  * @note The sleep needs a value that a later change ends. A caller sleeps only on a value whose change comes with a
  *       wake, such as a lane word that has the busy bit.
  */
-EMBED_INLINE void embed_turnstile_backoff_step(embed_atomic_word *word, embed_atomic_word_value old_value,
-                                               embed_atomic_word_value sleeper_bit, EmbedTurnstileBackoff *backoff,
-                                               embed_bool sleep_allowed)
+EMBED_INLINE void embed_turnstile_backoff_step(const EmbedTurnstileBackoffStepCfg *args)
 {
     EMBED_TURNSTILE_SPIN_PAUSE();
     // Explicit cast takes the difference modulo the word, because a word narrower than int promotes to int
-    const embed_word elapsed_ns = (embed_word)(embed_clock_ns() - backoff->start_ns);
+    const embed_word elapsed_ns = (embed_word)(embed_clock_ns() - args->backoff->start_ns);
 
     // Explicit cast takes the unit as the word, and the assertion on the unit shift holds it below the width
-    if (sleep_allowed && (elapsed_ns >= ((embed_word)1u << EMBED_TURNSTILE_UNIT_SHIFT)))
+    if (args->sleep_allowed && (elapsed_ns >= ((embed_word)1u << EMBED_TURNSTILE_UNIT_SHIFT)))
     {
-        (void)embed_atomic_word_fetch_or(word, sleeper_bit);
+        (void)EMBED_CALL(embed_atomic_word_fetch_or, EmbedAtomicWordFetchOrCfg, args->word, args->sleeper_bit);
         // Explicit cast takes the limit as the word, and EMBED_TURNSTILE_EXPONENT_MAX holds it below the width
-        (void)embed_word_wait(word, old_value | sleeper_bit,
-                              (embed_word)((embed_word)1u << (EMBED_TURNSTILE_UNIT_SHIFT + backoff->exponent)));
+        (void)EMBED_CALL(embed_word_wait, EmbedWordWaitCfg, args->word, args->old_value | args->sleeper_bit,
+                         (embed_word)((embed_word)1u << (EMBED_TURNSTILE_UNIT_SHIFT + args->backoff->exponent)));
         // Explicit cast converts the comparison, an int of 0 or 1, to the unsigned type of the exponent
-        backoff->exponent += (unsigned int)(backoff->exponent < EMBED_TURNSTILE_EXPONENT_MAX);
+        args->backoff->exponent += (unsigned int)(args->backoff->exponent < EMBED_TURNSTILE_EXPONENT_MAX);
     }
 }
+
+/** @brief The parameters of embed_turnstile_open_lane_count. */
+typedef struct
+{
+    const EmbedTurnstiles *const set; /**< The set [BORROWS]. */
+} EmbedTurnstileOpenLaneCountCfg;
 
 /**
  * @brief The lanes a set has open.
  *
- * @param[in] set The set [BORROWS].
- * @return        The lanes open, from 1 to EMBED_TURNSTILE_LANES.
+ * @param[in] args The parameters, as EmbedTurnstileOpenLaneCountCfg holds them [BORROWS].
+ * @return         The lanes open, from 1 to EMBED_TURNSTILE_LANES.
  */
-EMBED_INLINE unsigned int embed_turnstile_open_lane_count(const EmbedTurnstiles *set)
+EMBED_INLINE unsigned int embed_turnstile_open_lane_count(const EmbedTurnstileOpenLaneCountCfg *args)
 {
     // Explicit cast takes the place of the top open lane from the word, which EMBED_TURNSTILE_LANES bounds
-    return (unsigned int)embed_atomic_word_load(&set->top_open_lane) + 1u;
+    return (unsigned int)EMBED_CALL(embed_atomic_word_load, EmbedAtomicWordLoadCfg, &args->set->top_open_lane) + 1u;
 }
+
+/** @brief The parameters of embed_turnstile_lane_add. */
+typedef struct
+{
+    EmbedTurnstileLane *const lane;       /**< The lane [BORROWS]. */
+    const embed_atomic_word_value addend; /**< The constant of the fetch-add. */
+} EmbedTurnstileLaneAddCfg;
 
 /**
  * @brief A fetch-add on a lane word that the caller holds, and the wake of its sleepers where the old value had the
  *        sleeper bit.
  *
- * @param[in,out] lane   The lane [BORROWS].
- * @param[in]     addend The constant of the fetch-add.
+ * @param[in] args The parameters, as EmbedTurnstileLaneAddCfg holds them [BORROWS].
  */
-EMBED_INLINE void embed_turnstile_lane_add(EmbedTurnstileLane *lane, embed_atomic_word_value addend)
+EMBED_INLINE void embed_turnstile_lane_add(const EmbedTurnstileLaneAddCfg *args)
 {
-    const embed_atomic_word_value previous_word = embed_atomic_word_fetch_add(&lane->word, addend);
+    const embed_atomic_word_value previous_word =
+        EMBED_CALL(embed_atomic_word_fetch_add, EmbedAtomicWordFetchAddCfg, &args->lane->word, args->addend);
 
     if ((previous_word & EMBED_TURNSTILE_SLEEPER_BIT) != 0u)
     {
-        (void)embed_atomic_word_fetch_and(&lane->word, ~EMBED_TURNSTILE_SLEEPER_BIT);
-        embed_word_wake(&lane->word);
+        (void)EMBED_CALL(embed_atomic_word_fetch_and, EmbedAtomicWordFetchAndCfg, &args->lane->word,
+                         ~EMBED_TURNSTILE_SLEEPER_BIT);
+        EMBED_CALL(embed_word_wake, EmbedWordWakeCfg, &args->lane->word);
     }
 }
 
 /** @brief The place of no lane: the answer of a growth or a spill that took none. */
 #define EMBED_TURNSTILE_NO_LANE 0xffffffffu
+
+/** @brief The parameters of embed_turnstile_grow. */
+typedef struct
+{
+    EmbedTurnstiles *const set;               /**< The set [BORROWS]. */
+    const unsigned int open_lane_count;       /**< The lanes the caller read open. */
+    embed_atomic_word_value *const held_word; /**< The word of lane open_lane_count where another thread holds it, and 0
+                                                 in each other case [BORROWS]. */
+} EmbedTurnstileGrowCfg;
 
 /**
  * @brief The growth from open_lane_count lanes to one more, which gives the caller lane open_lane_count as its pass.
@@ -280,60 +325,66 @@ EMBED_INLINE void embed_turnstile_lane_add(EmbedTurnstileLane *lane, embed_atomi
  * Where that swap lands, the lane is the caller's pass. Where it fails, the growth gives the lane back as it was. A
  * lane that had the closed bit gets a close, and a lane that was free gets a release.
  *
- * @param[in,out] set             The set [BORROWS].
- * @param[in]     open_lane_count The lanes the caller read open.
- * @param[out]    held_word       The word of lane open_lane_count where another thread holds it, and 0 in each other
- *                                case [BORROWS].
- * @return                        open_lane_count, the lane the caller now holds, or EMBED_TURNSTILE_NO_LANE where it
- *                                holds none.
+ * @param[in] args The parameters, as EmbedTurnstileGrowCfg holds them [BORROWS].
+ * @return         open_lane_count, the lane the caller now holds, or EMBED_TURNSTILE_NO_LANE where it
+ *                 holds none.
  * @note A lane that a pass, a contraction or another growth holds refuses the first compare-and-swap, and nothing
  *       changes. A contraction holds its lane from its claim to its close, so no growth takes a lane between a
  *       contraction's swap and its close. The caller sleeps on `held_word`: the end of that hold changes the word
  *       and wakes it.
  */
-EMBED_INLINE unsigned int embed_turnstile_grow(EmbedTurnstiles *set, unsigned int open_lane_count,
-                                               embed_atomic_word_value *held_word)
+EMBED_INLINE unsigned int embed_turnstile_grow(const EmbedTurnstileGrowCfg *args)
 {
-    *held_word = 0u;
-    if (open_lane_count >= EMBED_TURNSTILE_LANES)
+    *args->held_word = 0u;
+    if (args->open_lane_count >= EMBED_TURNSTILE_LANES)
     {
         return EMBED_TURNSTILE_NO_LANE;
     }
-    EmbedTurnstileLane *const lane = &set->lanes[open_lane_count];
-    embed_atomic_word_value expected_word = embed_atomic_word_load(&lane->word);
+    EmbedTurnstileLane *const lane = &args->set->lanes[args->open_lane_count];
+    embed_atomic_word_value expected_word = EMBED_CALL(embed_atomic_word_load, EmbedAtomicWordLoadCfg, &lane->word);
     const embed_atomic_word_value state = expected_word & (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT);
     // Explicit cast converts the comparison, an int of 0 or 1, to the project boolean
     const embed_bool lane_closed = (embed_bool)(state == (EMBED_TURNSTILE_BUSY_BIT | EMBED_TURNSTILE_CLOSED_BIT));
 
     if ((state != 0u) && !lane_closed)
     {
-        *held_word = expected_word;
+        *args->held_word = expected_word;
         return EMBED_TURNSTILE_NO_LANE;
     }
     const embed_atomic_word_value taken_word =
         lane_closed ? (expected_word + EMBED_TURNSTILE_GENERATION_UNIT - EMBED_TURNSTILE_CLOSED_BIT)
                     : (expected_word | EMBED_TURNSTILE_BUSY_BIT);
 
-    if (!embed_atomic_word_swap_if(&lane->word, &expected_word, taken_word))
+    if (!EMBED_CALL(embed_atomic_word_swap_if, EmbedAtomicWordSwapIfCfg, &lane->word, &expected_word, taken_word))
     {
         return EMBED_TURNSTILE_NO_LANE;
     }
     if ((taken_word & EMBED_TURNSTILE_SLEEPER_BIT) != 0u)
     {
-        (void)embed_atomic_word_fetch_and(&lane->word, ~EMBED_TURNSTILE_SLEEPER_BIT);
-        embed_word_wake(&lane->word);
+        (void)EMBED_CALL(embed_atomic_word_fetch_and, EmbedAtomicWordFetchAndCfg, &lane->word,
+                         ~EMBED_TURNSTILE_SLEEPER_BIT);
+        EMBED_CALL(embed_word_wake, EmbedWordWakeCfg, &lane->word);
     }
     // Explicit casts widen the lane count to the word, and EMBED_TURNSTILE_LANES bounds it at 64
-    embed_atomic_word_value expected_top_lane = (embed_atomic_word_value)open_lane_count - 1u;
+    embed_atomic_word_value expected_top_lane = (embed_atomic_word_value)args->open_lane_count - 1u;
 
-    if (embed_atomic_word_swap_if(&set->top_open_lane, &expected_top_lane, (embed_atomic_word_value)open_lane_count))
+    if (EMBED_CALL(embed_atomic_word_swap_if, EmbedAtomicWordSwapIfCfg, &args->set->top_open_lane, &expected_top_lane,
+                   (embed_atomic_word_value)args->open_lane_count))
     {
-        return open_lane_count;
+        return args->open_lane_count;
     }
-    embed_turnstile_lane_add(lane, lane_closed ? (EMBED_TURNSTILE_GENERATION_UNIT + EMBED_TURNSTILE_CLOSED_BIT)
-                                               : (EMBED_TURNSTILE_GENERATION_UNIT - EMBED_TURNSTILE_BUSY_BIT));
+    EMBED_CALL(embed_turnstile_lane_add, EmbedTurnstileLaneAddCfg, lane,
+               lane_closed ? (EMBED_TURNSTILE_GENERATION_UNIT + EMBED_TURNSTILE_CLOSED_BIT)
+                           : (EMBED_TURNSTILE_GENERATION_UNIT - EMBED_TURNSTILE_BUSY_BIT));
     return EMBED_TURNSTILE_NO_LANE;
 }
+
+/** @brief The parameters of embed_turnstile_contract. */
+typedef struct
+{
+    EmbedTurnstiles *const set;         /**< The set [BORROWS]. */
+    const unsigned int open_lane_count; /**< The lanes the caller read open, above 1. */
+} EmbedTurnstileContractCfg;
 
 /**
  * @brief The contraction from open_lane_count lanes to one less.
@@ -341,61 +392,76 @@ EMBED_INLINE unsigned int embed_turnstile_grow(EmbedTurnstiles *set, unsigned in
  * The contraction claims the top open lane as an entry does. Then one compare-and-swap moves `top_open_lane` down by
  * one. Where the swap lands, the contraction closes the lane. Where the swap fails, the contraction releases the lane.
  *
- * @param[in,out] set             The set [BORROWS].
- * @param[in]     open_lane_count The lanes the caller read open, above 1.
- * @return                        EMBED_TRUE where the lane closed, EMBED_FALSE where a pass held it or the swap
- *                                failed.
+ * @param[in] args The parameters, as EmbedTurnstileContractCfg holds them [BORROWS].
+ * @return         EMBED_TRUE where the lane closed, EMBED_FALSE where a pass held it or the swap
+ *                 failed.
  * @note A lane that a pass holds refuses the claim, and nothing changes. So each pass stays below the open count.
  */
-EMBED_INLINE embed_bool embed_turnstile_contract(EmbedTurnstiles *set, unsigned int open_lane_count)
+EMBED_INLINE embed_bool embed_turnstile_contract(const EmbedTurnstileContractCfg *args)
 {
-    EmbedTurnstileLane *const lane = &set->lanes[open_lane_count - 1u];
-    const embed_atomic_word_value previous_word = embed_atomic_word_fetch_or(&lane->word, EMBED_TURNSTILE_BUSY_BIT);
+    EmbedTurnstileLane *const lane = &args->set->lanes[args->open_lane_count - 1u];
+    const embed_atomic_word_value previous_word =
+        EMBED_CALL(embed_atomic_word_fetch_or, EmbedAtomicWordFetchOrCfg, &lane->word, EMBED_TURNSTILE_BUSY_BIT);
     embed_bool lane_closed = EMBED_FALSE;
 
     if ((previous_word & EMBED_TURNSTILE_BUSY_BIT) == 0u)
     {
         // Explicit casts widen the lane count to the word, and EMBED_TURNSTILE_LANES bounds it at 64
-        embed_atomic_word_value expected_top_lane = (embed_atomic_word_value)open_lane_count - 1u;
+        embed_atomic_word_value expected_top_lane = (embed_atomic_word_value)args->open_lane_count - 1u;
 
-        lane_closed = embed_atomic_word_swap_if(&set->top_open_lane, &expected_top_lane,
-                                                (embed_atomic_word_value)open_lane_count - 2u);
-        embed_turnstile_lane_add(lane, lane_closed ? (EMBED_TURNSTILE_GENERATION_UNIT + EMBED_TURNSTILE_CLOSED_BIT)
-                                                   : (EMBED_TURNSTILE_GENERATION_UNIT - EMBED_TURNSTILE_BUSY_BIT));
+        lane_closed = EMBED_CALL(embed_atomic_word_swap_if, EmbedAtomicWordSwapIfCfg, &args->set->top_open_lane,
+                                 &expected_top_lane, (embed_atomic_word_value)args->open_lane_count - 2u);
+        EMBED_CALL(embed_turnstile_lane_add, EmbedTurnstileLaneAddCfg, lane,
+                   lane_closed ? (EMBED_TURNSTILE_GENERATION_UNIT + EMBED_TURNSTILE_CLOSED_BIT)
+                               : (EMBED_TURNSTILE_GENERATION_UNIT - EMBED_TURNSTILE_BUSY_BIT));
     }
     return lane_closed;
 }
+
+/** @brief The parameters of embed_turnstile_spill. */
+typedef struct
+{
+    EmbedTurnstiles *const set;         /**< The set [BORROWS]. */
+    const unsigned int open_lane_count; /**< The lanes the caller read open. */
+    const unsigned int start_lane;      /**< The start lane, below open_lane_count. */
+} EmbedTurnstileSpillCfg;
 
 /**
  * @brief The spill of an entry over the open lanes: a fetch-or of busy on each lane from start_lane, mod
  *        open_lane_count.
  *
- * @param[in,out] set             The set [BORROWS].
- * @param[in]     open_lane_count The lanes the caller read open.
- * @param[in]     start_lane      The start lane, below open_lane_count.
- * @return                        The lane the caller now holds, or EMBED_TURNSTILE_NO_LANE where every lane was
- *                                busy.
+ * @param[in] args The parameters, as EmbedTurnstileSpillCfg holds them [BORROWS].
+ * @return         The lane the caller now holds, or EMBED_TURNSTILE_NO_LANE where every lane was
+ *                 busy.
  * @note A lane with busy in the old value refuses the fetch-or, and nothing changes. The spill writes no word but
  *       the lane words.
  */
-EMBED_INLINE unsigned int embed_turnstile_spill(EmbedTurnstiles *set, unsigned int open_lane_count,
-                                                unsigned int start_lane)
+EMBED_INLINE unsigned int embed_turnstile_spill(const EmbedTurnstileSpillCfg *args)
 {
-    unsigned int place = start_lane;
+    unsigned int place = args->start_lane;
 
-    for (unsigned int tries = 0u; tries < open_lane_count; tries += 1u)
+    for (unsigned int tries = 0u; tries < args->open_lane_count; tries += 1u)
     {
         const embed_atomic_word_value previous_word =
-            embed_atomic_word_fetch_or(&set->lanes[place].word, EMBED_TURNSTILE_BUSY_BIT);
+            EMBED_CALL(embed_atomic_word_fetch_or, EmbedAtomicWordFetchOrCfg, &args->set->lanes[place].word,
+                       EMBED_TURNSTILE_BUSY_BIT);
 
         if ((previous_word & EMBED_TURNSTILE_BUSY_BIT) == 0u)
         {
             return place;
         }
-        place = (place + 1u == open_lane_count) ? 0u : (place + 1u);
+        place = (place + 1u == args->open_lane_count) ? 0u : (place + 1u);
     }
     return EMBED_TURNSTILE_NO_LANE;
 }
+
+/** @brief The parameters of embed_turnstile_enter. */
+typedef struct
+{
+    EmbedTurnstiles *const set; /**< The set [BORROWS]. */
+    const embed_atomic_uptr_value
+        address; /**< The worker's address: an immutable place, such as the worker's own state. */
+} EmbedTurnstileEnterCfg;
 
 /**
  * @brief An entry by the worker at address: a lane taken, which the end of the pass takes back.
@@ -406,22 +472,24 @@ EMBED_INLINE unsigned int embed_turnstile_spill(EmbedTurnstiles *set, unsigned i
  * Where every open lane was busy, the worker joins the queue and grows the manifold, which gives it the new lane as its
  * pass. Where it can not grow the manifold, it backs off on its start lane. It leaves the queue when it takes a lane.
  *
- * @param[in,out] set     The set [BORROWS].
- * @param[in]     address The worker's address: an immutable place, such as the worker's own state.
- * @return                The lane's place, which the end of the pass takes.
+ * @param[in] args The parameters, as EmbedTurnstileEnterCfg holds them [BORROWS].
+ * @return         The lane's place, which the end of the pass takes.
  * @note The pass reads the data of a published pointer only after the entry returns, and none of it after the leave.
  */
-EMBED_INLINE unsigned int embed_turnstile_enter(EmbedTurnstiles *set, embed_atomic_uptr_value address)
+EMBED_INLINE unsigned int embed_turnstile_enter(const EmbedTurnstileEnterCfg *args)
 {
     EmbedTurnstileBackoff backoff;
     embed_bool queue_member = EMBED_FALSE;
 
     for (;;)
     {
-        const unsigned int open_lane_count = embed_turnstile_open_lane_count(set);
+        const unsigned int open_lane_count =
+            EMBED_CALL(embed_turnstile_open_lane_count, EmbedTurnstileOpenLaneCountCfg, args->set);
         // Explicit cast takes the address's cache line mod the count, which is below EMBED_TURNSTILE_LANES
-        const unsigned int start_lane = (unsigned int)((address >> 6u) % (embed_atomic_uptr_value)open_lane_count);
-        const unsigned int place = embed_turnstile_spill(set, open_lane_count, start_lane);
+        const unsigned int start_lane =
+            (unsigned int)((args->address >> 6u) % (embed_atomic_uptr_value)open_lane_count);
+        const unsigned int place =
+            EMBED_CALL(embed_turnstile_spill, EmbedTurnstileSpillCfg, args->set, open_lane_count, start_lane);
 
         if (place != EMBED_TURNSTILE_NO_LANE)
         {
@@ -429,7 +497,7 @@ EMBED_INLINE unsigned int embed_turnstile_enter(EmbedTurnstiles *set, embed_atom
             // word alone
             if (queue_member)
             {
-                (void)embed_atomic_u32_fetch_sub(&set->queue_length, 1u);
+                (void)EMBED_CALL(embed_atomic_u32_fetch_sub, EmbedAtomicU32FetchSubCfg, &args->set->queue_length, 1u);
             }
             // The pass starts before it reads anything. The fence of a writer's drain pairs with this fence.
             EMBED_ATOMIC_ORDERED();
@@ -437,16 +505,17 @@ EMBED_INLINE unsigned int embed_turnstile_enter(EmbedTurnstiles *set, embed_atom
         }
         if (!queue_member)
         {
-            (void)embed_atomic_u32_fetch_add(&set->queue_length, 1u);
+            (void)EMBED_CALL(embed_atomic_u32_fetch_add, EmbedAtomicU32FetchAddCfg, &args->set->queue_length, 1u);
             queue_member = EMBED_TRUE;
-            embed_turnstile_backoff_begin(&backoff);
+            EMBED_CALL(embed_turnstile_backoff_begin, EmbedTurnstileBackoffBeginCfg, &backoff);
         }
         embed_atomic_word_value held_word = 0u;
-        const unsigned int grown_place = embed_turnstile_grow(set, open_lane_count, &held_word);
+        const unsigned int grown_place =
+            EMBED_CALL(embed_turnstile_grow, EmbedTurnstileGrowCfg, args->set, open_lane_count, &held_word);
 
         if (grown_place != EMBED_TURNSTILE_NO_LANE)
         {
-            (void)embed_atomic_u32_fetch_sub(&set->queue_length, 1u);
+            (void)EMBED_CALL(embed_atomic_u32_fetch_sub, EmbedAtomicU32FetchSubCfg, &args->set->queue_length, 1u);
             // The pass starts before it reads anything. The fence of a writer's drain pairs with this fence.
             EMBED_ATOMIC_ORDERED();
             return grown_place;
@@ -457,20 +526,29 @@ EMBED_INLINE unsigned int embed_turnstile_enter(EmbedTurnstiles *set, embed_atom
         // lost a race to a change, and the worker tries again.
         if (held_word != 0u)
         {
-            embed_turnstile_backoff_step(&set->lanes[open_lane_count].word, held_word, EMBED_TURNSTILE_SLEEPER_BIT,
-                                         &backoff, EMBED_TRUE);
+            EMBED_CALL(embed_turnstile_backoff_step, EmbedTurnstileBackoffStepCfg,
+                       &args->set->lanes[open_lane_count].word, held_word, EMBED_TURNSTILE_SLEEPER_BIT, &backoff,
+                       EMBED_TRUE);
         }
         else if (open_lane_count == EMBED_TURNSTILE_LANES)
         {
-            const embed_atomic_word_value start_word = embed_atomic_word_load(&set->lanes[start_lane].word);
+            const embed_atomic_word_value start_word =
+                EMBED_CALL(embed_atomic_word_load, EmbedAtomicWordLoadCfg, &args->set->lanes[start_lane].word);
             // Explicit cast converts the test of the busy bit, an int of 0 or 1, to the project boolean
             const embed_bool start_busy = (embed_bool)((start_word & EMBED_TURNSTILE_BUSY_BIT) != 0u);
 
-            embed_turnstile_backoff_step(&set->lanes[start_lane].word, start_word, EMBED_TURNSTILE_SLEEPER_BIT,
-                                         &backoff, start_busy);
+            EMBED_CALL(embed_turnstile_backoff_step, EmbedTurnstileBackoffStepCfg, &args->set->lanes[start_lane].word,
+                       start_word, EMBED_TURNSTILE_SLEEPER_BIT, &backoff, start_busy);
         }
     }
 }
+
+/** @brief The parameters of embed_turnstile_leave. */
+typedef struct
+{
+    EmbedTurnstiles *const set; /**< The set [BORROWS]. */
+    const unsigned int place;   /**< The lane's place, as embed_turnstile_enter answered it. */
+} EmbedTurnstileLeaveCfg;
 
 /**
  * @brief The end of the pass through the lane at `place` of set.
@@ -479,21 +557,23 @@ EMBED_INLINE unsigned int embed_turnstile_enter(EmbedTurnstiles *set, embed_atom
  * clears it and wakes the word. Where the lane is the top open lane, the end contracts the manifold. Each step closes
  * the top lane while the queue is empty, more than one lane is open, and no pass holds the top lane.
  *
- * @param[in,out] set   The set [BORROWS].
- * @param[in]     place The lane's place, as embed_turnstile_enter answered it.
+ * @param[in] args The parameters, as EmbedTurnstileLeaveCfg holds them [BORROWS].
  * @note Only the end of a pass on the top lane contracts. So the end of a pass on a lower lane reads and writes no
  *       word but its own lane word and `top_open_lane`.
  */
-EMBED_INLINE void embed_turnstile_leave(EmbedTurnstiles *set, unsigned int place)
+EMBED_INLINE void embed_turnstile_leave(const EmbedTurnstileLeaveCfg *args)
 {
-    embed_turnstile_lane_add(&set->lanes[place], EMBED_TURNSTILE_GENERATION_UNIT - EMBED_TURNSTILE_BUSY_BIT);
-    unsigned int open_lane_count = embed_turnstile_open_lane_count(set);
+    EMBED_CALL(embed_turnstile_lane_add, EmbedTurnstileLaneAddCfg, &args->set->lanes[args->place],
+               EMBED_TURNSTILE_GENERATION_UNIT - EMBED_TURNSTILE_BUSY_BIT);
+    unsigned int open_lane_count =
+        EMBED_CALL(embed_turnstile_open_lane_count, EmbedTurnstileOpenLaneCountCfg, args->set);
 
-    if (place + 1u == open_lane_count)
+    if (args->place + 1u == open_lane_count)
     {
-        while ((open_lane_count > 1u) && (embed_atomic_u32_load(&set->queue_length) == 0u))
+        while ((open_lane_count > 1u) &&
+               (EMBED_CALL(embed_atomic_u32_load, EmbedAtomicU32LoadCfg, &args->set->queue_length) == 0u))
         {
-            if (!embed_turnstile_contract(set, open_lane_count))
+            if (!EMBED_CALL(embed_turnstile_contract, EmbedTurnstileContractCfg, args->set, open_lane_count))
             {
                 break;
             }
@@ -502,10 +582,16 @@ EMBED_INLINE void embed_turnstile_leave(EmbedTurnstiles *set, unsigned int place
     }
 }
 
+/** @brief The parameters of embed_turnstiles_drain. */
+typedef struct
+{
+    EmbedTurnstiles *const set; /**< The set [BORROWS]. */
+} EmbedTurnstilesDrainCfg;
+
 /**
  * @brief Every pass through set begun before this call waited out.
  *
- * @param[in,out] set The set [BORROWS].
+ * @param[in] args The parameters, as EmbedTurnstilesDrainCfg holds them [BORROWS].
  * @note A writer swaps a published pointer and calls this function. Then it releases the data that the old pointer
  *       led to. A pass that starts after the fence of the drain reads the new pointer, and the drain does not wait
  *       for it.
@@ -515,17 +601,18 @@ EMBED_INLINE void embed_turnstile_leave(EmbedTurnstiles *set, unsigned int place
  * @note A round that finds the lane still held backs off on that lane word, with the sleeper bit. The end of the pass
  *       changes the word and wakes it.
  */
-EMBED_INLINE void embed_turnstiles_drain(EmbedTurnstiles *set)
+EMBED_INLINE void embed_turnstiles_drain(const EmbedTurnstilesDrainCfg *args)
 {
     embed_atomic_word_value snapshot[EMBED_TURNSTILE_LANES];
 
     // This fence orders the swap of the writer before the snapshot. It pairs with the fence after an entry's claim.
     EMBED_ATOMIC_ORDERED();
-    const unsigned int open_lane_count = embed_turnstile_open_lane_count(set);
+    const unsigned int open_lane_count =
+        EMBED_CALL(embed_turnstile_open_lane_count, EmbedTurnstileOpenLaneCountCfg, args->set);
 
     for (unsigned int place = 0u; place < open_lane_count; place += 1u)
     {
-        snapshot[place] = embed_atomic_word_load(&set->lanes[place].word);
+        snapshot[place] = EMBED_CALL(embed_atomic_word_load, EmbedAtomicWordLoadCfg, &args->set->lanes[place].word);
     }
     for (unsigned int place = 0u; place < open_lane_count; place += 1u)
     {
@@ -536,16 +623,57 @@ EMBED_INLINE void embed_turnstiles_drain(EmbedTurnstiles *set)
         // A lane whose first read has the closed bit holds no pass, and the drain does not wait on it
         const embed_atomic_word_value closed_bit = snapshot[place] & EMBED_TURNSTILE_CLOSED_BIT;
 
-        embed_turnstile_backoff_begin(&backoff);
+        EMBED_CALL(embed_turnstile_backoff_begin, EmbedTurnstileBackoffBeginCfg, &backoff);
         while ((closed_bit == 0u) && ((current_word & EMBED_TURNSTILE_BUSY_BIT) != 0u) &&
                ((current_word >> EMBED_TURNSTILE_GENERATION_SHIFT) == generation))
         {
-            embed_turnstile_backoff_step(&set->lanes[place].word, current_word, EMBED_TURNSTILE_SLEEPER_BIT, &backoff,
-                                         EMBED_TRUE);
-            current_word = embed_atomic_word_load(&set->lanes[place].word);
+            EMBED_CALL(embed_turnstile_backoff_step, EmbedTurnstileBackoffStepCfg, &args->set->lanes[place].word,
+                       current_word, EMBED_TURNSTILE_SLEEPER_BIT, &backoff, EMBED_TRUE);
+            current_word = EMBED_CALL(embed_atomic_word_load, EmbedAtomicWordLoadCfg, &args->set->lanes[place].word);
         }
     }
 }
+
+/**
+ * @brief The dispatch table of embed_turnstile.h: one member for each public function, in the order of the header.
+ *
+ * @note EMBED_TABLE_LAYOUT asserts that the members sit at consecutive EMBED_FUNCTION_POINTER_BYTES offsets.
+ */
+typedef struct
+{
+    int (*word_wait)(const EmbedWordWaitCfg *args);                   /**< embed_word_wait. */
+    void (*word_wake)(const EmbedWordWakeCfg *args);                  /**< embed_word_wake. */
+    embed_word (*clock_ns)(void);                                     /**< embed_clock_ns. */
+    embed_u32 (*thread_place)(void);                                  /**< embed_thread_place. */
+    void (*backoff_begin)(const EmbedTurnstileBackoffBeginCfg *args); /**< embed_turnstile_backoff_begin. */
+    void (*backoff_step)(const EmbedTurnstileBackoffStepCfg *args);   /**< embed_turnstile_backoff_step. */
+    unsigned int (*open_lane_count)(
+        const EmbedTurnstileOpenLaneCountCfg *args);           /**< embed_turnstile_open_lane_count. */
+    unsigned int (*enter)(const EmbedTurnstileEnterCfg *args); /**< embed_turnstile_enter. */
+    void (*leave)(const EmbedTurnstileLeaveCfg *args);         /**< embed_turnstile_leave. */
+    void (*drain)(const EmbedTurnstilesDrainCfg *args);        /**< embed_turnstiles_drain. */
+} EmbedTurnstileNs;
+EMBED_TABLE_LAYOUT(EmbedTurnstileNs, word_wait, word_wake, clock_ns, thread_place, backoff_begin, backoff_step,
+                   open_lane_count, enter, leave, drain);
+
+#if !defined(__CUDA_ARCH__)
+/**
+ * @brief The table of embed_turnstile.h. A call through it folds to a direct call under the optimizer and LTO.
+ *
+ * @note The device pass of CUDA has no table, because a kernel cannot read the address of a host function. A
+ *       kernel calls each function by its name.
+ */
+static const EmbedTurnstileNs embed_turnstile_table = {embed_word_wait,
+                                                       embed_word_wake,
+                                                       embed_clock_ns,
+                                                       embed_thread_place,
+                                                       embed_turnstile_backoff_begin,
+                                                       embed_turnstile_backoff_step,
+                                                       embed_turnstile_open_lane_count,
+                                                       embed_turnstile_enter,
+                                                       embed_turnstile_leave,
+                                                       embed_turnstiles_drain};
+#endif
 
 EMBED_END_DECLS
 

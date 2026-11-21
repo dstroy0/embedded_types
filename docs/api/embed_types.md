@@ -167,6 +167,34 @@ The stored form of a 64-bit count: one [`embed_u64`](#embed_u64) on a host and o
 - `lower`: Bits 0 to 31 of the count.
 - `upper`: Bits 32 to 63 of the count.
 
+### `EmbedStoredU64GetCfg` { #EmbedStoredU64GetCfg }
+
+```c
+typedef struct
+{
+    const embed_stored_u64 *const stored; /**< The stored form [BORROWS]. */
+} EmbedStoredU64GetCfg;
+```
+
+The parameters of [`embed_stored_u64_get`](#embed_stored_u64_get).
+
+- `stored`: The stored form \[BORROWS\].
+
+### `EmbedStoredU64SetCfg` { #EmbedStoredU64SetCfg }
+
+```c
+typedef struct
+{
+    embed_stored_u64 *const stored; /**< The stored form [BORROWS]. */
+    const embed_u64 count;          /**< The count. */
+} EmbedStoredU64SetCfg;
+```
+
+The parameters of [`embed_stored_u64_set`](#embed_stored_u64_set).
+
+- `stored`: The stored form \[BORROWS\].
+- `count`: The count.
+
 ### `EmbedEnumProbe` { #EmbedEnumProbe }
 
 ```c
@@ -183,6 +211,22 @@ A one-byte enum used only to prove [`EMBED_ENUM_BYTE`](embed_compiler_directives
 
 - `EMBED_ENUM_PROBE_MIN`: Low end of the probe range.
 - `EMBED_ENUM_PROBE_MAX`: High end, the largest value eight bits hold.
+
+### `EmbedStoredU64Ns` { #EmbedStoredU64Ns }
+
+```c
+typedef struct
+{
+    embed_u64 (*get)(const EmbedStoredU64GetCfg *args); /**< embed_stored_u64_get. */
+    void (*set)(const EmbedStoredU64SetCfg *args);      /**< embed_stored_u64_set. */
+} EmbedStoredU64Ns;
+```
+
+The dispatch table of `embed_types`.h: one member for each public function, in the order of the header.
+
+> **Note:** [`EMBED_TABLE_LAYOUT`](embed_dispatch_layout.md#EMBED_TABLE_LAYOUT) asserts that the members sit at consecutive [`EMBED_FUNCTION_POINTER_BYTES`](embed_dispatch_layout.md#EMBED_FUNCTION_POINTER_BYTES) offsets.
+
+- `args`: [`embed_stored_u64_get`](#embed_stored_u64_get).
 
 ## Macros
 
@@ -274,27 +318,40 @@ The width of an offset or a length in bits.
 ### `embed_stored_u64_get` { #embed_stored_u64_get }
 
 ```c
-EMBED_INLINE embed_u64 embed_stored_u64_get(const embed_stored_u64 *stored);
+EMBED_INLINE embed_u64 embed_stored_u64_get(const EmbedStoredU64GetCfg *args);
 ```
 
 The count that a stored form holds.
 
-- `[in]`: stored The stored form \[BORROWS\].
+- `[in]`: args The parameters, as EmbedStoredU64GetCfg holds them \[BORROWS\].
 
 \*\*Returns:\*\* The count.
 
 ### `embed_stored_u64_set` { #embed_stored_u64_set }
 
 ```c
-EMBED_INLINE void embed_stored_u64_set(embed_stored_u64 *stored, embed_u64 count);
+EMBED_INLINE void embed_stored_u64_set(const EmbedStoredU64SetCfg *args);
 ```
 
 Writes a count into a stored form.
 
-- `[out]`: stored The stored form \[BORROWS\].
-- `[in]`: count The count.
+- `[in]`: args The parameters, as EmbedStoredU64SetCfg holds them \[BORROWS\].
 
 > **Note:** On an embedded target the write stores the upper word only where it changes.
+
+## Tables
+
+### `embed_stored_u64_table` { #embed_stored_u64_table }
+
+```c
+#if !defined(__CUDA_ARCH__)
+static const EmbedStoredU64Ns embed_stored_u64_table = {embed_stored_u64_get, embed_stored_u64_set};
+#endif
+```
+
+The table of `embed_types`.h. A call through it folds to a direct call under the optimizer and LTO.
+
+> **Note:** The device pass of CUDA has no table, because a kernel cannot read the address of a host function. A kernel calls each function by its name.
 
 ## Assertions
 

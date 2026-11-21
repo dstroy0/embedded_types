@@ -77,16 +77,16 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("test/unit/test_embed_atomic\\test_embed_atomic.c");
-  run_test(test_a_word_declared_holds_its_value_and_is_one_word_wide, "test_a_word_declared_holds_its_value_and_is_one_word_wide", 133);
-  run_test(test_store_load_and_exchange_round_trip, "test_store_load_and_exchange_round_trip", 147);
-  run_test(test_swap_if_takes_the_expected_word_alone, "test_swap_if_takes_the_expected_word_alone", 165);
-  run_test(test_the_fetch_operations_answer_the_word_before_and_wrap, "test_the_fetch_operations_answer_the_word_before_and_wrap", 185);
-  run_test(test_raise_moves_the_word_up_and_never_down, "test_raise_moves_the_word_up_and_never_down", 205);
-  run_test(test_ordered_retains_two_threads_from_both_missing_each_others_write, "test_ordered_retains_two_threads_from_both_missing_each_others_write", 252);
-  run_test(test_contending_threads_lose_no_add_and_raise_to_the_highest, "test_contending_threads_lose_no_add_and_raise_to_the_highest", 259);
-  run_test(test_contending_raises_end_at_the_highest_value_of_any_thread, "test_contending_raises_end_at_the_highest_value_of_any_thread", 271);
-  run_test(test_contending_threads_claim_each_slot_once, "test_contending_threads_claim_each_slot_once", 283);
+  UnityBegin("D:/git_project/repos/owned/public/embedded_types/test/unit/test_embed_atomic\\test_embed_atomic.c");
+  run_test(test_a_word_declared_holds_its_value_and_is_one_word_wide, "test_a_word_declared_holds_its_value_and_is_one_word_wide", 137);
+  run_test(test_store_load_and_exchange_round_trip, "test_store_load_and_exchange_round_trip", 153);
+  run_test(test_swap_if_takes_the_expected_word_alone, "test_swap_if_takes_the_expected_word_alone", 181);
+  run_test(test_the_fetch_operations_answer_the_word_before_and_wrap, "test_the_fetch_operations_answer_the_word_before_and_wrap", 210);
+  run_test(test_raise_moves_the_word_up_and_never_down, "test_raise_moves_the_word_up_and_never_down", 252);
+  run_test(test_ordered_retains_two_threads_from_both_missing_each_others_write, "test_ordered_retains_two_threads_from_both_missing_each_others_write", 315);
+  run_test(test_contending_threads_lose_no_add_and_raise_to_the_highest, "test_contending_threads_lose_no_add_and_raise_to_the_highest", 323);
+  run_test(test_contending_raises_end_at_the_highest_value_of_any_thread, "test_contending_raises_end_at_the_highest_value_of_any_thread", 339);
+  run_test(test_contending_threads_claim_each_slot_once, "test_contending_threads_claim_each_slot_once", 355);
 
   return UNITY_END();
 }

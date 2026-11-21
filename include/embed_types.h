@@ -22,6 +22,7 @@
 #include <stdint.h>
 
 #include "embed_compiler_directives.h"
+#include "embed_dispatch_layout.h"
 
 EMBED_BEGIN_DECLS
 
@@ -221,41 +222,53 @@ typedef struct
 typedef embed_u64 embed_stored_u64;
 #endif
 
+/** @brief The parameters of embed_stored_u64_get. */
+typedef struct
+{
+    const embed_stored_u64 *const stored; /**< The stored form [BORROWS]. */
+} EmbedStoredU64GetCfg;
+
 /**
  * @brief The count that a stored form holds.
  *
- * @param[in] stored The stored form [BORROWS].
- * @return           The count.
+ * @param[in] args The parameters, as EmbedStoredU64GetCfg holds them [BORROWS].
+ * @return         The count.
  */
-EMBED_INLINE embed_u64 embed_stored_u64_get(const embed_stored_u64 *stored)
+EMBED_INLINE embed_u64 embed_stored_u64_get(const EmbedStoredU64GetCfg *args)
 {
 #if EMBED_TARGET == EMBED_TARGET_EMBEDDED
     // Explicit casts widen each half to the count before the upper half moves to bits 32 to 63
-    return ((embed_u64)stored->upper << 32) | (embed_u64)stored->lower;
+    return ((embed_u64)args->stored->upper << 32) | (embed_u64)args->stored->lower;
 #else
-    return *stored;
+    return *args->stored;
 #endif
 }
+
+/** @brief The parameters of embed_stored_u64_set. */
+typedef struct
+{
+    embed_stored_u64 *const stored; /**< The stored form [BORROWS]. */
+    const embed_u64 count;          /**< The count. */
+} EmbedStoredU64SetCfg;
 
 /**
  * @brief Writes a count into a stored form.
  *
- * @param[out] stored The stored form [BORROWS].
- * @param[in]  count  The count.
+ * @param[in] args The parameters, as EmbedStoredU64SetCfg holds them [BORROWS].
  * @note On an embedded target the write stores the upper word only where it changes.
  */
-EMBED_INLINE void embed_stored_u64_set(embed_stored_u64 *stored, embed_u64 count)
+EMBED_INLINE void embed_stored_u64_set(const EmbedStoredU64SetCfg *args)
 {
 #if EMBED_TARGET == EMBED_TARGET_EMBEDDED
     // Explicit casts narrow the count to its two halves, each of which fits an embed_u32
-    const embed_u32 upper = (embed_u32)(count >> 32);
-    stored->lower = (embed_u32)count;
-    if (stored->upper != upper)
+    const embed_u32 upper = (embed_u32)(args->count >> 32);
+    args->stored->lower = (embed_u32)args->count;
+    if (args->stored->upper != upper)
     {
-        stored->upper = upper;
+        args->stored->upper = upper;
     }
 #else
-    *stored = count;
+    *args->stored = args->count;
 #endif
 }
 
@@ -312,6 +325,28 @@ EMBED_ENUM_BYTE(EmbedEnumProbe, EMBED_ENUM_PROBE_MIN = 0, /**< Low end of the pr
 EMBED_STATIC_ASSERT(sizeof(EmbedEnumProbe) == 1,
                     "EMBED_ENUM_BYTE gave an enum more than one byte here, so no enum retains its declared width "
                     "(TI: pass --small_enum)");
+
+/**
+ * @brief The dispatch table of embed_types.h: one member for each public function, in the order of the header.
+ *
+ * @note EMBED_TABLE_LAYOUT asserts that the members sit at consecutive EMBED_FUNCTION_POINTER_BYTES offsets.
+ */
+typedef struct
+{
+    embed_u64 (*get)(const EmbedStoredU64GetCfg *args); /**< embed_stored_u64_get. */
+    void (*set)(const EmbedStoredU64SetCfg *args);      /**< embed_stored_u64_set. */
+} EmbedStoredU64Ns;
+EMBED_TABLE_LAYOUT(EmbedStoredU64Ns, get, set);
+
+#if !defined(__CUDA_ARCH__)
+/**
+ * @brief The table of embed_types.h. A call through it folds to a direct call under the optimizer and LTO.
+ *
+ * @note The device pass of CUDA has no table, because a kernel cannot read the address of a host function. A
+ *       kernel calls each function by its name.
+ */
+static const EmbedStoredU64Ns embed_stored_u64_table = {embed_stored_u64_get, embed_stored_u64_set};
+#endif
 
 EMBED_END_DECLS
 

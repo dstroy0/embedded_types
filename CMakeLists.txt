@@ -29,6 +29,20 @@ set(EMBEDDED_TYPES_TEST_WARNINGS
     $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic;-Wshadow;-Wcast-align;-Wcast-qual;-Wstrict-prototypes;-Wpointer-arith;-Wvla>
     $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:GNU,Clang,AppleClang>>:-Werror>)
 
+# Link-time optimization for the targets of this project. Each header holds a static const dispatch table, and a
+# call through a table folds to a direct call where the optimizer sees the table and its target. LTO lets it see
+# both across translation units. A consumer sets the same for its own build, with -flto or this CMake property.
+option(EMBEDDED_TYPES_LTO "Link the targets of this project with link-time optimization" ON)
+if(EMBEDDED_TYPES_LTO)
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT embedded_types_ipo OUTPUT embedded_types_ipo_reason LANGUAGES C)
+  if(embedded_types_ipo)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+  else()
+    message(STATUS "embedded_types: no link-time optimization here, ${embedded_types_ipo_reason}")
+  endif()
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # The device arm. Where the configure step finds a CUDA compiler, the suites that hold the device arm

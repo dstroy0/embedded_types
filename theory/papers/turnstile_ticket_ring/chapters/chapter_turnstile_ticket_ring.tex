@@ -88,9 +88,15 @@ A word of 16 bits has no room for the three fields, and the build stops. Five fl
 #define EMBED_TICKET_LANE_SHIFT (EMBED_TICKET_FLAG_SHIFT + 8u)
 #define EMBED_TICKET_RESERVED_BIT ((embed_word)1u << (EMBED_TICKET_FLAG_SHIFT + 15u))
 
-EMBED_INLINE embed_word embed_ticket_stamp(embed_word epoch, embed_word ticket)
+typedef struct
 {
-    return ((epoch & EMBED_TICKET_EPOCH_MASK) << EMBED_TICKET_EPOCH_SHIFT) | (ticket & EMBED_TICKET_MASK);
+    const embed_word epoch;  /**< The epoch, of which the stamp keeps the low EMBED_TICKET_EPOCH_BITS bits. */
+    const embed_word ticket; /**< The ticket, of which the stamp keeps the low EMBED_TICKET_BITS bits. */
+} EmbedTicketStampCfg;
+
+EMBED_INLINE embed_word embed_ticket_stamp(const EmbedTicketStampCfg *args)
+{
+    return ((args->epoch & EMBED_TICKET_EPOCH_MASK) << EMBED_TICKET_EPOCH_SHIFT) | (args->ticket & EMBED_TICKET_MASK);
 }
 \end{Verbatim}
 
@@ -129,57 +135,97 @@ typedef struct
 The place of a stamp is its ticket masked to \(s\) bits. Every transition of a slot is one compare-and-swap on its stamp word. The expected stamp is the input stamp with the flag bits of the transitions before. The new stamp adds the flag bit of the transition. An input stamp with any flag bit set is invalid, and the expected stamp then carries the reserved bit, which no slot word has:
 
 \begin{Verbatim}
-EMBED_INLINE embed_word embed_ticket_ring_expected_stamp(embed_word stamp, embed_word flags)
+typedef struct
+{
+    const embed_word stamp; /**< The input stamp, as the caller holds it. */
+    const embed_word flags; /**< The flag bits of the transitions before this one. */
+} EmbedTicketRingExpectedStampCfg;
+
+EMBED_INLINE embed_word embed_ticket_ring_expected_stamp(const EmbedTicketRingExpectedStampCfg *args)
 {
     // Explicit cast converts the invalid-input condition to 1 or 0, for the shift to the reserved bit
-    const embed_word invalid_input = (embed_word)((stamp & EMBED_TICKET_FLAG_MASK) != 0u);
+    const embed_word invalid_input = (embed_word)((args->stamp & EMBED_TICKET_FLAG_MASK) != 0u);
 
-    return stamp | flags | (invalid_input << (EMBED_TICKET_FLAG_SHIFT + 15u));
+    return args->stamp | args->flags | (invalid_input << (EMBED_TICKET_FLAG_SHIFT + 15u));
 }
 
-EMBED_INLINE embed_bool embed_ticket_ring_transition(EmbedTicketRingSlot *slot, embed_word expected_stamp,
-                                                     embed_word new_stamp, embed_word *found_stamp)
+typedef struct
 {
-    embed_word compared_stamp = expected_stamp;
-    const embed_bool success = embed_atomic_word_swap_if(&slot->stamp, &compared_stamp, new_stamp);
+    EmbedTicketRingSlot *const slot; /**< The slot [BORROWS]. */
+    const embed_word expected_stamp; /**< The expected stamp. */
+    const embed_word new_stamp;      /**< The new stamp: the expected stamp with the flag bit of the transition. */
+    embed_word *const found_stamp;   /**< The stamp that the compare found in the slot [BORROWS]: the expected stamp on
+                                        success, the current stamp on failure. */
+} EmbedTicketRingTransitionCfg;
 
-    *found_stamp = compared_stamp;
+EMBED_INLINE embed_bool embed_ticket_ring_transition(const EmbedTicketRingTransitionCfg *args)
+{
+    embed_word compared_stamp = args->expected_stamp;
+    const embed_bool success = EMBED_CALL(embed_atomic_word_swap_if, EmbedAtomicWordSwapIfCfg, &args->slot->stamp,
+                                          &compared_stamp, args->new_stamp);
+
+    *args->found_stamp = compared_stamp;
     return success;
 }
 
-EMBED_INLINE embed_bool embed_ticket_ring_push(const EmbedTicketRing *ring, embed_word stamp, void *job,
-                                               embed_word *found_stamp)
+typedef struct
 {
-    EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
-    const embed_word expected_stamp = embed_ticket_ring_expected_stamp(stamp, EMBED_TICKET_GRANTED_BIT);
-    const embed_word new_stamp = expected_stamp | EMBED_TICKET_PUSHED_BIT | embed_ticket_job_check_bits(job);
+    const EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    const embed_word stamp;            /**< The input stamp of a granted slot. */
+    void *const job;                   /**< The job [BORROWS]. */
+    embed_word *const found_stamp;     /**< The stamp that the compare found in the slot [BORROWS]. */
+} EmbedTicketRingPushCfg;
 
-    slot->job = job;
-    return embed_ticket_ring_transition(slot, expected_stamp, new_stamp, found_stamp);
+EMBED_INLINE embed_bool embed_ticket_ring_push(const EmbedTicketRingPushCfg *args)
+{
+    EmbedTicketRingSlot *const slot =
+        EMBED_CALL(embed_ticket_ring_slot, EmbedTicketRingSlotCfg, args->ring, args->stamp);
+    const embed_word expected_stamp = EMBED_CALL(embed_ticket_ring_expected_stamp, EmbedTicketRingExpectedStampCfg,
+                                                 args->stamp, EMBED_TICKET_GRANTED_BIT);
+    const embed_word new_stamp = expected_stamp | EMBED_TICKET_PUSHED_BIT |
+                                 EMBED_CALL(embed_ticket_job_check_bits, EmbedTicketJobCheckBitsCfg, args->job);
+
+    slot->job = args->job;
+    return EMBED_CALL(embed_ticket_ring_transition, EmbedTicketRingTransitionCfg, slot, expected_stamp, new_stamp,
+                      args->found_stamp);
 }
 
-EMBED_INLINE embed_bool embed_ticket_ring_pop(const EmbedTicketRing *ring, embed_word stamp, unsigned int lane_place,
-                                              void **job, embed_word *found_stamp)
+typedef struct
 {
-    EmbedTicketRingSlot *const slot = embed_ticket_ring_slot(ring, stamp);
-    const embed_word current_stamp = embed_atomic_word_load(&slot->stamp);
-    const embed_word pushed_stamp =
-        embed_ticket_ring_expected_stamp(stamp, EMBED_TICKET_GRANTED_BIT | EMBED_TICKET_PUSHED_BIT);
+    const EmbedTicketRing *const ring; /**< The ring [BORROWS]. */
+    const embed_word stamp;            /**< The input stamp of a pushed slot. */
+    const unsigned int
+        lane_place;   /**< The place of the lane of the pass of the caller, as embed_turnstile_enter returned it. */
+    void **const job; /**< The job on success [BORROWS], and NULL on failure. */
+    embed_word *const found_stamp; /**< The stamp that the compare found in the slot [BORROWS], with the reserved bit
+                                      set where the job pointer failed its check. */
+} EmbedTicketRingPopCfg;
+
+EMBED_INLINE embed_bool embed_ticket_ring_pop(const EmbedTicketRingPopCfg *args)
+{
+    EmbedTicketRingSlot *const slot =
+        EMBED_CALL(embed_ticket_ring_slot, EmbedTicketRingSlotCfg, args->ring, args->stamp);
+    const embed_word current_stamp = EMBED_CALL(embed_atomic_word_load, EmbedAtomicWordLoadCfg, &slot->stamp);
+    const embed_word pushed_stamp = EMBED_CALL(embed_ticket_ring_expected_stamp, EmbedTicketRingExpectedStampCfg,
+                                               args->stamp, EMBED_TICKET_GRANTED_BIT | EMBED_TICKET_PUSHED_BIT);
     // Explicit cast converts the state test, check bits aside, to an all-ones or all-zeros mask over the current stamp
     const embed_word valid_mask =
         (embed_word)0u - (embed_word)((current_stamp & ~EMBED_TICKET_CHECK_MASK) == pushed_stamp);
     // Explicit cast converts the lane place to the stamp, and EMBED_TURNSTILE_LANES bounds it at 64
     const embed_word new_stamp =
-        current_stamp | EMBED_TICKET_POPPED_BIT | ((embed_word)lane_place << EMBED_TICKET_LANE_SHIFT);
-    const embed_bool success = embed_ticket_ring_transition(
-        slot, embed_ticket_ring_guarded_stamp(current_stamp, valid_mask), new_stamp, found_stamp);
+        current_stamp | EMBED_TICKET_POPPED_BIT | ((embed_word)args->lane_place << EMBED_TICKET_LANE_SHIFT);
+    const embed_bool success = EMBED_CALL(
+        embed_ticket_ring_transition, EmbedTicketRingTransitionCfg, slot,
+        EMBED_CALL(embed_ticket_ring_guarded_stamp, EmbedTicketRingGuardedStampCfg, current_stamp, valid_mask),
+        new_stamp, args->found_stamp);
 
     if (!success)
     {
-        *job = NULL;
+        *args->job = NULL;
         return EMBED_FALSE;
     }
-    return embed_ticket_ring_job_verify(slot, current_stamp, job, found_stamp);
+    return EMBED_CALL(embed_ticket_ring_job_verify, EmbedTicketRingJobVerifyCfg, slot, current_stamp, args->job,
+                      args->found_stamp);
 }
 \end{Verbatim}
 
@@ -228,8 +274,8 @@ From one unit on, a step sets the sleeper bit with a fetch-or. Then it calls the
 The host supplies three functions, and the headers declare them without a definition:
 
 \begin{Verbatim}
-int embed_word_wait(embed_atomic_word *word, embed_atomic_word_value old_value, embed_word nanoseconds);
-void embed_word_wake(embed_atomic_word *word);
+int embed_word_wait(const EmbedWordWaitCfg *args);
+void embed_word_wake(const EmbedWordWakeCfg *args);
 embed_word embed_clock_ns(void);
 \end{Verbatim}
 
