@@ -171,7 +171,7 @@ The state sequence of a slot is grant, push, pop, replay, release, one transitio
 
 \subsection{\texorpdfstring{2.3 The turnstile}{2.3 The turnstile}}
 
-A set of turnstiles is \texttt{Embed\allowbreak{}Turnstiles}: \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}LANES} lanes (64 by default, and a build can set 1 to 64), an open count \texttt{top\_\allowbreak{}open\_\allowbreak{}lane} that holds the number of open lanes less one, and a queue word \texttt{queue\_\allowbreak{}length} that counts the workers that found every open lane busy. A set of zeros is at rest with one lane open.
+A set of turnstiles is \texttt{Embed\allowbreak{}Turnstiles}. It holds \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}LANES} lanes, an open count \texttt{top\_\allowbreak{}open\_\allowbreak{}lane} and a queue word \texttt{queue\_\allowbreak{}length}. The lane count is 64 by default on a CPU host and on a CUDA device, and 4 on a microcontroller, and a build can set 1 to 64. The open count holds the number of open lanes less one. The queue word counts the workers that found every open lane busy. A set of zeros is at rest with one lane open.
 
 An \textbf{entry} by a worker at address \(a\) reads the open count \(n\), starts at lane \((a \gg 6) \bmod n\), and tries a fetch-or of the busy bit on each lane in turn. The fetch-or takes the lane where the old value has busy clear; where the old value has busy set, the fetch-or changed nothing and the entry spills to the next lane modulo \(n\). Where every open lane was busy, the worker adds one to the queue word and tries to grow the manifold: a compare-and-swap on lane \(n\) from free or from closed to busy, then a compare-and-swap of \texttt{top\_\allowbreak{}open\_\allowbreak{}lane} from \(n - 1\) to \(n\). A growth that lands gives the worker lane \(n\) as its pass. A growth that fails backs off (Section 2.5) and tries again. On its way out of the entry a worker that was in the queue subtracts one from the queue word, and the entry ends with a sequentially consistent fence.
 
@@ -450,19 +450,21 @@ The transition systems of Sections 3.2 to 3.4, 3.9 and 3.12 take each operation 
 The pieces above are proved one brick at a time: a word, a lane, a slot. \texttt{Integrated.\allowbreak{}lean} composes them with the one actor that the bricks do not contain, the supervisor, and proves the whole. The state is every lane word, as the state of \texttt{Drain.\allowbreak{}lean}, every slot, as empty, pushed with a stamp and whether its job pointer passes the check, or popped with the lane of the pass that popped and whether the job ran, and every worker, as idle, in a pass on a lane, dead on a lane it still holds, or gone. The steps are the five of the algorithm:
 
 \begin{Verbatim}
-inductive Step : State → State → Prop where
-  | enter {s : State} (w l : Nat) (hw : s.worker w = .idle) (hl : (s.lane l).busy = false)
+inductive Step (n : Nat) : State → State → Prop where
+  | enter {s : State} (w l : Nat) (hn : l < n) (hw : s.worker w = .idle) (hl : (s.lane l).busy = false)
       (fresh : (s.lane l).ended w = false) :
-      Step s ((s.setLane l (laneEntered (s.lane l) w)).setWorker w (.inPass l))
+      Step n s ((s.setLane l (laneEntered (s.lane l) w)).setWorker w (.inPass l))
   | pop {s : State} (w l at_ stamp : Nat) (intact : Bool) (hw : s.worker w = .inPass l)
       (hs : s.slot at_ = .pushed stamp intact) :
-      Step s (s.setSlot at_ (.popped stamp l intact))
+      Step n s (s.setSlot at_ (.popped stamp l intact))
   | leave {s : State} (w l : Nat) (hw : s.worker w = .inPass l) :
-      Step s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .idle)
-  | kill {s : State} (w l : Nat) (hw : s.worker w = .inPass l) : Step s (s.setWorker w (.dead l))
+      Step n s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .idle)
+  | kill {s : State} (w l : Nat) (hw : s.worker w = .inPass l) : Step n s (s.setWorker w (.dead l))
   | free {s : State} (w l : Nat) (hw : s.worker w = .dead l) :
-      Step s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .gone)
+      Step n s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .gone)
 \end{Verbatim}
+
+The model has \(n\) lanes, with \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}LANES} as \(n\). An entry takes a lane below \(n\), as the spill of \texttt{Open.\allowbreak{}lean} does.
 
 The entry and the two leaves are the entry and leave steps of \texttt{Drain.\allowbreak{}lean} on the lane word, by \texttt{entered\_\allowbreak{}is\_\allowbreak{}step} and \texttt{left\_\allowbreak{}is\_\allowbreak{}step}, so every lane of the integrated state inherits \texttt{held\_\allowbreak{}until\_\allowbreak{}end} and \texttt{drain\_\allowbreak{}lane\_\allowbreak{}complete} (\texttt{lane\_\allowbreak{}invariant}). The pop records the lane and sets \texttt{ran} to the check, so a job runs only where its pointer passed. The kill leaves the lane word alone, which is what a kill does to hardware state. The free is the supervisor's \texttt{embed\_\allowbreak{}turnstile\_\allowbreak{}leave} with the lane index that the popped word recorded.
 
@@ -475,9 +477,39 @@ An invariant \texttt{Inv} is proved for every reachable state: a worker in a pas
 \item \texttt{popped\_\allowbreak{}lane\_\allowbreak{}was\_\allowbreak{}held}: the lane a popped slot records was held by the worker that popped, at the pop.
 \item \texttt{free\_\allowbreak{}ends\_\allowbreak{}pass}: after the free of a dead worker on lane \(l\), the lane reads free, the worker is ended, and \(\mathrm{over}(\mathit{before}, \mathit{after}) = \mathrm{true}\) for the lane word: a drain that read the lane held by the dead worker reads it over. The kill is recoverable because the lane index is recorded.
 \item \texttt{drain\_\allowbreak{}completes}: in a state where every worker is idle or gone, no lane has a holder and none is busy, so a drain reads every lane over and ends.
+\item \texttt{reach\_\allowbreak{}below} and \texttt{busy\_\allowbreak{}below\_\allowbreak{}count}: each lane that a worker holds and each busy lane stays below \(n\). So each lane that a drain reads over and each lane index that a pop records is below \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}LANES}.
 \end{itemize}
 
 This is the whole algorithm as deployed: workers pass and pop, the check refuses what it can see, the supervisor kills what misbehaves and frees its lane from the record in the slot, and the drain always ends once the supervisor has acted. The unbounded parts, how many workers and how long they run, are parameters of the state and never of a theorem.
+
+\subsection{\texorpdfstring{3.13 The configuration of each target (\texttt{Config.\allowbreak{}lean})}{3.13 The configuration of each target (Config.lean)}}
+
+Where the build does not set them, \texttt{embed\_\allowbreak{}turnstile.\allowbreak{}h} selects \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}LANES} and \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}UNIT\_\allowbreak{}SHIFT} from \texttt{EMBED\_\allowbreak{}VECTOR\_\allowbreak{}REGISTER\_\allowbreak{}BITS} and the device pass of CUDA. A target with a vector register is a CPU host. A target with no vector register is a microcontroller, except the device pass of CUDA. The two passes of a CUDA build compile one set, so the device pass takes the lane count of the host pass. A lane takes one cache line, so 64 lanes take 4 KiB, and a microcontroller cannot give that to each set.
+
+{\small
+\setlength{\tabcolsep}{6pt}
+\begin{longtable}{>{\RaggedRight\arraybackslash}p{\dimexpr0.3229\linewidth-2\tabcolsep\relax}>{\RaggedRight\arraybackslash}p{\dimexpr0.3345\linewidth-2\tabcolsep\relax}>{\RaggedRight\arraybackslash}p{\dimexpr0.3426\linewidth-2\tabcolsep\relax}}
+\toprule
+target & \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}LANES} & \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}UNIT\_\allowbreak{}SHIFT} \\
+\midrule
+\endhead
+CPU host & 64 & 10 \\
+CUDA device & 64 & 0 \\
+microcontroller & 4 & 0 \\
+\bottomrule
+\end{longtable}
+}
+
+\texttt{Widths.\allowbreak{}lean} states the selection as \texttt{turnstile\allowbreak{}Lanes} and \texttt{unit\allowbreak{}Shift}. \texttt{turnstile\_\allowbreak{}lanes\_\allowbreak{}hold} proves that each arm meets the assertion of \texttt{embed\_\allowbreak{}turnstile.\allowbreak{}h}, from 1 to 64, and the assertion of \texttt{embed\_\allowbreak{}ticket\_\allowbreak{}ring.\allowbreak{}h}, at max 128. \texttt{targets\_\allowbreak{}select} proves the table. \texttt{Config.\allowbreak{}lean} puts the values of each target into each model that reads them:
+
+\begin{itemize}
+\item \texttt{open\_\allowbreak{}configured}: the open count of Section 3.2 at the lane count of the target. Each pass and each held lane is below the open count, and the open count is from 1 to the lane count.
+\item \texttt{backoff\_\allowbreak{}configured}: the backoff of Section 3.5 at the unit shift of the target. The shift of the C is below the width of the word, and each limit is below \texttt{EMBED\_\allowbreak{}WAIT\_\allowbreak{}INFINITE} and at max \(2^{30}\) ns.
+\item \texttt{integrated\_\allowbreak{}configured}: the integrated model of Section 3.12 at the lane count of the target. Each busy lane is below the lane count, and \texttt{lane\_\allowbreak{}recorded} of the flag matrix reads the index of that lane back from the popped word.
+\item \texttt{microcontroller\_\allowbreak{}configured}: 4 lanes, an open count at max 4, each busy lane below 4, and a ceiling of \(2^{20}\) ns on each wait.
+\end{itemize}
+
+So each theorem of the open count, the backoff, the integrated model and the flag matrix holds with the values that each target builds with.
 
 \section{\texorpdfstring{4. Case study: the cellblock memory manager over the turnstile}{4. Case study: the cellblock memory manager over the turnstile}}
 

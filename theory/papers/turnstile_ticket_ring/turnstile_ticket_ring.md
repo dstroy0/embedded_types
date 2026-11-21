@@ -160,7 +160,7 @@ The state sequence of a slot is grant, push, pop, replay, release, one transitio
 
 ### 2.3 The turnstile
 
-A set of turnstiles is `EmbedTurnstiles`: `EMBED_TURNSTILE_LANES` lanes (64 by default, and a build can set 1 to 64), an open count `top_open_lane` that holds the number of open lanes less one, and a queue word `queue_length` that counts the workers that found every open lane busy. A set of zeros is at rest with one lane open.
+A set of turnstiles is `EmbedTurnstiles`. It holds `EMBED_TURNSTILE_LANES` lanes, an open count `top_open_lane` and a queue word `queue_length`. The lane count is 64 by default on a CPU host and on a CUDA device, and 4 on a microcontroller, and a build can set 1 to 64. The open count holds the number of open lanes less one. The queue word counts the workers that found every open lane busy. A set of zeros is at rest with one lane open.
 
 An **entry** by a worker at address $a$ reads the open count $n$, starts at lane $(a \gg 6) \bmod n$, and tries a fetch-or of the busy bit on each lane in turn. The fetch-or takes the lane where the old value has busy clear; where the old value has busy set, the fetch-or changed nothing and the entry spills to the next lane modulo $n$. Where every open lane was busy, the worker adds one to the queue word and tries to grow the manifold: a compare-and-swap on lane $n$ from free or from closed to busy, then a compare-and-swap of `top_open_lane` from $n - 1$ to $n$. A growth that lands gives the worker lane $n$ as its pass. A growth that fails backs off (Section 2.5) and tries again. On its way out of the entry a worker that was in the queue subtracts one from the queue word, and the entry ends with a sequentially consistent fence.
 
@@ -401,19 +401,21 @@ The transition systems of Sections 3.2 to 3.4, 3.9 and 3.12 take each operation 
 The pieces above are proved one brick at a time: a word, a lane, a slot. `Integrated.lean` composes them with the one actor that the bricks do not contain, the supervisor, and proves the whole. The state is every lane word, as the state of `Drain.lean`, every slot, as empty, pushed with a stamp and whether its job pointer passes the check, or popped with the lane of the pass that popped and whether the job ran, and every worker, as idle, in a pass on a lane, dead on a lane it still holds, or gone. The steps are the five of the algorithm:
 
 ```
-inductive Step : State → State → Prop where
-  | enter {s : State} (w l : Nat) (hw : s.worker w = .idle) (hl : (s.lane l).busy = false)
+inductive Step (n : Nat) : State → State → Prop where
+  | enter {s : State} (w l : Nat) (hn : l < n) (hw : s.worker w = .idle) (hl : (s.lane l).busy = false)
       (fresh : (s.lane l).ended w = false) :
-      Step s ((s.setLane l (laneEntered (s.lane l) w)).setWorker w (.inPass l))
+      Step n s ((s.setLane l (laneEntered (s.lane l) w)).setWorker w (.inPass l))
   | pop {s : State} (w l at_ stamp : Nat) (intact : Bool) (hw : s.worker w = .inPass l)
       (hs : s.slot at_ = .pushed stamp intact) :
-      Step s (s.setSlot at_ (.popped stamp l intact))
+      Step n s (s.setSlot at_ (.popped stamp l intact))
   | leave {s : State} (w l : Nat) (hw : s.worker w = .inPass l) :
-      Step s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .idle)
-  | kill {s : State} (w l : Nat) (hw : s.worker w = .inPass l) : Step s (s.setWorker w (.dead l))
+      Step n s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .idle)
+  | kill {s : State} (w l : Nat) (hw : s.worker w = .inPass l) : Step n s (s.setWorker w (.dead l))
   | free {s : State} (w l : Nat) (hw : s.worker w = .dead l) :
-      Step s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .gone)
+      Step n s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .gone)
 ```
+
+The model has $n$ lanes, with `EMBED_TURNSTILE_LANES` as $n$. An entry takes a lane below $n$, as the spill of `Open.lean` does.
 
 The entry and the two leaves are the entry and leave steps of `Drain.lean` on the lane word, by `entered_is_step` and `left_is_step`, so every lane of the integrated state inherits `held_until_end` and `drain_lane_complete` (`lane_invariant`). The pop records the lane and sets `ran` to the check, so a job runs only where its pointer passed. The kill leaves the lane word alone, which is what a kill does to hardware state. The free is the supervisor's `embed_turnstile_leave` with the lane index that the popped word recorded.
 
@@ -425,8 +427,28 @@ An invariant `Inv` is proved for every reachable state: a worker in a pass or de
 - `popped_lane_was_held`: the lane a popped slot records was held by the worker that popped, at the pop.
 - `free_ends_pass`: after the free of a dead worker on lane $l$, the lane reads free, the worker is ended, and $\mathrm{over}(\mathit{before}, \mathit{after}) = \mathrm{true}$ for the lane word: a drain that read the lane held by the dead worker reads it over. The kill is recoverable because the lane index is recorded.
 - `drain_completes`: in a state where every worker is idle or gone, no lane has a holder and none is busy, so a drain reads every lane over and ends.
+- `reach_below` and `busy_below_count`: each lane that a worker holds and each busy lane stays below $n$. So each lane that a drain reads over and each lane index that a pop records is below `EMBED_TURNSTILE_LANES`.
 
 This is the whole algorithm as deployed: workers pass and pop, the check refuses what it can see, the supervisor kills what misbehaves and frees its lane from the record in the slot, and the drain always ends once the supervisor has acted. The unbounded parts, how many workers and how long they run, are parameters of the state and never of a theorem.
+
+### 3.13 The configuration of each target (`Config.lean`)
+
+Where the build does not set them, `embed_turnstile.h` selects `EMBED_TURNSTILE_LANES` and `EMBED_TURNSTILE_UNIT_SHIFT` from `EMBED_VECTOR_REGISTER_BITS` and the device pass of CUDA. A target with a vector register is a CPU host. A target with no vector register is a microcontroller, except the device pass of CUDA. The two passes of a CUDA build compile one set, so the device pass takes the lane count of the host pass. A lane takes one cache line, so 64 lanes take 4 KiB, and a microcontroller cannot give that to each set.
+
+| target          | `EMBED_TURNSTILE_LANES` | `EMBED_TURNSTILE_UNIT_SHIFT` |
+| --------------- | ----------------------- | ---------------------------- |
+| CPU host        | 64                      | 10                           |
+| CUDA device     | 64                      | 0                            |
+| microcontroller | 4                       | 0                            |
+
+`Widths.lean` states the selection as `turnstileLanes` and `unitShift`. `turnstile_lanes_hold` proves that each arm meets the assertion of `embed_turnstile.h`, from 1 to 64, and the assertion of `embed_ticket_ring.h`, at max 128. `targets_select` proves the table. `Config.lean` puts the values of each target into each model that reads them:
+
+- `open_configured`: the open count of Section 3.2 at the lane count of the target. Each pass and each held lane is below the open count, and the open count is from 1 to the lane count.
+- `backoff_configured`: the backoff of Section 3.5 at the unit shift of the target. The shift of the C is below the width of the word, and each limit is below `EMBED_WAIT_INFINITE` and at max $2^{30}$ ns.
+- `integrated_configured`: the integrated model of Section 3.12 at the lane count of the target. Each busy lane is below the lane count, and `lane_recorded` of the flag matrix reads the index of that lane back from the popped word.
+- `microcontroller_configured`: 4 lanes, an open count at max 4, each busy lane below 4, and a ceiling of $2^{20}$ ns on each wait.
+
+So each theorem of the open count, the backoff, the integrated model and the flag matrix holds with the values that each target builds with.
 
 ## 4. Case study: the cellblock memory manager over the turnstile
 

@@ -47,6 +47,10 @@ The theorems:
 
 - `lane_invariant`. Every lane word of a reachable state satisfies the invariant of the drain model, so
   `held_until_end` and `drain_lane_complete` apply to each lane of the integrated model.
+
+- `reach_below` and `busy_below_count`. The model has n lanes, `EMBED_TURNSTILE_LANES` as n, and an entry takes a
+  lane below n. Each lane that a worker holds and each busy lane stays below n. `Config.lean` sets n to the count
+  that each target selects.
 -/
 
 namespace EmbeddedTypes.Integrated
@@ -95,31 +99,33 @@ def State.setWorker (s : State) (w : Nat) (v : Worker) : State :=
 def State.setSlot (s : State) (at_ : Nat) (v : SlotState) : State :=
   { s with slot := fun i => if i = at_ then v else s.slot i }
 
-inductive Step : State → State → Prop where
-  /-- An idle worker takes a free lane, with the entry step of the lane word. -/
-  | enter {s : State} (w l : Nat) (hw : s.worker w = .idle) (hl : (s.lane l).busy = false)
+/-- The steps of a set of n lanes, `EMBED_TURNSTILE_LANES` as n. An entry takes a lane below n, as the spill of
+`Manifold/Open.lean` does. -/
+inductive Step (n : Nat) : State → State → Prop where
+  /-- An idle worker takes a free lane below the lane count, with the entry step of the lane word. -/
+  | enter {s : State} (w l : Nat) (hn : l < n) (hw : s.worker w = .idle) (hl : (s.lane l).busy = false)
       (fresh : (s.lane l).ended w = false) :
-      Step s ((s.setLane l (laneEntered (s.lane l) w)).setWorker w (.inPass l))
+      Step n s ((s.setLane l (laneEntered (s.lane l) w)).setWorker w (.inPass l))
   /-- A worker in a pass pops a pushed slot. The job runs where its pointer passed the check. -/
   | pop {s : State} (w l at_ stamp : Nat) (intact : Bool) (hw : s.worker w = .inPass l)
       (hs : s.slot at_ = .pushed stamp intact) :
-      Step s (s.setSlot at_ (.popped stamp l intact))
+      Step n s (s.setSlot at_ (.popped stamp l intact))
   /-- A worker ends its pass, with the leave step of the lane word. -/
   | leave {s : State} (w l : Nat) (hw : s.worker w = .inPass l) :
-      Step s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .idle)
+      Step n s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .idle)
   /-- The supervisor kills a worker in a pass. The lane word does not change. -/
-  | kill {s : State} (w l : Nat) (hw : s.worker w = .inPass l) : Step s (s.setWorker w (.dead l))
+  | kill {s : State} (w l : Nat) (hw : s.worker w = .inPass l) : Step n s (s.setWorker w (.dead l))
   /-- The supervisor frees the lane of a dead worker, with the leave step of the lane word on its behalf. -/
   | free {s : State} (w l : Nat) (hw : s.worker w = .dead l) :
-      Step s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .gone)
+      Step n s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .gone)
 
 /-- The state at rest: every lane free, every worker idle, every slot empty. -/
 def rest : State := { lane := fun _ => laneRest, worker := fun _ => .idle, slot := fun _ => .empty }
 
-/-- The states that the steps reach from rest. -/
-inductive Reach : State → Prop where
-  | rest : Reach rest
-  | step {s t : State} : Reach s → Step s t → Reach t
+/-- The states that the steps of n lanes reach from rest. -/
+inductive Reach (n : Nat) : State → Prop where
+  | rest : Reach n rest
+  | step {s t : State} : Reach n s → Step n s t → Reach n t
 
 /-! ## The invariant -/
 
@@ -202,9 +208,9 @@ theorem left_inv {s : State} (i : Inv s) (w l : Nat) (hw : s.worker w = .inPass 
     · rw [ite_eq_right hll]
       exact i.lane l'
 
-theorem step_inv {s t : State} (i : Inv s) (st : Step s t) : Inv t := by
+theorem step_inv {n : Nat} {s t : State} (i : Inv s) (st : Step n s t) : Inv t := by
   cases st with
-  | enter w l hw hl fresh =>
+  | enter w l hn hw hl fresh =>
     refine ⟨?_, ?_, ?_, ?_⟩
     · intro w' l' h
       simp only [State.setWorker, State.setLane] at h ⊢
@@ -292,15 +298,87 @@ theorem step_inv {s t : State} (i : Inv s) (st : Step s t) : Inv t := by
   | free w l hw =>
     exact left_inv i w l (Or.inr hw) (i.holds w l (Or.inr hw)) .gone (fun _ => ⟨by simp, by simp⟩)
 
-theorem reach_inv {s : State} (r : Reach s) : Inv s := by
+theorem reach_inv {n : Nat} {s : State} (r : Reach n s) : Inv s := by
   induction r with
   | rest => exact rest_inv
   | step _ st ih => exact step_inv ih st
 
+/-! ## The lane count -/
+
+/-- Each lane that a worker holds, in a pass or dead, is below the lane count n. -/
+def Below (n : Nat) (s : State) : Prop := ∀ w l, (s.worker w = .inPass l ∨ s.worker w = .dead l) → l < n
+
+theorem rest_below (n : Nat) : Below n rest := by
+  intro w l h
+  rcases h with h | h <;> simp [rest] at h
+
+theorem step_below {n : Nat} {s t : State} (b : Below n s) (st : Step n s t) : Below n t := by
+  cases st with
+  | enter w l hn hw hl fresh =>
+    intro w' l' h
+    simp only [State.setWorker, State.setLane] at h
+    by_cases hww : w' = w
+    · subst hww
+      rw [ite_eq_left rfl] at h
+      rcases h with h | h
+      · simp only [Worker.inPass.injEq] at h
+        subst h
+        exact hn
+      · cases h
+    · rw [ite_eq_right hww] at h
+      exact b w' l' h
+  | pop w l at_ stamp intact hw hs =>
+    intro w' l' h
+    exact b w' l' h
+  | leave w l hw =>
+    intro w' l' h
+    simp only [State.setWorker, State.setLane] at h
+    by_cases hww : w' = w
+    · subst hww
+      rw [ite_eq_left rfl] at h
+      rcases h with h | h <;> cases h
+    · rw [ite_eq_right hww] at h
+      exact b w' l' h
+  | kill w l hw =>
+    intro w' l' h
+    simp only [State.setWorker] at h
+    by_cases hww : w' = w
+    · subst hww
+      rw [ite_eq_left rfl] at h
+      rcases h with h | h
+      · cases h
+      · simp only [Worker.dead.injEq] at h
+        subst h
+        exact b _ _ (Or.inl hw)
+    · rw [ite_eq_right hww] at h
+      exact b w' l' h
+  | free w l hw =>
+    intro w' l' h
+    simp only [State.setWorker, State.setLane] at h
+    by_cases hww : w' = w
+    · subst hww
+      rw [ite_eq_left rfl] at h
+      rcases h with h | h <;> cases h
+    · rw [ite_eq_right hww] at h
+      exact b w' l' h
+
+theorem reach_below {n : Nat} {s : State} (r : Reach n s) : Below n s := by
+  induction r with
+  | rest => exact rest_below n
+  | step _ st ih => exact step_below ih st
+
+/-- In each state that the steps of n lanes reach, each busy lane is below n. So each lane that a drain reads over
+and each lane index that a pop records is below `EMBED_TURNSTILE_LANES`. -/
+theorem busy_below_count {n : Nat} {s : State} (r : Reach n s) (l : Nat) (h : (s.lane l).busy = true) : l < n := by
+  have i := reach_inv r
+  cases hh : (s.lane l).holder with
+  | none => exact absurd hh (i.busy l h)
+  | some w => exact reach_below r w l (i.holder l w hh)
+
 /-! ## The theorems -/
 
 /-- A popped slot whose job pointer failed the check never ran its job: the pop step records `ran` as the check. -/
-theorem refused_never_runs {s t : State} (st : Step s t) (at_ stamp l : Nat) (ran : Bool)
+theorem refused_never_runs {n : Nat} {s t : State} (st : Step n s t) (at_ stamp l : Nat) (ran : Bool)
     (hs : s.slot at_ ≠ .popped stamp l ran) (ht : t.slot at_ = .popped stamp l ran) :
     s.slot at_ = .pushed stamp ran := by
   cases st with
@@ -314,7 +392,7 @@ theorem refused_never_runs {s t : State} (st : Step s t) (at_ stamp l : Nat) (ra
       exact hs'
     · rw [ite_eq_right ha] at ht
       exact absurd ht hs
-  | enter _ _ _ _ _ => exact absurd ht hs
+  | enter _ _ _ _ _ _ => exact absurd ht hs
   | leave _ _ _ => exact absurd ht hs
   | kill _ _ _ => exact absurd ht hs
   | free _ _ _ => exact absurd ht hs
@@ -327,7 +405,7 @@ theorem single_flip_never_runs (p : Nat) (hp : p ∈ Flags.pointers) (job i : Bi
   decide_eq_false (Flags.job_flip_changes_check p hp job i hi)
 
 /-- No step changes a popped slot, so a popped slot stays popped and its job ran at max once. -/
-theorem runs_at_max_once {s t : State} (st : Step s t) (at_ stamp l : Nat) (ran : Bool)
+theorem runs_at_max_once {n : Nat} {s t : State} (st : Step n s t) (at_ stamp l : Nat) (ran : Bool)
     (hs : s.slot at_ = .popped stamp l ran) : t.slot at_ = .popped stamp l ran := by
   cases st with
   | pop w l' at' stamp' intact hw hs' =>
@@ -338,14 +416,14 @@ theorem runs_at_max_once {s t : State} (st : Step s t) (at_ stamp l : Nat) (ran 
       cases hs'
     · rw [ite_eq_right ha]
       exact hs
-  | enter _ _ _ _ _ => exact hs
+  | enter _ _ _ _ _ _ => exact hs
   | leave _ _ _ => exact hs
   | kill _ _ _ => exact hs
   | free _ _ _ => exact hs
 
 /-- A worker in a pass or dead holds its lane, the lane names the worker back, and two workers never share a
 lane. -/
-theorem lane_identifies_worker {s : State} (r : Reach s) (w l : Nat)
+theorem lane_identifies_worker {n : Nat} {s : State} (r : Reach n s) (w l : Nat)
     (h : s.worker w = .inPass l ∨ s.worker w = .dead l) :
     (s.lane l).busy = true ∧ (s.lane l).holder = some w ∧
       ∀ w', (s.worker w' = .inPass l ∨ s.worker w' = .dead l) → w' = w := by
@@ -357,7 +435,8 @@ theorem lane_identifies_worker {s : State} (r : Reach s) (w l : Nat)
   exact ((Option.some.injEq _ _).mp this).symm
 
 /-- The worker that popped a slot held the lane that the slot records, at the pop. -/
-theorem popped_lane_was_held {s t : State} (r : Reach s) (st : Step s t) (at_ stamp l : Nat) (ran : Bool)
+theorem popped_lane_was_held {n : Nat} {s t : State} (r : Reach n s) (st : Step n s t) (at_ stamp l : Nat)
+    (ran : Bool)
     (hs : s.slot at_ ≠ .popped stamp l ran) (ht : t.slot at_ = .popped stamp l ran) :
     ∃ w, s.worker w = .inPass l ∧ (s.lane l).holder = some w := by
   cases st with
@@ -371,7 +450,7 @@ theorem popped_lane_was_held {s t : State} (r : Reach s) (st : Step s t) (at_ st
       exact ⟨w, hw, ((reach_inv r).holds w l' (Or.inl hw)).2⟩
     · rw [ite_eq_right ha] at ht
       exact absurd ht hs
-  | enter _ _ _ _ _ => exact absurd ht hs
+  | enter _ _ _ _ _ _ => exact absurd ht hs
   | leave _ _ _ => exact absurd ht hs
   | kill _ _ _ => exact absurd ht hs
   | free _ _ _ => exact absurd ht hs
@@ -386,7 +465,7 @@ theorem free_ends_pass (s : State) (w l : Nat) :
 
 /-- In a state where every worker is idle or gone, no lane has a holder and no lane is busy. So every drain reads
 every lane over, and ends. -/
-theorem drain_completes {s : State} (r : Reach s)
+theorem drain_completes {n : Nat} {s : State} (r : Reach n s)
     (quiet : ∀ w, s.worker w = .idle ∨ s.worker w = .gone) (l : Nat) :
     (s.lane l).holder = none ∧ (s.lane l).busy = false := by
   have i := reach_inv r
@@ -401,7 +480,7 @@ theorem drain_completes {s : State} (r : Reach s)
   | true => exact absurd hn (i.busy l hb)
 
 /-- Every lane word of a reachable state satisfies the invariant of the drain model. -/
-theorem lane_invariant {s : State} (r : Reach s) (l : Nat) : Manifold.Drain.Inv (s.lane l) :=
+theorem lane_invariant {n : Nat} {s : State} (r : Reach n s) (l : Nat) : Manifold.Drain.Inv (s.lane l) :=
   (reach_inv r).lane l
 
 end EmbeddedTypes.Integrated

@@ -16,6 +16,10 @@ and `decide` checks each theorem on every arm of the chain.
   64 bits and 32 bits below it. At each word width, the busy, closed and sleeper bits of the lane word and its
   generation fill that atomic word. The generation is 61 bits wide at 64, and 29 at 32 and 16. The open count fits.
 
+- `turnstile_lanes_hold` and `targets_select`. `EMBED_VECTOR_REGISTER_BITS` and the CUDA device pass select
+  `EMBED_TURNSTILE_LANES` and `EMBED_TURNSTILE_UNIT_SHIFT`. A microcontroller gets 4 lanes and the shift 0, a CPU
+  host 64 and 10, and a CUDA device 64 and 0. Every arm meets the assertions of the turnstile and the ticket ring.
+
 - `derived_builds` and `wide_without_stops`. `EMBED_ATOMIC_HAS_64` is 0 on MSVC below a pointer of 64 bits. There,
   the word, the size and the pointer that the header derives are 32 bits, and each gets the 32-bit atomic word. A
   width of 64 on that target stops the build.
@@ -101,6 +105,29 @@ theorem wide_without_stops : atomicFor (has64 true 32) 64 = none := by decide
 
 /-- `EMBED_TURNSTILE_LANES` is from 1 to 64, and the open count less one fits each word width. -/
 theorem lanes_fit : ∀ w ∈ [64, 32, 16], 64 - 1 < 2 ^ w := by decide
+
+/-- `EMBED_TURNSTILE_LANES` where the build does not set it: 64 on a CUDA device and where the target has a vector
+register, and 4 on a target with none. -/
+def turnstileLanes (cuda : Bool) (vector : Nat) : Nat := if cuda ∨ vector ≠ 0 then 64 else 4
+
+/-- `EMBED_TURNSTILE_UNIT_SHIFT` where the build does not set it: 10 on a CPU host, and 0 on each other target. A
+CPU host has a vector register and is no CUDA device. -/
+def unitShift (cuda : Bool) (vector : Nat) : Nat := if ¬cuda ∧ vector ≠ 0 then 10 else 0
+
+/-- On every arm, the lane count meets the assertion of `embed_turnstile.h`, from 1 to 64, and the assertion of
+`embed_ticket_ring.h`, at max 128. The open count less one fits each word width, and the unit shift is 10 at max. -/
+theorem turnstile_lanes_hold : ∀ cuda ∈ [true, false], ∀ v ∈ vectorArms,
+    1 ≤ turnstileLanes cuda v ∧ turnstileLanes cuda v ≤ 64 ∧ turnstileLanes cuda v ≤ 128 ∧
+      (∀ w ∈ [64, 32, 16], turnstileLanes cuda v - 1 < 2 ^ w) ∧ unitShift cuda v ≤ 10 := by
+  decide
+
+/-- A microcontroller, with no vector register and no CUDA, gets 4 lanes and the unit shift 0. A CPU host gets 64
+lanes and 10. A CUDA device gets 64 lanes and 0. -/
+theorem targets_select :
+    (turnstileLanes false 0 = 4 ∧ unitShift false 0 = 0) ∧
+      (∀ v ∈ [512, 256, 128], turnstileLanes false v = 64 ∧ unitShift false v = 10) ∧
+      (∀ v ∈ vectorArms, turnstileLanes true v = 64 ∧ unitShift true v = 0) := by
+  decide
 
 /-- `EMBED_NARG`: the caller's arguments, then the constants 24 down to 0; `EMBED_ARG_N` takes the 25th. -/
 def narg (n : Nat) : Option Nat :=
