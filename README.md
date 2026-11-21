@@ -135,6 +135,104 @@ ABI. Assertions hold each width to the values that the header supports.
 picks its arm. [The ABI](docs/abi.md) states the types, the host hooks and the stamp. It also
 states each value that follows the width of the word, and each macro that a build can set.
 
+## The ABI
+
+This section states the interface of the eight headers. [The ABI](docs/abi.md) holds the same facts,
+with a link to the contract of each name.
+
+### The atomic words
+
+| name                 | width                                                                  |
+| -------------------- | ---------------------------------------------------------------------- |
+| `embed_atomic_u32`   | 32 bits, on every arm                                                  |
+| `embed_atomic_u64`   | 64 bits, where `EMBED_ATOMIC_HAS_64` is 1                              |
+| `embed_atomic_word`  | 64 bits on a word of 64 bits, and 32 bits below it                     |
+| `embed_atomic_usize` | the width of `size_t`                                                  |
+| `embed_atomic_uptr`  | the width of `uintptr_t`                                               |
+| `embed_stored_u64`   | 64 bits: one `embed_u64`, or two `embed_u32` halves on an embedded target |
+
+No arm has an atomic word of 16 bits. So a word of 16 bits has an `embed_atomic_word` of 32 bits,
+and its lane words are 32 bits. Where `EMBED_ATOMIC_HAS_64` is 0, a word, a `size_t` or a
+`uintptr_t` of 64 bits stops the build at an `#error`.
+
+### The host hooks
+
+`embed_word_wait` sleeps while the word holds `old_value`, for `nanoseconds` at max. A limit of
+`EMBED_WAIT_INFINITE`, each bit of the word set, has no end. A limit of 0 answers at once, with no
+sleep and no system call. The call returns 1 where the word moved off `old_value`, and 0 where it
+did not. A sleep can end early, so a sleeper tests its condition in a loop.
+
+`embed_word_wake` wakes every thread asleep on the word. The compare and the sleep of the wait are
+one step with respect to the wake. That is the contract of the futex.
+
+`embed_clock_ns` gives the nanoseconds of the host modulo 2^`EMBED_WORD_BITS`. The clock rolls after
+about 4.29 s on a word of 32 bits, and after 65.5 µs on a word of 16 bits. `embed_thread_place`
+gives the place of the thread that calls, from 0. Each thread answers its own place for its life,
+and no two live threads answer one place.
+
+### The values that follow the word
+
+| value                                             | 64-bit word | 32-bit word | 16-bit word    |
+| ------------------------------------------------- | ----------- | ----------- | -------------- |
+| `EMBED_TICKET_BITS`, the width of the ticket      | 32          | 12          | no ticket ring |
+| `EMBED_TICKET_EPOCH_BITS`, the width of the epoch | 16          | 4           | no ticket ring |
+| `EMBED_TICKET_RING_SHIFT_MAX`                     | 31          | 11          | no ticket ring |
+| `EMBED_TURNSTILE_EXPONENT_MAX`                    | 20          | 20          | 5              |
+| the longest wait of the backoff on a CPU host     | 2^30 ns     | 2^30 ns     | 2^15 ns        |
+| the width of the generation in a lane word        | 61 bits     | 29 bits     | 29 bits        |
+
+The unit of the backoff is 2^`EMBED_TURNSTILE_UNIT_SHIFT` ns. The shift is 10 on a host, and 0 on a
+device and on an embedded target. The longest wait is 2^(`EMBED_TURNSTILE_UNIT_SHIFT` +
+`EMBED_TURNSTILE_EXPONENT_MAX`) ns. The ring has at max 2^`EMBED_TICKET_RING_SHIFT_MAX` slots. The
+generation rolls after 2^n counts, with n its width.
+
+### The flag field of a stamp
+
+| bits of the flag field | field                                       |
+| ---------------------- | ------------------------------------------- |
+| 0 to 4                 | granted, pushed, popped, replayed, released |
+| 5 to 7                 | the three-bit check of the job pointer      |
+| 8 to 14                | the lane index of the pop                   |
+| 15                     | the reserved bit, which no transition sets  |
+
+Each transition of a slot takes an input stamp with its flag field clear. It answers in
+`found_stamp` the stamp that the compare found in the slot. The check folds the job pointer at the
+width of `uintptr_t`, so it holds on a pointer of 16, 32 or 64 bits.
+
+### What a build can set
+
+A build defines each of these ahead of the first header that it includes.
+
+| macro                          | default                                                     | what it sets                                          |
+| ------------------------------ | ----------------------------------------------------------- | ----------------------------------------------------- |
+| `EMBED_WORD_BITS`              | the width of `UINTPTR_MAX`                                  | the word                                              |
+| `EMBED_INDEX_BITS`             | 32, or 16 on a word of 16 bits                              | the index                                             |
+| `EMBED_LANE_BITS`              | the widest vector register                                  | the lane                                              |
+| `EMBED_LANE_PORTABLE`          | 0                                                           | 1 takes the portable arm of the lane on any target    |
+| `EMBED_BIG_ENDIAN`             | 1 where `__BYTE_ORDER__` is big-endian, else 0              | the byte order                                        |
+| `EMBED_FAST_UNALIGNED_LOAD`    | 1 where `__ARM_FEATURE_UNALIGNED` is defined, else 0        | whether one instruction loads a word from any address |
+| `EMBED_TARGET`                 | device on CUDA, host with a vector register, else embedded  | the class of the target, which the defaults below read |
+| `EMBED_TURNSTILE_LANES`        | 4 on an embedded target, else 64                            | the lanes of a set, from 1 to 64                      |
+| `EMBED_TURNSTILE_UNIT_SHIFT`   | 10 on a host, else 0                                        | the unit of the backoff, 2^shift ns, 10 at max        |
+| `EMBED_TURNSTILE_SPIN_PAUSE()` | the pause instruction where the compiler has one            | the pause of a spin                                   |
+| `EMBED_TICKET_JOB_CHECK`       | 1                                                           | 0 turns off the check of the job pointer              |
+| `EMBED_CLOCK_HZ`               | 1000000, with a build warning                               | the ticks of the clock in one second                  |
+| `EMBED_CLOCK_SOURCE`           | `EMBED_CLOCK_OWN` where the architecture has a cycle counter, else `EMBED_CLOCK_CALLER`, with a build warning | the caller's clock, or a counter pinned to a core |
+| `EMBED_CLOCK_CORE`             | 0, with a build warning                                     | the core of the pinned counter, under `EMBED_CLOCK_OWN` alone |
+| `EMBED_INLINE`                 | `static inline` with `always_inline`                        | the inline policy of each function                    |
+
+### The targets
+
+| target                  | what builds                                |
+| ----------------------- | ------------------------------------------ |
+| a word of 64 bits       | each header                                |
+| a word of 32 bits       | each header                                |
+| a word of 16 bits       | each header but `embed_ticket_ring.h`      |
+| MSVC on a 32-bit target | each header, and no 64-bit atomic word     |
+
+The Lean proofs under [`theory/`](theory) hold the stamp and the flag matrix on the words of 32 and
+64 bits. They hold the lane word on the atomic words of 32 and 64 bits, and the backoff on each word.
+
 ## A first use
 
 ```c

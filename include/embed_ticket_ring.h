@@ -258,6 +258,8 @@ EMBED_INLINE embed_word embed_ticket_fields_of_stamp(embed_word stamp)
  */
 EMBED_INLINE void embed_ticket_ring_begin(EmbedTicketRing *ring, EmbedTicketRingSlot *slots, unsigned int shift)
 {
+    // Explicit cast widens the one to the word before the shift, and EMBED_TICKET_RING_SHIFT_MAX holds the shift below
+    // the width
     ring->mask = ((embed_word)1u << shift) - 1u;
     ring->slots = slots;
 }

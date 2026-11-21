@@ -40,8 +40,8 @@
  * @brief 1 where the atomics run on CUDA's device atomics, 2 on C11 atomics, 3 on the GCC and clang
  *        builtins, 4 on MSVC's interlocked intrinsics.
  *
- * @note Always defined. Under nvcc the host pass and the device pass each read this header, and each
- *       selects its own arm over the same word.
+ * @note Each arm defines this macro. Under nvcc the host pass and the device pass each read this header,
+ *       and each selects its own arm over the same word.
  */
 #if defined(__CUDA_ARCH__)
 #define EMBED_ATOMIC_ARM 1
@@ -61,8 +61,9 @@
  * @brief 1 where the arm has a 64-bit atomic word, and 0 where it has none. The MSVC arm has none on a 32-bit
  *        target, because MSVC gives the 64-bit interlocked intrinsics only to its 64-bit targets.
  *
- * @note Always defined. Test it with #if. Where it is 0, the header defines no 64-bit word and no operation on one,
- *       as it defines no 16-bit word. The word, the size and the pointer of such a target are 32 bits.
+ * @note Both arms define this macro. Test it with #if. Where it is 0, the header defines no 64-bit word and no
+ *       operation on one, as it defines no 16-bit word. The word, the size and the pointer of such a target are 32
+ *       bits.
  */
 #if (EMBED_ATOMIC_ARM == 4) && !defined(_M_X64) && !defined(_M_ARM64)
 #define EMBED_ATOMIC_HAS_64 0
@@ -120,7 +121,13 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 #if EMBED_ATOMIC_ARM == 1
 
 /**
- * @brief The device arm's load: a volatile read, then a fence, which no later read moves ahead of.
+ * @brief The primitives of the device arm, on the device atomics of CUDA.
+ *
+ * @note The load is a volatile read, and EMBED_ATOMIC_FENCE after it keeps each later read after the load. The
+ *       store is a volatile write after the fence. Each read-modify-write is the atomic of its width, and each
+ *       answers the word before it.
+ * @note The device atomics take unsigned int for 32 bits and unsigned long long for 64. The casts read the
+ *       same bits as the unsigned words that they are.
  */
 #define EMBED_ATOMIC_LOAD(atom_) ((atom_)->value)
 #define EMBED_ATOMIC_FENCE() __threadfence()
@@ -141,6 +148,13 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 
 #elif EMBED_ATOMIC_ARM == 2
 
+/**
+ * @brief The primitives of the C11 arm, on the explicit atomics of stdatomic.h.
+ *
+ * @note The load has acquire ordering, the store release ordering, and each read-modify-write both. The
+ *       orders are in the calls, so EMBED_ATOMIC_FENCE is empty. The generic calls take either width, so
+ *       each 64-bit primitive is the 32-bit one.
+ */
 #define EMBED_ATOMIC_LOAD(atom_) atomic_load_explicit(&(atom_)->value, memory_order_acquire)
 #define EMBED_ATOMIC_FENCE() ((void)0)
 #define EMBED_ATOMIC_ORDERED() atomic_thread_fence(memory_order_seq_cst)
@@ -157,6 +171,12 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 
 #elif EMBED_ATOMIC_ARM == 3
 
+/**
+ * @brief The primitives of the builtin arm, on the __atomic builtins of GCC and clang.
+ *
+ * @note The orders are those of the C11 arm, and they are in the calls, so EMBED_ATOMIC_FENCE is empty.
+ *       The builtins take either width, so each 64-bit primitive is the 32-bit one.
+ */
 #define EMBED_ATOMIC_LOAD(atom_) __atomic_load_n(&(atom_)->value, __ATOMIC_ACQUIRE)
 #define EMBED_ATOMIC_FENCE() ((void)0)
 #define EMBED_ATOMIC_ORDERED() __atomic_thread_fence(__ATOMIC_SEQ_CST)
@@ -173,10 +193,12 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
 #else
 
 /**
- * @brief MSVC's intrinsics take a long for 32 bits and an __int64 for 64; the casts read the same
- *        bits as the unsigned words they are. A plain volatile read and write of a 32-bit word are one
- *        step each on every target of MSVC. Those of a 64-bit word are one step on its 64-bit targets.
- *        The fences give them their ordering.
+ * @brief The primitives of the MSVC arm, on the interlocked intrinsics.
+ *
+ * @note MSVC's intrinsics take a long for 32 bits and an __int64 for 64. The casts read the same bits as
+ *       the unsigned words that they are.
+ * @note A plain volatile read and write of a 32-bit word are one step each on every target of MSVC. Those
+ *       of a 64-bit word are one step on its 64-bit targets. The fences give them their ordering.
  */
 #define EMBED_ATOMIC_LOAD(atom_) ((atom_)->value)
 #define EMBED_ATOMIC_FENCE() _ReadWriteBarrier()
@@ -251,7 +273,8 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
         EMBED_ATOMIC_FENCE();                                                                                          \
         return swapped;                                                                                                \
     }                                                                                                                  \
-    /** @brief value added to the word, with wrap around, and the word before the add. */                              \
+    /** @brief value added to the word, with wrap around, and the word before the add.                                 \
+     *  @warning A sum past the max of type_ wraps modulo the width of the word, and nothing reports it. */            \
     EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_fetch_add(embed_atomic_##name_ *atom, type_ value)     \
     {                                                                                                                  \
         EMBED_ATOMIC_FENCE();                                                                                          \
@@ -259,7 +282,8 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
         EMBED_ATOMIC_FENCE();                                                                                          \
         return found;                                                                                                  \
     }                                                                                                                  \
-    /** @brief value taken from the word, with wrap around, and the word before the subtract. */                       \
+    /** @brief value taken from the word, with wrap around, and the word before the subtract.                          \
+     *  @warning A value above the word wraps modulo the width of the word, and nothing reports it. */                 \
     EMBED_HOST_DEVICE EMBED_INLINE type_ embed_atomic_##name_##_fetch_sub(embed_atomic_##name_ *atom, type_ value)     \
     {                                                                                                                  \
         /* The add of the two's complement is the subtract, because the add of each arm wraps. */                      \
@@ -302,22 +326,43 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
  */
 #define EMBED_ATOMIC_CAS_32(atom_, expected_, value_) embed_atomic_cas_u32(atom_, expected_, value_)
 
+/**
+ * @brief The 32-bit compare-and-swap of an arm whose primitive answers the word that it found.
+ *
+ * @param[in,out] atom     The word [BORROWS].
+ * @param[in,out] expected The word that the caller expects, and after the call the word that the primitive found
+ *                         [BORROWS].
+ * @param[in]     value    The word that the swap writes.
+ * @return                 1 where the swap occurred, 0 where it did not.
+ */
 EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u32(embed_atomic_u32 *atom, embed_u32 *expected,
                                                                embed_u32 value)
 {
     const embed_u32 found = EMBED_ATOMIC_SWAP_IF_32(atom, *expected, value);
+    // Explicit cast converts the comparison, an int of 0 or 1, to embed_bool
     const embed_bool swapped = (embed_bool)(found == *expected);
     *expected = found;
     return swapped;
 }
 
 #if EMBED_ATOMIC_HAS_64
+/** @brief The compare-and-swap of the 64-bit word on this arm, as for 32 bits. */
 #define EMBED_ATOMIC_CAS_64(atom_, expected_, value_) embed_atomic_cas_u64(atom_, expected_, value_)
 
+/**
+ * @brief The 64-bit compare-and-swap of an arm whose primitive answers the word that it found.
+ *
+ * @param[in,out] atom     The word [BORROWS].
+ * @param[in,out] expected The word that the caller expects, and after the call the word that the primitive found
+ *                         [BORROWS].
+ * @param[in]     value    The word that the swap writes.
+ * @return                 1 where the swap occurred, 0 where it did not.
+ */
 EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u64(embed_atomic_u64 *atom, embed_u64 *expected,
                                                                embed_u64 value)
 {
     const embed_u64 found = EMBED_ATOMIC_SWAP_IF_64(atom, *expected, value);
+    // Explicit cast converts the comparison, an int of 0 or 1, to embed_bool
     const embed_bool swapped = (embed_bool)(found == *expected);
     *expected = found;
     return swapped;
@@ -326,6 +371,13 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u64(embed_atomic_u64 
 
 #elif EMBED_ATOMIC_ARM == 2
 
+/**
+ * @brief The compare-and-swap of the C11 arm, the strong form, with acquire and release ordering where it swaps
+ *        and acquire ordering where it does not. Where it does not swap, *expected_ takes the word that it found.
+ *
+ * @note The generic call takes either width, so the 64-bit form is the 32-bit one. The cast converts the _Bool of
+ *       the call to embed_bool.
+ */
 #define EMBED_ATOMIC_CAS_32(atom_, expected_, value_)                                                                  \
     ((embed_bool)atomic_compare_exchange_strong_explicit(&(atom_)->value, (expected_), (value_), memory_order_acq_rel, \
                                                          memory_order_acquire))
@@ -333,6 +385,13 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u64(embed_atomic_u64 
 
 #else
 
+/**
+ * @brief The compare-and-swap of the builtin arm, the strong form, with the orders of the C11 arm. Where it does
+ *        not swap, *expected_ takes the word that it found.
+ *
+ * @note The builtin takes either width, so the 64-bit form is the 32-bit one. The cast converts the bool of the
+ *       builtin to embed_bool.
+ */
 #define EMBED_ATOMIC_CAS_32(atom_, expected_, value_)                                                                  \
     ((embed_bool)__atomic_compare_exchange_n(&(atom_)->value, (expected_), (value_), 0, __ATOMIC_ACQ_REL,              \
                                              __ATOMIC_ACQUIRE))
@@ -340,9 +399,11 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_atomic_cas_u64(embed_atomic_u64 
 
 #endif
 
+// The operations of the 32-bit word, embed_atomic_u32_load to embed_atomic_u32_raise, on every arm
 EMBED_ATOMIC_OPERATIONS(u32, embed_u32, EMBED_ATOMIC_EXCHANGE_32, EMBED_ATOMIC_CAS_32, EMBED_ATOMIC_ADD_32,
                         EMBED_ATOMIC_OR_32, EMBED_ATOMIC_AND_32)
 #if EMBED_ATOMIC_HAS_64
+// The operations of the 64-bit word, embed_atomic_u64_load to embed_atomic_u64_raise, where the arm has the word
 EMBED_ATOMIC_OPERATIONS(u64, embed_u64, EMBED_ATOMIC_EXCHANGE_64, EMBED_ATOMIC_CAS_64, EMBED_ATOMIC_ADD_64,
                         EMBED_ATOMIC_OR_64, EMBED_ATOMIC_AND_64)
 #endif
@@ -375,6 +436,7 @@ typedef embed_atomic_u64 embed_atomic_word;
 
 /** @brief The plain integer embed_atomic_word holds and its operations take and answer. */
 typedef embed_u64 embed_atomic_word_value;
+/** @brief The operations of embed_atomic_word, each the operation of embed_atomic_u64 with the same suffix. */
 #define embed_atomic_word_load embed_atomic_u64_load
 #define embed_atomic_word_store embed_atomic_u64_store
 #define embed_atomic_word_exchange embed_atomic_u64_exchange
@@ -389,6 +451,7 @@ typedef embed_atomic_u32 embed_atomic_word;
 
 /** @brief The plain integer embed_atomic_word holds and its operations take and answer. */
 typedef embed_u32 embed_atomic_word_value;
+/** @brief The operations of embed_atomic_word, each the operation of embed_atomic_u32 with the same suffix. */
 #define embed_atomic_word_load embed_atomic_u32_load
 #define embed_atomic_word_store embed_atomic_u32_store
 #define embed_atomic_word_exchange embed_atomic_u32_exchange
@@ -415,6 +478,7 @@ typedef embed_atomic_u64 embed_atomic_usize;
 
 /** @brief The plain integer embed_atomic_usize holds and its operations take and answer. */
 typedef embed_u64 embed_atomic_usize_value;
+/** @brief The operations of embed_atomic_usize, each the operation of embed_atomic_u64 with the same suffix. */
 #define embed_atomic_usize_load embed_atomic_u64_load
 #define embed_atomic_usize_store embed_atomic_u64_store
 #define embed_atomic_usize_exchange embed_atomic_u64_exchange
@@ -429,6 +493,7 @@ typedef embed_atomic_u32 embed_atomic_usize;
 
 /** @brief The plain integer embed_atomic_usize holds and its operations take and answer. */
 typedef embed_u32 embed_atomic_usize_value;
+/** @brief The operations of embed_atomic_usize, each the operation of embed_atomic_u32 with the same suffix. */
 #define embed_atomic_usize_load embed_atomic_u32_load
 #define embed_atomic_usize_store embed_atomic_u32_store
 #define embed_atomic_usize_exchange embed_atomic_u32_exchange
@@ -444,8 +509,8 @@ typedef embed_u32 embed_atomic_usize_value;
  * @brief The atomic word as wide as a pointer, for an address as uintptr_t holds it. It is the 64-bit
  *        word where UINTPTR_MAX is 64 bits wide, and the 32-bit word below that.
  *
- * @note Keyed on the pointer, not on EMBED_WORD_BITS, since a build may define the word narrower than
- *       the pointer and an address must still fit whole.
+ * @note The key is the pointer, and not EMBED_WORD_BITS. A build can define the word narrower than the
+ *       pointer, and an address must still fit whole.
  */
 #if UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFu
 #if !EMBED_ATOMIC_HAS_64
@@ -455,6 +520,7 @@ typedef embed_atomic_u64 embed_atomic_uptr;
 
 /** @brief The plain integer embed_atomic_uptr holds and its operations take and answer. */
 typedef embed_u64 embed_atomic_uptr_value;
+/** @brief The operations of embed_atomic_uptr, each the operation of embed_atomic_u64 with the same suffix. */
 #define embed_atomic_uptr_load embed_atomic_u64_load
 #define embed_atomic_uptr_store embed_atomic_u64_store
 #define embed_atomic_uptr_exchange embed_atomic_u64_exchange
@@ -464,6 +530,7 @@ typedef embed_atomic_u32 embed_atomic_uptr;
 
 /** @brief The plain integer embed_atomic_uptr holds and its operations take and answer. */
 typedef embed_u32 embed_atomic_uptr_value;
+/** @brief The operations of embed_atomic_uptr, each the operation of embed_atomic_u32 with the same suffix. */
 #define embed_atomic_uptr_load embed_atomic_u32_load
 #define embed_atomic_uptr_store embed_atomic_u32_store
 #define embed_atomic_uptr_exchange embed_atomic_u32_exchange

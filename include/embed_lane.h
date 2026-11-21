@@ -87,7 +87,7 @@ EMBED_STATIC_ASSERT((EMBED_LANE_BYTES % sizeof(embed_word)) == 0u, "a lane must 
  * @brief word_ expanded one time for each 32-bit lane of the lane, with the place of that lane. So an
  *        operation of the portable arm is one statement for each word, with no counted walk.
  *
- * @param word_ A macro of one parameter, the word's place from 0.
+ * @param[in] word_ A macro of one parameter, the word's place from 0.
  */
 #if EMBED_LANE_U32S == 1u
 #define EMBED_LANE_WORDS(word_) word_(0)
@@ -183,9 +183,9 @@ typedef embed_u64 embed_lane_mask;
 
 /** @brief The mask with every byte of the lane set. */
 #if EMBED_LANE_BYTES >= 64u
-#define EMBED_LANE_MASK_ALL ((embed_lane_mask) ~(embed_u64)0)
+#define EMBED_LANE_MASK_ALL ((embed_lane_mask) ~(embed_u64)0u)
 #else
-#define EMBED_LANE_MASK_ALL ((embed_lane_mask)(((embed_u64)1 << EMBED_LANE_BYTES) - 1u))
+#define EMBED_LANE_MASK_ALL ((embed_lane_mask)(((embed_u64)1u << EMBED_LANE_BYTES) - 1u))
 #endif
 
 /**
@@ -193,16 +193,16 @@ typedef embed_u64 embed_lane_mask;
  *
  * @param[in] bytes_ The bytes, 0 through EMBED_LANE_BYTES.
  * @note A count of EMBED_LANE_BYTES or more gives EMBED_LANE_MASK_ALL. The shift then stays below the width of
- *       the mask.
+ *       the mask. The cast widens the one to the mask before the shift.
  */
 #define EMBED_LANE_MASK_OF(bytes_)                                                                                     \
-    (((bytes_) >= EMBED_LANE_BYTES) ? EMBED_LANE_MASK_ALL : (embed_lane_mask)(((embed_lane_mask)1 << (bytes_)) - 1u))
+    (((bytes_) >= EMBED_LANE_BYTES) ? EMBED_LANE_MASK_ALL : (embed_lane_mask)(((embed_lane_mask)1u << (bytes_)) - 1u))
 
 /**
  * @brief The index of the first byte set in a mask.
  *
- * @param mask  A mask with at least one byte set.
- * @return      The byte, counted from the first.
+ * @param[in] mask A mask with at least one byte set.
+ * @return         The byte, counted from the first.
  * @note The trailing zero count where the compiler has it, else the lowest bit isolated and placed by six masked
  *       steps.
  */
@@ -212,6 +212,7 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask m
     // Explicit casts widen the mask to the builtin's operand and read its count, below 64, as unsigned
     return (embed_u32)__builtin_ctzll((unsigned long long)mask);
 #else
+    // Explicit casts widen the mask to 64 bits, so the negation keeps the lowest set bit alone at each mask width
     const unsigned long long low = (unsigned long long)mask & (0ull - (unsigned long long)mask);
     embed_u32 byte = 0u;
 
@@ -228,8 +229,8 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_u32 embed_lane_mask_first(embed_lane_mask m
 /**
  * @brief The bytes before the first set byte of a mask, or every byte where the mask has no set byte.
  *
- * @param mask  Bytes that end a walk.
- * @return      The bytes ahead of the first one that ends it.
+ * @param[in] mask Bytes that end a walk.
+ * @return         The bytes ahead of the first one that ends it.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_mask_before(embed_lane_mask mask)
 {
@@ -239,8 +240,8 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_mask_before(embed_lane
 /**
  * @brief A lane loaded from any address.
  *
- * @param at  The address of the EMBED_LANE_BYTES bytes to read, at any alignment.
- * @return    The bytes as a lane.
+ * @param[in] at The address of the EMBED_LANE_BYTES bytes to read, at any alignment.
+ * @return       The bytes as a lane.
  */
 #if EMBED_LANE_PLAIN
 // The portable lane is a struct, and a struct cannot take the raw attributes. So this arm reads the lane one raw
@@ -248,7 +249,7 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_mask_before(embed_lane
 // gives the lane a view as words, which C defines, so no pointer casts between the two types.
 typedef union
 {
-    embed_lane lane;                                       /**< The lane. */
+    embed_lane lane;                                         /**< The lane. */
     embed_word words[EMBED_LANE_BYTES / sizeof(embed_word)]; /**< The same bytes as words. */
 } embed_lane_words;
 
@@ -273,8 +274,8 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load(const void *at)
 /**
  * @brief A lane loaded from an address aligned to the lane.
  *
- * @param at  The address of the EMBED_LANE_BYTES bytes to read, a multiple of EMBED_LANE_BYTES.
- * @return    The bytes as a lane.
+ * @param[in] at The address of the EMBED_LANE_BYTES bytes to read, a multiple of EMBED_LANE_BYTES.
+ * @return       The bytes as a lane.
  * @warning C leaves a load from an address not aligned to the lane undefined here. embed_lane_load
  *          reads from any address.
  */
@@ -286,8 +287,8 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_load_aligned(const void *at
 /**
  * @brief A lane put at any address.
  *
- * @param dst   The address of the EMBED_LANE_BYTES bytes to write, at any alignment.
- * @param lane  The bytes.
+ * @param[out] dst  The address of the EMBED_LANE_BYTES bytes to write, at any alignment.
+ * @param[in]  lane The bytes.
  */
 #if EMBED_LANE_PLAIN
 // The store that matches the load arm above, one raw word at a time, for the same reason.
@@ -312,8 +313,8 @@ EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put(void *dst, embed_lane lane)
 /**
  * @brief A lane put at an address aligned to the lane.
  *
- * @param dst   The address of the EMBED_LANE_BYTES bytes to write, a multiple of EMBED_LANE_BYTES.
- * @param lane  The bytes.
+ * @param[out] dst  The address of the EMBED_LANE_BYTES bytes to write, a multiple of EMBED_LANE_BYTES.
+ * @param[in]  lane The bytes.
  * @warning C leaves a store to an address not aligned to the lane undefined here. embed_lane_put
  *          writes to any address.
  */
@@ -325,8 +326,8 @@ EMBED_HOST_DEVICE EMBED_INLINE void embed_lane_put_aligned(void *dst, embed_lane
 /**
  * @brief Every 32-bit lane of a lane set to `val`.
  *
- * @param val  The 32-bit value.
- * @return     The lane.
+ * @param[in] val The 32-bit value.
+ * @return        The lane.
  * @note On the vector arm a scalar added to the zero vector is the scalar in every lane.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 val)
@@ -346,20 +347,21 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_u32(embed_u32 val)
 /**
  * @brief Every byte of a lane set to `val`.
  *
- * @param val  The byte.
- * @return     The lane.
+ * @param[in] val The byte.
+ * @return        The lane.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_fill_byte(embed_u8 val)
 {
+    // Explicit cast widens the byte to 32 bits, so the product puts a copy of it in each of the four bytes
     return embed_lane_fill_u32((embed_u32)val * 0x01010101u);
 }
 
 /**
  * @brief The bitwise and of two lanes.
  *
- * @param one    A lane.
- * @param other  A lane.
- * @return       The and.
+ * @param[in] one   A lane.
+ * @param[in] other A lane.
+ * @return          The and.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_and(embed_lane one, embed_lane other)
 {
@@ -377,9 +379,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_and(embed_lane one, embed_l
 /**
  * @brief The bitwise or of two lanes.
  *
- * @param one    A lane.
- * @param other  A lane.
- * @return       The or.
+ * @param[in] one   A lane.
+ * @param[in] other A lane.
+ * @return          The or.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_or(embed_lane one, embed_lane other)
 {
@@ -397,9 +399,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_or(embed_lane one, embed_la
 /**
  * @brief The bitwise exclusive or of two lanes.
  *
- * @param one    A lane.
- * @param other  A lane.
- * @return       The exclusive or.
+ * @param[in] one   A lane.
+ * @param[in] other A lane.
+ * @return          The exclusive or.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_xor(embed_lane one, embed_lane other)
 {
@@ -417,9 +419,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_xor(embed_lane one, embed_l
 /**
  * @brief The 32-bit lanes of two lanes added, each with wrap around at 32 bits.
  *
- * @param one    A lane.
- * @param other  A lane.
- * @return       The sums.
+ * @param[in] one   A lane.
+ * @param[in] other A lane.
+ * @return          The sums.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_add_u32(embed_lane one, embed_lane other)
 {
@@ -437,9 +439,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_add_u32(embed_lane one, emb
 /**
  * @brief The 32-bit lanes of `other` taken from those of `one`, each with wrap around at 32 bits.
  *
- * @param one    A lane.
- * @param other  A lane.
- * @return       The differences.
+ * @param[in] one   A lane.
+ * @param[in] other A lane.
+ * @return          The differences.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_sub_u32(embed_lane one, embed_lane other)
 {
@@ -457,9 +459,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_sub_u32(embed_lane one, emb
 /**
  * @brief The 32-bit lanes of two lanes multiplied, the low 32 bits of each product retained.
  *
- * @param one    A lane.
- * @param other  A lane.
- * @return       The products' low halves.
+ * @param[in] one   A lane.
+ * @param[in] other A lane.
+ * @return          The products' low halves.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_mul_u32(embed_lane one, embed_lane other)
 {
@@ -477,9 +479,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_mul_u32(embed_lane one, emb
 /**
  * @brief The 32-bit lanes of a lane shifted right by `count` bits, zeros shifted in.
  *
- * @param lane   A lane.
- * @param count  The bits, below 32.
- * @return       The shifted lanes.
+ * @param[in] lane  A lane.
+ * @param[in] count The bits, below 32.
+ * @return          The shifted lanes.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_right_u32(embed_lane lane, embed_u32 count)
 {
@@ -497,9 +499,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_right_u32(embed_lane 
 /**
  * @brief The 32-bit lanes of a lane shifted left by `count` bits, zeros shifted in.
  *
- * @param lane   A lane.
- * @param count  The bits, below 32.
- * @return       The shifted lanes.
+ * @param[in] lane  A lane.
+ * @param[in] count The bits, below 32.
+ * @return          The shifted lanes.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane lane, embed_u32 count)
 {
@@ -527,9 +529,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane embed_lane_shift_left_u32(embed_lane l
 /**
  * @brief Which bytes of two lanes are equal, one bit a byte, the lowest byte the lowest bit.
  *
- * @param one    A lane.
- * @param other  A lane.
- * @return       The mask.
+ * @param[in] one   A lane.
+ * @param[in] other A lane.
+ * @return          The mask.
  * @note On the vector arm, the code compares the bytes as a byte vector, and each equal byte becomes
  *       all ones. Where the compiler has the byte mask builtin for the width of the lane, it reads the
  *       mask in one instruction. That builtin is EMBED_BYTE_MASK_256 or EMBED_BYTE_MASK_128. Otherwise
@@ -541,6 +543,7 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
 {
     embed_lane_mask mask = 0u;
 #if EMBED_LANE_VECTOR
+    // Explicit casts view each lane as its bytes, and read the signed bytes of the compare, 0 or -1, as 0 or 0xFF
     const embed_lane_bytes equal = (embed_lane_bytes)((embed_lane_bytes)one == (embed_lane_bytes)other);
 #if EMBED_HAS_BYTE_MASK_256 && (EMBED_LANE_BITS == 256)
     // Explicit casts read the builtin's int as the 32 unsigned bits it holds
@@ -549,8 +552,10 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
     // Explicit casts read the builtin's int as the 16 unsigned bits it holds
     mask = (embed_lane_mask)(embed_u32)EMBED_BYTE_MASK_128((embed_lane_chars)equal);
 #else
+    // Explicit cast views the bytes as the 32-bit lanes again, and the and keeps one bit of each byte
     const embed_lane bits = (embed_lane)equal & embed_lane_fill_u32(0x01010101u);
-    const embed_lane nibbles = (bits * embed_lane_fill_u32(EMBED_LANE_NIBBLE_GATHER)) >> 24;
+    const embed_lane nibbles = (bits * embed_lane_fill_u32(EMBED_LANE_NIBBLE_GATHER)) >> 24u;
+    // Explicit cast widens the four bits of each 32-bit lane to the mask, before the shift to their place
 #define EMBED_LANE_NIBBLE_WORD(at_) mask |= (embed_lane_mask)nibbles[at_] << (4u * (at_));
     EMBED_LANE_WORDS(EMBED_LANE_NIBBLE_WORD)
 #undef EMBED_LANE_NIBBLE_WORD
@@ -574,8 +579,8 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_equal(embed_lane
 /**
  * @brief Which bytes of a lane are zero, one bit a byte, the lowest byte the lowest bit.
  *
- * @param lane  A lane.
- * @return      The mask.
+ * @param[in] lane A lane.
+ * @return         The mask.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_zero(embed_lane lane)
 {
@@ -585,9 +590,9 @@ EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_zero(embed_lane 
 /**
  * @brief Which bytes two lanes differ in, one bit a byte, the lowest byte the lowest bit.
  *
- * @param one   A lane.
- * @param other The lane to compare it with.
- * @return      The mask.
+ * @param[in] one   A lane.
+ * @param[in] other The lane to compare it with.
+ * @return          The mask.
  */
 EMBED_HOST_DEVICE EMBED_INLINE embed_lane_mask embed_lane_bytes_differ(embed_lane one, embed_lane other)
 {

@@ -225,6 +225,7 @@ EMBED_INLINE void embed_turnstile_backoff_step(embed_atomic_word *word, embed_at
     // Explicit cast takes the difference modulo the word, because a word narrower than int promotes to int
     const embed_word elapsed_ns = (embed_word)(embed_clock_ns() - backoff->start_ns);
 
+    // Explicit cast takes the unit as the word, and the assertion on the unit shift holds it below the width
     if (sleep_allowed && (elapsed_ns >= ((embed_word)1u << EMBED_TURNSTILE_UNIT_SHIFT)))
     {
         (void)embed_atomic_word_fetch_or(word, sleeper_bit);
