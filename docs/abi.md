@@ -23,7 +23,7 @@ No arm has an atomic word of 16 bits. So a word of 16 bits has an `embed_atomic_
 
 ## The call
 
-Each function takes one parameter, a pointer to a `const` Cfg of its own. The Cfg is a struct of the parameters of that function, and each member is `const`. A C caller builds the Cfg as a compound literal at the call with `EMBED_CALL`:
+Each function takes one parameter, a pointer to a `const` Cfg of its own. The Cfg is a struct of the parameters of that function, and each member is `const`. A call must give each member, and no pointer member takes zero. A C caller builds the Cfg as a compound literal at the call with `EMBED_CALL`:
 
 ```c
 const unsigned int place = EMBED_CALL(embed_turnstile_table.enter, EmbedTurnstileEnterCfg, .set = &set,

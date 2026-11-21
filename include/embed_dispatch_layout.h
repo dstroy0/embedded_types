@@ -715,6 +715,8 @@ EMBED_BEGIN_DECLS
  * @note C sets to zero each member that the initializer does not name. A compound literal in an
  *       argument lives to the end of the block around it. So entry_ can retain the pointer for the full
  *       call.
+ * @note A call must give each member of each Cfg in these headers. No pointer member takes zero, and a call that
+ *       leaves one out reads through a null pointer.
  * @note No revision of C++ has compound literals. In C++ the macro builds a braced temporary of ArgsType_ and
  *       passes its address through embed_cfg_address. The temporary lives to the end of the full-expression, which
  *       covers the call and no more.
