@@ -645,7 +645,7 @@
 #define EMBED_TABLE_LAYOUT(Table_, ...)                                                                                \
     EMBED_CAT(EMBED_TABLE_SLOTS_, EMBED_NARG(__VA_ARGS__))(Table_, __VA_ARGS__)                                        \
         EMBED_STATIC_ASSERT(sizeof(Table_) == (size_t)EMBED_NARG(__VA_ARGS__) * EMBED_FUNCTION_POINTER_BYTES,          \
-                            #Table_ " has a member that is not in its dispatch list, or is padded")
+                            #Table_ " has a member that is not in its dispatch list, or padding between two members")
 
 /**
  * @brief Expands to static const.

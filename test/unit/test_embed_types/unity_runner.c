@@ -14,6 +14,7 @@ extern void test_the_word_matches_the_pointer_it_was_derived_from(void);
 extern void test_the_index_fits_the_register_and_is_two_or_four_bytes(void);
 extern void test_the_boolean_normalizes_every_nonzero_to_one(void);
 extern void test_a_raw_word_reads_from_an_odd_address(void);
+extern void test_a_stored_count_reads_back_each_count_that_a_set_writes(void);
 
 
 /*=======Mock Management=====*/
@@ -81,6 +82,7 @@ int main(void)
   run_test(test_the_index_fits_the_register_and_is_two_or_four_bytes, "test_the_index_fits_the_register_and_is_two_or_four_bytes", 108);
   run_test(test_the_boolean_normalizes_every_nonzero_to_one, "test_the_boolean_normalizes_every_nonzero_to_one", 123);
   run_test(test_a_raw_word_reads_from_an_odd_address, "test_a_raw_word_reads_from_an_odd_address", 151);
+  run_test(test_a_stored_count_reads_back_each_count_that_a_set_writes, "test_a_stored_count_reads_back_each_count_that_a_set_writes", 178);
 
   return UNITY_END();
 }

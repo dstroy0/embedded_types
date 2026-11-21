@@ -167,3 +167,22 @@ void test_a_raw_word_reads_from_an_odd_address(void)
     }
     TEST_ASSERT_TRUE_MESSAGE(*at_one == expected, "a raw word at offset one matches the bytes it covers");
 }
+
+/**
+ * @brief Checks that a stored form gives back each count that a set writes into it.
+ *
+ * @note The first count sets bits in both 32-bit halves. The second count changes the lower half and keeps the upper
+ *       half. The third count clears the upper half. On an embedded target the three sets reach each path of the
+ *       write.
+ */
+void test_a_stored_count_reads_back_each_count_that_a_set_writes(void)
+{
+    embed_stored_u64 stored = {0};
+
+    embed_stored_u64_set(&stored, 0x0123456789ABCDEFULL);
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x0123456789ABCDEFULL, embed_stored_u64_get(&stored), "a count with both halves");
+    embed_stored_u64_set(&stored, 0x0123456700000001ULL);
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x0123456700000001ULL, embed_stored_u64_get(&stored), "the same upper half");
+    embed_stored_u64_set(&stored, 0x00000000FFFFFFFFULL);
+    TEST_ASSERT_EQUAL_HEX64_MESSAGE(0x00000000FFFFFFFFULL, embed_stored_u64_get(&stored), "a count below 2^32");
+}

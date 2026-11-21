@@ -119,13 +119,13 @@ def runner_cases(path):
 def conditional_cases(path):
     """Every registered case in @p path whose definition sits inside a preprocessor conditional.
 
-    Unity's generator reads case names out of the source text. Such a case is still declared and
-    called by the runner. Where the conditional went the other way the definition is gone and the
-    suite fails to LINK. A failed link is a build somebody has to read, and it is louder than a case
+    Unity's generator reads case names out of the source text. The runner still declares and calls
+    such a case. Where the conditional went the other way, the definition is absent, and the suite
+    fails to LINK. A failed link is a build that somebody has to read, and it is louder than a case
     that quietly never ran.
 
-    A case whose body must vary by target puts the #if inside the case, where every arm still
-    compiles into one definition the runner can reach.
+    A case whose body must vary by target puts the #if inside the case. There every arm still
+    compiles into one definition that the runner can reach.
     """
     with open(path, encoding="utf-8") as fh:
         lines = fh.read().splitlines()
@@ -276,9 +276,9 @@ TREES = {
 def msvc_environment_script():
     """The script that sets MSVC's environment on this host, or None where there is none to set.
 
-    nvcc on Windows compiles through MSVC's cl and links through MSVC's link, and both read their
-    include and library paths from the environment that script sets. Outside it, Git's own link is
-    found first on PATH and the CUDA check fails on it.
+    nvcc on Windows compiles through MSVC's cl and links through MSVC's link. Both read their
+    include and library paths from the environment that script sets. Outside it, Git's own link
+    comes first on PATH, and the CUDA check fails on it.
     """
     if os.name != "nt":
         return None
@@ -293,7 +293,7 @@ def toolchain_environment():
     """The environment cmake runs in: the process's own, with MSVC's set on top where nvcc is present on Windows.
 
     The device suites alone need nvcc's host toolchain in the environment. A
-    host without nvcc, or without MSVC, runs cmake as it is and the device suites are left out.
+    host without nvcc, or without MSVC, runs cmake as it is, and the build leaves the device suites out.
     """
     env = dict(os.environ)
     script = msvc_environment_script()
@@ -320,8 +320,9 @@ def run(cmd, quiet=True):
 def borrowed_toolchain(skip):
     """Generator and compiler taken from whichever tree is already configured.
 
-    cmake's default generator is not always the one that works on a given machine, and a tree that
-    already built is proof of one that does. Reading it back retains the toolchain path in one place.
+    cmake's default generator is not always the one that works on a given machine. A tree that
+    already built is proof of one that does. This function reads it back, so the toolchain path stays
+    in one place.
     """
     keys = {
         "CMAKE_GENERATOR": "-G",
@@ -408,9 +409,10 @@ def cmd_test(parsed):
 def cmd_coverage(parsed):
     """Build build-cov, run its suites, and report what of include/ they reached.
 
-    The counters carry a stamp from the notes file beside them at build time. The counters of the last run go after
-    the build and before the run, so a report always describes the binaries that produced it. gcovr reads the
-    counters, and --sonarqube writes the report that the scan reads, coverage.xml in the tree.
+    The counters carry a stamp from the notes file beside them at build time. The command removes the counters of
+    the last run after the build and before the run. Thus a report always describes the binaries that produced it.
+    The tool gcovr reads the counters, and --sonarqube writes the report that the scan reads, coverage.xml in the
+    tree.
     """
     tree = "build-cov"
     if not parsed.no_build and build(tree, parsed.jobs) != 0:
@@ -595,8 +597,8 @@ API_PAGES = os.path.join(ROOT, "tools", "api_pages.py")
 def cmd_ste(parsed):
     """Hold each technical document to ASD-STE100: no document can have more findings than test/ste_ratchet.tsv.
 
-    test/ste_check.py does the check, and orior, MMgr and embedded_types hold the same file. --show lists the
-    findings of the documents that it names, or of the tree. --lower writes the count of each document into the
+    test/ste_check.py does the check, and orior, MMgr and embedded_types hold the same file. The option --show lists
+    the findings of the documents that it names, or of the tree. The option --lower writes the count of each document into the
     ratchet, and it can lower a count but it cannot raise one. The pre-commit hook and the ste test in the suite
     run the ratchet. Vocabulary belongs to the banned-word check of orior, and this check reads no word list.
 

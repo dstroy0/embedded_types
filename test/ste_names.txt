@@ -7,3 +7,10 @@ heading
 docstring
 sealing
 spilling
+setting
+aliasing
+non-aliasing
+coupling
+decoupling
+mapping
+pending

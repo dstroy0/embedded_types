@@ -72,12 +72,12 @@ static void run_test(UnityTestFunction func, const char* name, UNITY_LINE_TYPE l
 /*=======MAIN=====*/
 int main(void)
 {
-  UnityBegin("D:/git_project/repos/owned/public/anchor_sift/includes/mmgr/deps/embedded_types/test/unit/test_embed_clock\\test_embed_clock.c");
-  run_test(test_the_build_is_one_family_and_a_host, "test_the_build_is_one_family_and_a_host", 32);
-  run_test(test_a_host_has_no_counter_to_pin, "test_a_host_has_no_counter_to_pin", 40);
-  run_test(test_the_register_is_the_pointer_width_and_holds_the_word, "test_the_register_is_the_pointer_width_and_holds_the_word", 46);
-  run_test(test_the_ticks_scale_to_whole_microseconds_rounded_down, "test_the_ticks_scale_to_whole_microseconds_rounded_down", 52);
-  run_test(test_a_stated_clock_takes_no_default, "test_a_stated_clock_takes_no_default", 59);
+  UnityBegin("D:/git_project/repos/owned/public/embedded_types/test/unit/test_embed_clock\\test_embed_clock.c");
+  run_test(test_the_build_is_one_family_and_a_host, "test_the_build_is_one_family_and_a_host", 29);
+  run_test(test_a_host_has_no_counter_to_pin, "test_a_host_has_no_counter_to_pin", 37);
+  run_test(test_the_register_is_the_pointer_width_and_holds_the_word, "test_the_register_is_the_pointer_width_and_holds_the_word", 43);
+  run_test(test_the_ticks_scale_to_whole_microseconds_rounded_down, "test_the_ticks_scale_to_whole_microseconds_rounded_down", 49);
+  run_test(test_a_stated_clock_takes_no_default, "test_a_stated_clock_takes_no_default", 56);
 
   return UNITY_END();
 }

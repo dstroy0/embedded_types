@@ -369,7 +369,7 @@ Asserts [`embed_index`](#embed_index) is [`EMBED_INDEX_BITS`](#EMBED_INDEX_BITS)
 ### `sizeof(embed_index) <= sizeof(embed_word)`
 
 ```c
-EMBED_STATIC_ASSERT(sizeof(embed_index) <= sizeof(embed_word), "an index must fit the register it is carried in");
+EMBED_STATIC_ASSERT(sizeof(embed_index) <= sizeof(embed_word), "an index must fit the register that carries it");
 ```
 
 Asserts [`embed_index`](#embed_index) is no larger than [`embed_word`](#embed_word).

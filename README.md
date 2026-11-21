@@ -1,6 +1,6 @@
 # embedded_types
 
-Seven C11 headers for an embedded build. They hold a fully atomic thread scheduler, atomic types,
+Eight C11 headers for an embedded build. They hold a fully atomic thread scheduler, atomic types,
 compiler directives and platform directives. Under those are the fixed-width integers, the machine
 word, the index and the lane that each one builds on. Each library in a build takes these names from
 one place, and none defines them again. The library is headers only. No header allocates memory or
@@ -17,10 +17,10 @@ Doxygen comments in the headers. The Doxygen block on a declaration is the contr
 | [`include/embed_clock.h`](include/embed_clock.h)                             | the clock selection: the architecture family, its cycle counter and register width, the caller's clock or a counter pinned to a core, its frequency, and the scale of a tick to a microsecond |
 | [`include/embed_ticket_ring.h`](include/embed_ticket_ring.h)                 | the ticket ring: a ring of job slots that a ticket indexes, with a state machine per slot in the flag bits of its stamp, each transition one compare-and-swap inside a pass |
 | [`include/embed_atomic.h`](include/embed_atomic.h)                           | the atomic types: a 32-bit word on each target and a 64-bit word where the target has one, each with load, store, exchange, compare-and-swap, add, subtract, or, and, and raise, on the arm of the target |
-| [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | the compiler directives, feature checks, the static assertion, attribute wrappers, diagnostic pragmas and an argument count; and the platform directives, the byte order, the unaligned load, the widest vector register and the host and device marker |
+| [`include/embed_compiler_directives.h`](include/embed_compiler_directives.h) | the compiler directives, feature checks, the static assertion, attribute wrappers, diagnostic pragmas, an argument count and the build warning. Also the platform directives: the byte order, the unaligned load, the widest vector register, the class of the target, and the host and device marker |
 | [`include/embed_dispatch_layout.h`](include/embed_dispatch_layout.h)         | the dispatch table: assertions that pin each function pointer of a struct to its slot, and the macros that call and define an entry point                            |
-| [`include/embed_types.h`](include/embed_types.h)                             | the widths: the fixed-width integers, the boolean, the word, the index, the raw word, and the assertions that pin each one                                           |
-| [`include/embed_lane.h`](include/embed_lane.h)                               | the lane: the widest vector register of the target, with its loads, fills, arithmetic and byte masks                                                               |
+| [`include/embed_types.h`](include/embed_types.h)                             | the widths: the fixed-width integers, the boolean, the word, the index, the raw word, the stored form of a 64-bit count, and the assertions that pin each one        |
+| [`include/embed_lane.h`](include/embed_lane.h)                               | the lane: the widest vector register of the target, with its loads, fills, arithmetic and byte masks, the mask of a count, the bytes before a set byte, and the bytes two lanes differ in |
 
 ### The thread scheduler
 
@@ -28,6 +28,8 @@ A set of turnstiles is a manifold of lanes. Each lane is one atomic word on a ca
 A reader enters at the lane that its address selects. Where that lane is busy, the reader spills to
 the next lane. Where every lane is busy, the manifold opens one more. As the pressure goes, the
 manifold closes lanes again.
+
+By default, a set has 64 lanes on a host and on a CUDA device, and 4 on an embedded target.
 
 A writer swaps a published pointer, then drains: it waits until each pass that holds a lane at the
 drain ends. Each step is one atomic operation on one word, and no step holds a lock.
@@ -98,9 +100,11 @@ attribute wrapper, `EMBED_INLINE`, `EMBED_ALIGN`, `EMBED_RAW` and the rest, expa
 where the compiler has it and to nothing where it does not. `EMBED_STATIC_ASSERT` is `static_assert`
 in C++ and C23, `_Static_assert` in C11, and `#error` below C11.
 
-The platform directives read the target. `EMBED_BIG_ENDIAN` comes from `__BYTE_ORDER__`.
+The platform directives read the target. `EMBED_BIG_ENDIAN` comes from `__BYTE_ORDER__`, and
 `EMBED_FAST_UNALIGNED_LOAD` comes from `__ARM_FEATURE_UNALIGNED`. `EMBED_VECTOR_REGISTER_BITS` is
-512, 256, 128 or 0, from the instruction set macros. `EMBED_HOST_DEVICE` is `__host__ __device__`
+512, 256, 128 or 0, from the instruction set macros. `EMBED_TARGET` classes the target from it. A
+CUDA device pass is a device, a target with a vector register is a host, and a target with none is
+an embedded target. `EMBED_HOST_DEVICE` is `__host__ __device__`
 under nvcc and nothing on another compiler.
 
 Under nvcc, one definition of each atomic and lane function compiles into the host pass and the
@@ -114,12 +118,15 @@ The target sets three widths, and a build can set each one on the command line.
 | ---------------------- | ------------------ | ---------------------------------------------------------------------------------------------- |
 | the word, `embed_word` | `EMBED_WORD_BITS`  | `UINTPTR_MAX`: 64, 32 or 16, and `#error` for any other value                                   |
 | the index, `embed_index` | `EMBED_INDEX_BITS` | 16 where the word is 16 bits, and 32 above it                                                |
-| the lane, `embed_lane` | `EMBED_LANE_BITS`  | the widest vector register: 512 under AVX-512, 256 under AVX2 and on a CUDA device, 128 under SSE2 or NEON; 64 or 32 where the target has no vector unit |
+| the lane, `embed_lane` | `EMBED_LANE_BITS`  | the widest vector register: 512 under AVX-512, 256 under AVX2 and on a CUDA device, 128 under SSE2 or NEON, and 64 or 32 where the target has no vector unit |
 
 The word is the register that each count, mask and carry runs in. The index is for offsets and
 lengths, which do not need the full register. The lane is the unit of a bulk pass over memory: a
 copy, a fill, a compare, a blend of pixels. A build for a wider register widens each pass, with no
 edit to the code.
+
+`embed_stored_u64` holds a 64-bit count. On an embedded target it is two 32-bit halves, and each
+half is one plain load or store. `embed_stored_u64_get` and `embed_stored_u64_set` convert it.
 
 Define `EMBED_WORD_BITS`, `EMBED_INDEX_BITS` or `EMBED_LANE_BITS` on the command line to set a
 width yourself. Set the word where the register width differs from the pointer width, as on the x32
@@ -198,7 +205,7 @@ generator of each suite needs `ruby` on `PATH`. CMake configures `test/` only wh
 `EMBEDDED_TYPES_BUILD_TESTS` is on, and that option is on by default where this project is the
 top-level project.
 
-Eight suites run, one for each header and one for the device arm of the lane. Where the configure
+Nine suites run, one for each header and one for the device arm of the lane. Where the configure
 step finds a CUDA compiler, the device suite compiles its kernels and runs them on the part that the
 host has. Where it finds none, the build leaves that suite out and says so.
 
@@ -226,14 +233,14 @@ git config core.hooksPath .githooks
 
 | path                                                 | contents                                                                             |
 | ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| [`include/`](include)                                | the seven headers                                                                    |
+| [`include/`](include)                                | the eight headers                                                                    |
 | [`cmake/`](cmake)                                    | `embedded_types_add_suite()` and `embedded_types_add_device_suite()`                 |
 | [`test/unit/`](test/unit)                            | one Unity suite for each header, and one for the device arm of the lane              |
 | [`test/headers/`](test/headers)                      | one translation unit for each header alone, which the build compiles and the SonarCloud scan reads the headers through |
 | [`test/support/`](test/support)                      | host threads for the contention cases, the host's sleep on the address of a word, and the inline policy of the coverage build |
-| [`test/prove/`](test/prove)                          | the GenMC clients of the turnstile, and the host that they run on                    |
+| [`test/prove/`](test/prove)                          | the GenMC clients of the turnstile and the ticket ring, and the host that they run on |
 | [`test/harness.py`](test/harness.py)                 | suite discovery, Unity runner generation, the build trees, the coverage, the proofs, and the site |
-| [`theory/`](theory)                                  | the Lean proofs: the widths, the atomics, the lane, the manifold of the turnstile, the ticket ring, the flag matrix, the claim of a slot, the device arm and the integrated algorithm; and the research paper on the two |
+| [`theory/`](theory)                                  | the Lean proofs: the widths, the atomics, the lane, the manifold of the turnstile, the ticket ring, the flag matrix, the claim of a slot, the device arm, the configuration of each target and the integrated algorithm. Also the research paper on the two |
 | [`docs/`](docs)                                      | the site: the hand-written pages, and the API pages from the headers                 |
 | [`tools/api_pages.py`](tools/api_pages.py)           | the tool that writes the API pages                                                   |
 | [`LICENSES/`](LICENSES)                              | the AGPL text and the two LicenseRef documents                                       |

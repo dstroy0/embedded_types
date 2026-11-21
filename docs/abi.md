@@ -1,6 +1,6 @@
 # The ABI
 
-This page states the interface of the seven headers. It covers the types, the host hooks, the stamp, and each value that follows the width of the word. The API pages hold the contract of each name.
+This page states the interface of the eight headers. It covers the types, the host hooks, the stamp, and each value that follows the width of the word. The API pages hold the contract of each name.
 
 ## The word and the atomic words
 
@@ -13,8 +13,11 @@ This page states the interface of the seven headers. It covers the types, the ho
 | [`embed_atomic_word`](api/embed_atomic.md#embed_atomic_word) | 64 bits on a word of 64 bits, and 32 bits below it        |
 | [`embed_atomic_usize`](api/embed_atomic.md#embed_atomic_usize) | the width of `size_t`                                   |
 | [`embed_atomic_uptr`](api/embed_atomic.md#embed_atomic_uptr) | the width of `uintptr_t`                                  |
+| [`embed_stored_u64`](api/embed_types.md#embed_stored_u64)  | 64 bits: one `embed_u64`, or two `embed_u32` halves on an embedded target |
 
 No arm has an atomic word of 16 bits. So a word of 16 bits has an `embed_atomic_word` of 32 bits, and its lane words are 32 bits.
+
+[`embed_stored_u64_get`](api/embed_types.md#embed_stored_u64_get) and [`embed_stored_u64_set`](api/embed_types.md#embed_stored_u64_set) read and write a count in its stored form. On an embedded target each half is one plain load or store of 32 bits, and a set writes the upper half only where it changes.
 
 [`EMBED_ATOMIC_HAS_64`](api/embed_atomic.md#EMBED_ATOMIC_HAS_64) is 0 under MSVC on a 32-bit target, and 1 on every other target. MSVC gives its 64-bit interlocked intrinsics only to its 64-bit targets. Where the macro is 0, the header defines no 64-bit atomic word. Each use of `embed_atomic_u64` then stops the compile of its file, and the error names the cause. A word, a `size_t` or a `uintptr_t` of 64 bits on such a target stops the build at an `#error`.
 
@@ -84,6 +87,12 @@ A build defines each of these ahead of the first header that it includes.
 | `EMBED_WORD_BITS`              | the width of `UINTPTR_MAX`                     | the word                                     |
 | `EMBED_INDEX_BITS`             | 32, or 16 on a word of 16 bits                 | the index                                    |
 | `EMBED_LANE_BITS`              | the widest vector register                     | the lane                                     |
+| `EMBED_LANE_PORTABLE`          | 0                                              | 1 takes the portable arm of the lane on any target |
+| `EMBED_BIG_ENDIAN`             | 1 where `__BYTE_ORDER__` is big-endian, else 0 | the byte order                               |
+| `EMBED_FAST_UNALIGNED_LOAD`    | 1 where `__ARM_FEATURE_UNALIGNED` is defined, else 0 | whether one instruction loads a word from any address |
+| `EMBED_CLOCK_HZ`               | 1000000, with a build warning                  | the ticks of the clock in one second         |
+| `EMBED_CLOCK_SOURCE`           | `EMBED_CLOCK_OWN` where the architecture has a cycle counter, else `EMBED_CLOCK_CALLER`, with a build warning | the caller's clock, or a counter pinned to a core |
+| `EMBED_CLOCK_CORE`             | 0, with a build warning                        | the core of the pinned counter, under `EMBED_CLOCK_OWN` alone |
 | `EMBED_TARGET`                 | device on CUDA, host with a vector register, else embedded | the class of the target, which the defaults below read |
 | `EMBED_TURNSTILE_LANES`        | 4 on an embedded target, else 64               | the lanes of a set, from 1 to 64             |
 | `EMBED_TURNSTILE_UNIT_SHIFT`   | 10 on a host, else 0                           | the unit of the backoff, 2^shift ns, 10 at max |

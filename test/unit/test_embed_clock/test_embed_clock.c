@@ -6,17 +6,14 @@
  */
 /**
  * @file test_embed_clock.c
- * @brief Holds the clock selection to the answers of the host build: one family, the host's name, no counter,
- *        the register width, the caller's clock, and the scale of its ticks.
+ * @brief Holds the clock selection to the answers of the host build. The answers are one family, the host's name,
+ *        no counter, the register width, the caller's clock and the scale of its ticks.
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-11-18
  *
- * @note The suite states a frequency of 48 MHz and the caller's clock before the header. The header then
- *       takes no default and gives no warning.
+ * @note The CMakeLists.txt of the suite states a frequency of 48 MHz and the caller's clock for each unit. The
+ *       header then takes no default and gives no warning, in this file and in the runner.
  */
-#define EMBED_CLOCK_HZ 48000000u
-#define EMBED_CLOCK_SOURCE EMBED_CLOCK_CALLER
-
 #include "embed_clock.h"
 
 #include "unity.h"

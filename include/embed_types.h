@@ -208,8 +208,8 @@ typedef embed_word embed_raw_word EMBED_RAW;
  * @note A value is an embed_u64 in each arm, and embed_stored_u64_get and embed_stored_u64_set convert it. The
  *       stored form is the only difference between the arms.
  * @note On an embedded target the halves are the lower word and the upper word of the count. Each is one plain load
- *       or store, and the stored form takes the alignment of an embed_u32. A count that stays below 2^32 changes only its
- *       lower word.
+ *       or store, and the stored form takes the alignment of an embed_u32. A count that stays below 2^32 changes
+ *       only its lower word.
  */
 #if EMBED_TARGET == EMBED_TARGET_EMBEDDED
 typedef struct
@@ -294,7 +294,7 @@ EMBED_STATIC_ASSERT(sizeof(embed_iword) == sizeof(embed_word), "the signed word 
 EMBED_STATIC_ASSERT(sizeof(embed_index) == EMBED_INDEX_BITS / 8u, "embed_index must be exactly EMBED_INDEX_BITS wide");
 
 /** @brief Asserts embed_index is no larger than embed_word. */
-EMBED_STATIC_ASSERT(sizeof(embed_index) <= sizeof(embed_word), "an index must fit the register it is carried in");
+EMBED_STATIC_ASSERT(sizeof(embed_index) <= sizeof(embed_word), "an index must fit the register that carries it");
 
 /**
  * @brief A one-byte enum used only to prove EMBED_ENUM_BYTE gives one byte on this compiler.

@@ -37,7 +37,7 @@ python test/harness.py ste                      # each document held to ASD-STE1
 
 The configure step fetches [Unity](https://github.com/ThrowTheSwitch/Unity) at `v2.6.1`. The runner generator of each suite needs `ruby` on `PATH`. Both belong to `test/`, and CMake configures `test/` only where `EMBEDDED_TYPES_BUILD_TESTS` is on. That option is on by default where this project is the top-level project.
 
-Eight suites run, one for each header and one for the device arm of the lane. Where the configure step finds a CUDA compiler, the device suite compiles its kernels and runs them on the part that the host has. Where it finds none, the build leaves that suite out and says so.
+Nine suites run, one for each header and one for the device arm of the lane. CTest also runs the ASD-STE100 check as a test of its own. Where the configure step finds a CUDA compiler, the device suite compiles its kernels and runs them on the part that the host has. Where it finds none, the build leaves that suite out and says so.
 
 ## Coverage
 

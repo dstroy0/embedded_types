@@ -75,8 +75,8 @@ class Chapter:
 def code_spans(value, render):
     """The value with each code span in it replaced by render of the content of the span.
 
-    A span opens at a run of backticks and closes at the next run of as many, with one character at least between
-    them, on one line. Where no close follows the whole run, the opening gets one backtick shorter. Where no width
+    A span opens at a run of backticks. It closes at the next run of as many, with one character at least between
+    them, on one line. Where no close follows the whole run, the first run gets one backtick shorter. Where no width
     closes, the next character is the next start.
     """
     out = []
@@ -111,8 +111,8 @@ def code_spans(value, render):
 def heading_parts(stripped):
     """(level, text) of a heading line, or None for a line that is no heading.
 
-    A heading is one to six marks, white space, and the text. Closing marks and the white space before them are
-    not part of the text, but the text keeps one character at least. The line has no white space at either end.
+    A heading is one to six marks, white space, and the text. The marks at its end and the white space before them
+    are not part of the text, but the text keeps one character at least. The line has no white space at either end.
     """
     level = len(stripped) - len(stripped.lstrip("#"))
     rest = stripped[level:]

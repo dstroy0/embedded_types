@@ -259,7 +259,8 @@ EMBED_STATIC_ASSERT((EMBED_ARCH_ARM + EMBED_ARCH_RISCV + EMBED_ARCH_XTENSA + EMB
 
 // A word wider than the register that carries it is wrong. A build at 16 or 32 bits on a 64-bit host is
 // correct, and so a narrower word passes
-EMBED_STATIC_ASSERT(EMBED_WORD_BITS <= EMBED_REGISTER_BITS, "EMBED_WORD_BITS is wider than this architecture's register");
+EMBED_STATIC_ASSERT(EMBED_WORD_BITS <= EMBED_REGISTER_BITS,
+                    "EMBED_WORD_BITS is wider than this architecture's register");
 
 /**
  * @brief The core that a default pins a timer to.
@@ -294,7 +295,7 @@ EMBED_STATIC_ASSERT(EMBED_WORD_BITS <= EMBED_REGISTER_BITS, "EMBED_WORD_BITS is 
 #define EMBED_CLOCK_HZ 1000000u
 #define EMBED_UNSET_CLOCK_HZ 1
 EMBED_BUILD_WARNING(
-    "No clock is declared, so EMBED_CLOCK_HZ took the default of 1000000 and a tick is read as one microsecond. Each deadline is then wrong by the real frequency. Set it to the frequency of the clock this reads.")
+    "The build states no clock, so EMBED_CLOCK_HZ took the default of 1000000, and the header reads a tick as one microsecond. Each deadline is then wrong by the real frequency. Set it to the frequency of the clock this reads.")
 #endif
 
 /**
@@ -311,16 +312,16 @@ EMBED_BUILD_WARNING(
 #if EMBED_ARCH_CYCLE_COUNTER
 #define EMBED_CLOCK_SOURCE EMBED_CLOCK_OWN
 EMBED_BUILD_WARNING(
-    "EMBED_CLOCK_SOURCE was not set and took EMBED_CLOCK_OWN, because this architecture defines a cycle counter that a port can read. Say so, or set EMBED_CLOCK_CALLER to read a clock that you run.")
+    "EMBED_CLOCK_SOURCE has no value from the build and took EMBED_CLOCK_OWN, because this architecture defines a cycle counter that a port can read. Say so, or set EMBED_CLOCK_CALLER to read a clock that you run.")
 #else
 #define EMBED_CLOCK_SOURCE EMBED_CLOCK_CALLER
 EMBED_BUILD_WARNING(
-    "EMBED_CLOCK_SOURCE was not set and took EMBED_CLOCK_CALLER, because this architecture defines no cycle counter to pin a timer to. Say so, and supply the clock.")
+    "EMBED_CLOCK_SOURCE has no value from the build and took EMBED_CLOCK_CALLER, because this architecture defines no cycle counter to pin a timer to. Say so, and supply the clock.")
 #endif
 #endif
 
 // A source is one of the two named arms. A third value is a frequency, a core number or a flag in the
-// wrong place, and each test of it below takes the caller's arm without a word
+// wrong place. Each test of it below takes the caller's arm without a word
 #if (EMBED_CLOCK_SOURCE != EMBED_CLOCK_CALLER) && (EMBED_CLOCK_SOURCE != EMBED_CLOCK_OWN)
 #error "EMBED_CLOCK_SOURCE must be EMBED_CLOCK_CALLER or EMBED_CLOCK_OWN."
 #endif
@@ -344,7 +345,7 @@ EMBED_BUILD_WARNING(
 #define EMBED_CLOCK_CORE EMBED_CLOCK_CORE_DEFAULT
 #define EMBED_UNSET_CLOCK_CORE 1
 EMBED_BUILD_WARNING(
-    "EMBED_CLOCK_CORE was not set and took EMBED_CLOCK_CORE_DEFAULT, which is core zero on each family. Set it to the core to pin the timer to.")
+    "EMBED_CLOCK_CORE has no value from the build and took EMBED_CLOCK_CORE_DEFAULT, which is core zero on each family. Set it to the core to pin the timer to.")
 #endif
 
 #else
@@ -353,7 +354,7 @@ EMBED_BUILD_WARNING(
 // would look like a setting that has an effect
 #ifdef EMBED_CLOCK_CORE
 #error                                                                                                                 \
-    "EMBED_CLOCK_CORE is set but EMBED_CLOCK_SOURCE is EMBED_CLOCK_CALLER. Nothing pins a timer in this build, so no core takes it. Set EMBED_CLOCK_SOURCE to EMBED_CLOCK_OWN, or remove EMBED_CLOCK_CORE."
+    "The build sets EMBED_CLOCK_CORE, but EMBED_CLOCK_SOURCE is EMBED_CLOCK_CALLER. Nothing pins a timer in this build, so no core takes it. Set EMBED_CLOCK_SOURCE to EMBED_CLOCK_OWN, or remove EMBED_CLOCK_CORE."
 #endif
 
 #endif
