@@ -338,6 +338,35 @@
 #define EMBED_VECTOR_REGISTER_BITS 0
 #endif
 
+/** @brief The class of a CPU host. */
+#define EMBED_TARGET_HOST 1
+/** @brief The class of the device pass of CUDA. */
+#define EMBED_TARGET_DEVICE 2
+/** @brief The class of an embedded target. */
+#define EMBED_TARGET_EMBEDDED 3
+
+/**
+ * @brief The class of the target: EMBED_TARGET_HOST, EMBED_TARGET_DEVICE or EMBED_TARGET_EMBEDDED. A build can set
+ *        its own class before this header.
+ *
+ * @note EMBED_VECTOR_REGISTER_BITS is the boundary. The device pass of CUDA is a device. Each other target with a
+ *       vector register is a host, and a target with none is an embedded target.
+ * @note The defaults of the turnstile and the stored form of a 64-bit count come from this class.
+ * @note Both arms define this macro. Test it with #if.
+ */
+#if !defined(EMBED_TARGET)
+#if defined(__CUDA_ARCH__)
+#define EMBED_TARGET EMBED_TARGET_DEVICE
+#elif EMBED_VECTOR_REGISTER_BITS > 0
+#define EMBED_TARGET EMBED_TARGET_HOST
+#else
+#define EMBED_TARGET EMBED_TARGET_EMBEDDED
+#endif
+#endif
+EMBED_STATIC_ASSERT((EMBED_TARGET == EMBED_TARGET_HOST) || (EMBED_TARGET == EMBED_TARGET_DEVICE) ||
+                        (EMBED_TARGET == EMBED_TARGET_EMBEDDED),
+                    "EMBED_TARGET must be EMBED_TARGET_HOST, EMBED_TARGET_DEVICE or EMBED_TARGET_EMBEDDED");
+
 /**
  * @brief Set to 1 where the target runs AVX2 and the compiler has the builtin for the mask of 32
  *        bytes, else 0. The builtin reads the sign bit of each byte into an integer.

@@ -84,8 +84,9 @@ A build defines each of these ahead of the first header that it includes.
 | `EMBED_WORD_BITS`              | the width of `UINTPTR_MAX`                     | the word                                     |
 | `EMBED_INDEX_BITS`             | 32, or 16 on a word of 16 bits                 | the index                                    |
 | `EMBED_LANE_BITS`              | the widest vector register                     | the lane                                     |
-| `EMBED_TURNSTILE_LANES`        | 64 with a vector register or on CUDA, else 4   | the lanes of a set, from 1 to 64             |
-| `EMBED_TURNSTILE_UNIT_SHIFT`   | 10 with a vector register off CUDA, else 0     | the unit of the backoff, 2^shift ns, 10 at max |
+| `EMBED_TARGET`                 | device on CUDA, host with a vector register, else embedded | the class of the target, which the defaults below read |
+| `EMBED_TURNSTILE_LANES`        | 4 on an embedded target, else 64               | the lanes of a set, from 1 to 64             |
+| `EMBED_TURNSTILE_UNIT_SHIFT`   | 10 on a host, else 0                           | the unit of the backoff, 2^shift ns, 10 at max |
 | `EMBED_TURNSTILE_SPIN_PAUSE()` | the pause instruction where the compiler has one | the pause of a spin                        |
 | `EMBED_TICKET_JOB_CHECK`       | 1                                              | 0 turns off the check of the job pointer     |
 | `EMBED_INLINE`                 | `static inline` with `always_inline`           | the inline policy of each function           |

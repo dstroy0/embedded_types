@@ -344,6 +344,55 @@ The width in bits of the widest vector register that the target compiles for. It
 
 > **Note:** Both arms define this macro. Test it with `#if`.
 
+### `EMBED_TARGET_HOST` { #EMBED_TARGET_HOST }
+
+```c
+#define EMBED_TARGET_HOST 1
+```
+
+The class of a CPU host.
+
+### `EMBED_TARGET_DEVICE` { #EMBED_TARGET_DEVICE }
+
+```c
+#define EMBED_TARGET_DEVICE 2
+```
+
+The class of the device pass of CUDA.
+
+### `EMBED_TARGET_EMBEDDED` { #EMBED_TARGET_EMBEDDED }
+
+```c
+#define EMBED_TARGET_EMBEDDED 3
+```
+
+The class of an embedded target.
+
+### `EMBED_TARGET` { #EMBED_TARGET }
+
+```c
+#if !defined(EMBED_TARGET)
+#if defined(__CUDA_ARCH__)
+#define EMBED_TARGET EMBED_TARGET_DEVICE
+#elif EMBED_VECTOR_REGISTER_BITS > 0
+#define EMBED_TARGET EMBED_TARGET_HOST
+#else
+#define EMBED_TARGET EMBED_TARGET_EMBEDDED
+#endif
+#endif
+EMBED_STATIC_ASSERT((EMBED_TARGET == EMBED_TARGET_HOST) || (EMBED_TARGET == EMBED_TARGET_DEVICE) ||
+                        (EMBED_TARGET == EMBED_TARGET_EMBEDDED),
+                    "EMBED_TARGET must be EMBED_TARGET_HOST, EMBED_TARGET_DEVICE or EMBED_TARGET_EMBEDDED");
+```
+
+The class of the target: [`EMBED_TARGET_HOST`](#EMBED_TARGET_HOST), [`EMBED_TARGET_DEVICE`](#EMBED_TARGET_DEVICE) or [`EMBED_TARGET_EMBEDDED`](#EMBED_TARGET_EMBEDDED). A build can set its own class before this header.
+
+> **Note:** [`EMBED_VECTOR_REGISTER_BITS`](#EMBED_VECTOR_REGISTER_BITS) is the boundary. The device pass of CUDA is a device. Each other target with a vector register is a host, and a target with none is an embedded target.
+
+> **Note:** The defaults of the turnstile and the stored form of a 64-bit count come from this class.
+
+> **Note:** Both arms define this macro. Test it with `#if`.
+
 ### `EMBED_HAS_BYTE_MASK_256` { #EMBED_HAS_BYTE_MASK_256 }
 
 ```c

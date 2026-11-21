@@ -484,23 +484,23 @@ This is the whole algorithm as deployed: workers pass and pop, the check refuses
 
 \subsection{\texorpdfstring{3.13 The configuration of each target (\texttt{Config.\allowbreak{}lean})}{3.13 The configuration of each target (Config.lean)}}
 
-Where the build does not set them, \texttt{embed\_\allowbreak{}turnstile.\allowbreak{}h} selects \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}LANES} and \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}UNIT\_\allowbreak{}SHIFT} from \texttt{EMBED\_\allowbreak{}VECTOR\_\allowbreak{}REGISTER\_\allowbreak{}BITS} and the device pass of CUDA. A target with a vector register is a CPU host. A target with no vector register is a microcontroller, except the device pass of CUDA. The two passes of a CUDA build compile one set, so the device pass takes the lane count of the host pass. A lane takes one cache line, so 64 lanes take 4 KiB, and a microcontroller cannot give that to each set.
+\texttt{embed\_\allowbreak{}compiler\_\allowbreak{}directives.\allowbreak{}h} selects \texttt{EMBED\_\allowbreak{}TARGET}, the class of the target, from \texttt{EMBED\_\allowbreak{}VECTOR\_\allowbreak{}REGISTER\_\allowbreak{}BITS} and the device pass of CUDA. The device pass of CUDA is a device. Each other target with a vector register is a host, and a target with none is an embedded target. Where the build does not set them, \texttt{embed\_\allowbreak{}turnstile.\allowbreak{}h} selects \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}LANES} and \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}UNIT\_\allowbreak{}SHIFT} from the class. The two passes of a CUDA build compile one set, so the device takes the lane count of the host. A lane takes one cache line, so 64 lanes take 4 KiB, and an embedded target cannot give that to each set.
 
 {\small
 \setlength{\tabcolsep}{6pt}
-\begin{longtable}{>{\RaggedRight\arraybackslash}p{\dimexpr0.3229\linewidth-2\tabcolsep\relax}>{\RaggedRight\arraybackslash}p{\dimexpr0.3345\linewidth-2\tabcolsep\relax}>{\RaggedRight\arraybackslash}p{\dimexpr0.3426\linewidth-2\tabcolsep\relax}}
+\begin{longtable}{>{\RaggedRight\arraybackslash}p{\dimexpr0.2441\linewidth-2\tabcolsep\relax}>{\RaggedRight\arraybackslash}p{\dimexpr0.3723\linewidth-2\tabcolsep\relax}>{\RaggedRight\arraybackslash}p{\dimexpr0.3836\linewidth-2\tabcolsep\relax}}
 \toprule
-target & \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}LANES} & \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}UNIT\_\allowbreak{}SHIFT} \\
+class & \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}LANES} & \texttt{EMBED\_\allowbreak{}TURNSTILE\_\allowbreak{}UNIT\_\allowbreak{}SHIFT} \\
 \midrule
 \endhead
-CPU host & 64 & 10 \\
-CUDA device & 64 & 0 \\
-microcontroller & 4 & 0 \\
+host & 64 & 10 \\
+device & 64 & 0 \\
+embedded & 4 & 0 \\
 \bottomrule
 \end{longtable}
 }
 
-\texttt{Widths.\allowbreak{}lean} states the selection as \texttt{turnstile\allowbreak{}Lanes} and \texttt{unit\allowbreak{}Shift}. \texttt{turnstile\_\allowbreak{}lanes\_\allowbreak{}hold} proves that each arm meets the assertion of \texttt{embed\_\allowbreak{}turnstile.\allowbreak{}h}, from 1 to 64, and the assertion of \texttt{embed\_\allowbreak{}ticket\_\allowbreak{}ring.\allowbreak{}h}, at max 128. \texttt{targets\_\allowbreak{}select} proves the table. \texttt{Config.\allowbreak{}lean} puts the values of each target into each model that reads them:
+\texttt{Widths.\allowbreak{}lean} states the class as \texttt{target}, and the selection as \texttt{turnstile\allowbreak{}Lanes} and \texttt{unit\allowbreak{}Shift}. \texttt{target\_\allowbreak{}classes} proves the class of each target. \texttt{turnstile\_\allowbreak{}lanes\_\allowbreak{}hold} proves that each arm meets the assertion of \texttt{embed\_\allowbreak{}turnstile.\allowbreak{}h}, from 1 to 64, and the assertion of \texttt{embed\_\allowbreak{}ticket\_\allowbreak{}ring.\allowbreak{}h}, at max 128. \texttt{targets\_\allowbreak{}select} proves the table. \texttt{Config.\allowbreak{}lean} puts the values of each target into each model that reads them:
 
 \begin{itemize}
 \item \texttt{open\_\allowbreak{}configured}: the open count of Section 3.2 at the lane count of the target. Each pass and each held lane is below the open count, and the open count is from 1 to the lane count.

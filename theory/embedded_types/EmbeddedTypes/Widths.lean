@@ -1,3 +1,5 @@
+import Std.Tactic.BVDecide
+
 /-!
 # embedded_types, the widths the preprocessor derives
 
@@ -16,9 +18,16 @@ and `decide` checks each theorem on every arm of the chain.
   64 bits and 32 bits below it. At each word width, the busy, closed and sleeper bits of the lane word and its
   generation fill that atomic word. The generation is 61 bits wide at 64, and 29 at 32 and 16. The open count fits.
 
-- `turnstile_lanes_hold` and `targets_select`. `EMBED_VECTOR_REGISTER_BITS` and the CUDA device pass select
-  `EMBED_TURNSTILE_LANES` and `EMBED_TURNSTILE_UNIT_SHIFT`. A microcontroller gets 4 lanes and the shift 0, a CPU
-  host 64 and 10, and a CUDA device 64 and 0. Every arm meets the assertions of the turnstile and the ticket ring.
+- `target_classes`. `EMBED_VECTOR_REGISTER_BITS` and the CUDA device pass select `EMBED_TARGET`: a device in the
+  device pass of CUDA, a host with a vector register, and embedded with none.
+
+- `turnstile_lanes_hold` and `targets_select`. `EMBED_TARGET` selects `EMBED_TURNSTILE_LANES` and
+  `EMBED_TURNSTILE_UNIT_SHIFT`. An embedded target gets 4 lanes and the shift 0, a host 64 and 10, and a device 64
+  and 0. Every arm meets the assertions of the turnstile and the ticket ring.
+
+- `stored_round_trip`, `stored_set_is_split`, `stored_set_get` and `stored_upper_kept`. On an embedded target,
+  `embed_stored_u64` holds a count as its lower word and its upper word. A read after a set gives the count back.
+  The set writes the upper word only where it changes.
 
 - `derived_builds` and `wide_without_stops`. `EMBED_ATOMIC_HAS_64` is 0 on MSVC below a pointer of 64 bits. There,
   the word, the size and the pointer that the header derives are 32 bits, and each gets the 32-bit atomic word. A
@@ -106,13 +115,40 @@ theorem wide_without_stops : atomicFor (has64 true 32) 64 = none := by decide
 /-- `EMBED_TURNSTILE_LANES` is from 1 to 64, and the open count less one fits each word width. -/
 theorem lanes_fit : ∀ w ∈ [64, 32, 16], 64 - 1 < 2 ^ w := by decide
 
-/-- `EMBED_TURNSTILE_LANES` where the build does not set it: 64 on a CUDA device and where the target has a vector
-register, and 4 on a target with none. -/
-def turnstileLanes (cuda : Bool) (vector : Nat) : Nat := if cuda ∨ vector ≠ 0 then 64 else 4
+/-- `EMBED_TARGET`: the class of the target. -/
+inductive Target where
+  | host
+  | device
+  | embedded
+  deriving DecidableEq, Repr
 
-/-- `EMBED_TURNSTILE_UNIT_SHIFT` where the build does not set it: 10 on a CPU host, and 0 on each other target. A
-CPU host has a vector register and is no CUDA device. -/
-def unitShift (cuda : Bool) (vector : Nat) : Nat := if ¬cuda ∧ vector ≠ 0 then 10 else 0
+/-- `EMBED_TARGET` where the build does not set it. The device pass of CUDA is a device. A target with a vector
+register is a host, and a target with none is an embedded target. -/
+def target (cuda : Bool) (vector : Nat) : Target :=
+  if cuda then .device else if vector ≠ 0 then .host else .embedded
+
+/-- The lane count of each class: 4 on an embedded target, and 64 on a host and on a device. -/
+def lanesOf : Target → Nat
+  | .embedded => 4
+  | _ => 64
+
+/-- The unit shift of each class: 10 on a host, and 0 on a device and on an embedded target. -/
+def shiftOf : Target → Nat
+  | .host => 10
+  | _ => 0
+
+/-- `EMBED_TURNSTILE_LANES` where the build does not set it, from the class of the target. -/
+def turnstileLanes (cuda : Bool) (vector : Nat) : Nat := lanesOf (target cuda vector)
+
+/-- `EMBED_TURNSTILE_UNIT_SHIFT` where the build does not set it, from the class of the target. -/
+def unitShift (cuda : Bool) (vector : Nat) : Nat := shiftOf (target cuda vector)
+
+/-- The class of each target. The device pass of CUDA is a device on every arm. A vector register makes a host, and
+no vector register makes an embedded target. -/
+theorem target_classes :
+    (∀ v ∈ vectorArms, target true v = .device) ∧ (∀ v ∈ [512, 256, 128], target false v = .host) ∧
+      target false 0 = .embedded := by
+  decide
 
 /-- On every arm, the lane count meets the assertion of `embed_turnstile.h`, from 1 to 64, and the assertion of
 `embed_ticket_ring.h`, at max 128. The open count less one fits each word width, and the unit shift is 10 at max. -/
@@ -128,6 +164,36 @@ theorem targets_select :
       (∀ v ∈ [512, 256, 128], turnstileLanes false v = 64 ∧ unitShift false v = 10) ∧
       (∀ v ∈ vectorArms, turnstileLanes true v = 64 ∧ unitShift true v = 0) := by
   decide
+
+/-- `embed_stored_u64` on an embedded target: the lower word and the upper word of the count. -/
+def storedSplit (count : BitVec 64) : BitVec 32 × BitVec 32 := (count.setWidth 32, (count >>> 32).setWidth 32)
+
+/-- `embed_stored_u64_get` on an embedded target: the upper word moves to bits 32 to 63, under the lower word. -/
+def storedGet (halves : BitVec 32 × BitVec 32) : BitVec 64 := (halves.2.setWidth 64 <<< 32) ||| halves.1.setWidth 64
+
+/-- `embed_stored_u64_set` on an embedded target: the lower word always, and the upper word where it changes. -/
+def storedSet (old : BitVec 32 × BitVec 32) (count : BitVec 64) : BitVec 32 × BitVec 32 :=
+  ((storedSplit count).1, if old.2 ≠ (storedSplit count).2 then (storedSplit count).2 else old.2)
+
+/-- The halves hold the count: a read after a split gives the count back. -/
+theorem stored_round_trip (count : BitVec 64) : storedGet (storedSplit count) = count := by
+  simp only [storedGet, storedSplit]
+  bv_decide
+
+/-- The set that writes the upper word only where it changes leaves the same halves as a write of both. -/
+theorem stored_set_is_split (old : BitVec 32 × BitVec 32) (count : BitVec 64) :
+    storedSet old count = storedSplit count := by
+  simp only [storedSet]
+  split <;> simp_all
+
+/-- So a read after each set gives the count that the set wrote. -/
+theorem stored_set_get (old : BitVec 32 × BitVec 32) (count : BitVec 64) : storedGet (storedSet old count) = count := by
+  rw [stored_set_is_split, stored_round_trip]
+
+/-- A count whose upper word is the upper word already stored leaves the upper word unwritten. -/
+theorem stored_upper_kept (old : BitVec 32 × BitVec 32) (count : BitVec 64) (h : old.2 = (storedSplit count).2) :
+    (storedSet old count).2 = old.2 := by
+  simp [storedSet, h]
 
 /-- `EMBED_NARG`: the caller's arguments, then the constants 24 down to 0; `EMBED_ARG_N` takes the 25th. -/
 def narg (n : Nat) : Option Nat :=

@@ -202,6 +202,67 @@ typedef EMBED_CAT(embed_u, EMBED_INDEX_BITS) embed_index;
 typedef embed_word embed_raw_word EMBED_RAW;
 
 /**
+ * @brief The stored form of a 64-bit count: one embed_u64 on a host and on a device, and two embed_u32 halves on an
+ *        embedded target.
+ *
+ * @note A value is an embed_u64 in each arm, and embed_stored_u64_get and embed_stored_u64_set convert it. The
+ *       stored form is the only difference between the arms.
+ * @note On an embedded target the halves are the lower word and the upper word of the count. Each is one plain load
+ *       or store, and the stored form takes the alignment of an embed_u32. A count that stays below 2^32 changes only its
+ *       lower word.
+ */
+#if EMBED_TARGET == EMBED_TARGET_EMBEDDED
+typedef struct
+{
+    embed_u32 lower; /**< Bits 0 to 31 of the count. */
+    embed_u32 upper; /**< Bits 32 to 63 of the count. */
+} embed_stored_u64;
+#else
+typedef embed_u64 embed_stored_u64;
+#endif
+
+/**
+ * @brief The count that a stored form holds.
+ *
+ * @param[in] stored The stored form [BORROWS].
+ * @return           The count.
+ */
+EMBED_INLINE embed_u64 embed_stored_u64_get(const embed_stored_u64 *stored)
+{
+#if EMBED_TARGET == EMBED_TARGET_EMBEDDED
+    // Explicit casts widen each half to the count before the upper half moves to bits 32 to 63
+    return ((embed_u64)stored->upper << 32) | (embed_u64)stored->lower;
+#else
+    return *stored;
+#endif
+}
+
+/**
+ * @brief Writes a count into a stored form.
+ *
+ * @param[out] stored The stored form [BORROWS].
+ * @param[in]  count  The count.
+ * @note On an embedded target the write stores the upper word only where it changes.
+ */
+EMBED_INLINE void embed_stored_u64_set(embed_stored_u64 *stored, embed_u64 count)
+{
+#if EMBED_TARGET == EMBED_TARGET_EMBEDDED
+    // Explicit casts narrow the count to its two halves, each of which fits an embed_u32
+    const embed_u32 upper = (embed_u32)(count >> 32);
+    stored->lower = (embed_u32)count;
+    if (stored->upper != upper)
+    {
+        stored->upper = upper;
+    }
+#else
+    *stored = count;
+#endif
+}
+
+/** @brief Asserts the stored form of a 64-bit count takes 8 bytes in each arm. */
+EMBED_STATIC_ASSERT(sizeof(embed_stored_u64) == 8u, "embed_stored_u64 must take 8 bytes");
+
+/**
  * @brief Asserts embed_u8 is exactly eight bits.
  *
  * @note A stdint that conforms to C defines uint8_t at exactly eight bits, so this assertion guards

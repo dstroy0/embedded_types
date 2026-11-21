@@ -144,6 +144,29 @@ The word again, readable from an address that is not a multiple of its width.
 
 > _**Warning:**_ Where either attribute is not available, this type is the plain word, and C leaves a read through it undefined. Nothing diagnoses that. The warnings on [`EMBED_ALIGN`](embed_compiler_directives.md#EMBED_ALIGN) and [`EMBED_ALIAS`](embed_compiler_directives.md#EMBED_ALIAS) in `embed_compiler_directives`.h cover the same failure.
 
+### `embed_stored_u64` { #embed_stored_u64 }
+
+```c
+#if EMBED_TARGET == EMBED_TARGET_EMBEDDED
+typedef struct
+{
+    embed_u32 lower; /**< Bits 0 to 31 of the count. */
+    embed_u32 upper; /**< Bits 32 to 63 of the count. */
+} embed_stored_u64;
+#else
+typedef embed_u64 embed_stored_u64;
+#endif
+```
+
+The stored form of a 64-bit count: one [`embed_u64`](#embed_u64) on a host and on a device, and two [`embed_u32`](#embed_u32) halves on an embedded target.
+
+> **Note:** A value is an [`embed_u64`](#embed_u64) in each arm, and [`embed_stored_u64_get`](#embed_stored_u64_get) and [`embed_stored_u64_set`](#embed_stored_u64_set) convert it. The stored form is the only difference between the arms.
+
+> **Note:** On an embedded target the halves are the lower word and the upper word of the count. Each is one plain load or store, and the stored form takes the alignment of an [`embed_u32`](#embed_u32). A count that stays below `2^32` changes only its lower word.
+
+- `lower`: Bits 0 to 31 of the count.
+- `upper`: Bits 32 to 63 of the count.
+
 ### `EmbedEnumProbe` { #EmbedEnumProbe }
 
 ```c
@@ -246,7 +269,42 @@ The width of an offset or a length in bits.
 
 > _**Warning:**_ A build that wants 16-bit offsets on a wider register defines this ahead of this header. The assertion below stops an override wider than the word.
 
+## Functions
+
+### `embed_stored_u64_get` { #embed_stored_u64_get }
+
+```c
+EMBED_INLINE embed_u64 embed_stored_u64_get(const embed_stored_u64 *stored);
+```
+
+The count that a stored form holds.
+
+- `[in]`: stored The stored form \[BORROWS\].
+
+\*\*Returns:\*\* The count.
+
+### `embed_stored_u64_set` { #embed_stored_u64_set }
+
+```c
+EMBED_INLINE void embed_stored_u64_set(embed_stored_u64 *stored, embed_u64 count);
+```
+
+Writes a count into a stored form.
+
+- `[out]`: stored The stored form \[BORROWS\].
+- `[in]`: count The count.
+
+> **Note:** On an embedded target the write stores the upper word only where it changes.
+
 ## Assertions
+
+### `sizeof(embed_stored_u64) == 8u`
+
+```c
+EMBED_STATIC_ASSERT(sizeof(embed_stored_u64) == 8u, "embed_stored_u64 must take 8 bytes");
+```
+
+Asserts the stored form of a 64-bit count takes 8 bytes in each arm.
 
 ### `sizeof(embed_u8) == 1u`
 

@@ -47,34 +47,32 @@
 EMBED_BEGIN_DECLS
 
 /**
- * @brief The lanes of a set: 64 for a CPU host and for a CUDA device, and 4 for a microcontroller. A build can set
- *        its own count before this header, from 1 to 64.
+ * @brief The lanes of a set: 64 on a host and on a device, and 4 on an embedded target. A build can set its own
+ *        count before this header, from 1 to 64.
  *
- * @note EMBED_VECTOR_REGISTER_BITS is the boundary. A target with a vector register is a CPU host. A target with
- *       none is a microcontroller, except the device pass of CUDA. A lane takes one cache line, so 64 lanes take
- *       4 KiB, and a microcontroller cannot give that to each set.
- * @note The two passes of a CUDA build compile one set, so the device pass takes the count of the host pass.
+ * @note EMBED_TARGET selects the default. A lane takes one cache line, so 64 lanes take 4 KiB, and an embedded
+ *       target cannot give that to each set.
+ * @note The two passes of a CUDA build compile one set, so the device takes the count of the host.
  */
 #if !defined(EMBED_TURNSTILE_LANES)
-#if (EMBED_VECTOR_REGISTER_BITS > 0) || defined(__CUDA_ARCH__)
-#define EMBED_TURNSTILE_LANES 64u
-#else
+#if EMBED_TARGET == EMBED_TARGET_EMBEDDED
 #define EMBED_TURNSTILE_LANES 4u
+#else
+#define EMBED_TURNSTILE_LANES 64u
 #endif
 #endif
 EMBED_STATIC_ASSERT((EMBED_TURNSTILE_LANES >= 1u) && (EMBED_TURNSTILE_LANES <= 64u),
                     "EMBED_TURNSTILE_LANES must be from 1 to 64");
 
 /**
- * @brief The shift of the backoff's unit, 2^shift ns: 10 for a CPU host, about 1.024 us, and 0 for a device. A build
- *        can set its own before this header.
+ * @brief The shift of the backoff's unit, 2^shift ns: 10 on a host, about 1.024 us, and 0 on a device and on an
+ *        embedded target. A build can set its own before this header.
  *
- * @note A CPU host is a target with a vector register, outside the device pass of CUDA. Each other target is a
- *       device. The value is a constant of the code and not of a layout, so the two passes of a CUDA build can
- *       differ.
+ * @note EMBED_TARGET selects the default. The value is a constant of the code and not of a layout, so the two passes
+ *       of a CUDA build can differ.
  */
 #if !defined(EMBED_TURNSTILE_UNIT_SHIFT)
-#if (EMBED_VECTOR_REGISTER_BITS > 0) && !defined(__CUDA_ARCH__)
+#if EMBED_TARGET == EMBED_TARGET_HOST
 #define EMBED_TURNSTILE_UNIT_SHIFT 10u
 #else
 #define EMBED_TURNSTILE_UNIT_SHIFT 0u

@@ -433,15 +433,15 @@ This is the whole algorithm as deployed: workers pass and pop, the check refuses
 
 ### 3.13 The configuration of each target (`Config.lean`)
 
-Where the build does not set them, `embed_turnstile.h` selects `EMBED_TURNSTILE_LANES` and `EMBED_TURNSTILE_UNIT_SHIFT` from `EMBED_VECTOR_REGISTER_BITS` and the device pass of CUDA. A target with a vector register is a CPU host. A target with no vector register is a microcontroller, except the device pass of CUDA. The two passes of a CUDA build compile one set, so the device pass takes the lane count of the host pass. A lane takes one cache line, so 64 lanes take 4 KiB, and a microcontroller cannot give that to each set.
+`embed_compiler_directives.h` selects `EMBED_TARGET`, the class of the target, from `EMBED_VECTOR_REGISTER_BITS` and the device pass of CUDA. The device pass of CUDA is a device. Each other target with a vector register is a host, and a target with none is an embedded target. Where the build does not set them, `embed_turnstile.h` selects `EMBED_TURNSTILE_LANES` and `EMBED_TURNSTILE_UNIT_SHIFT` from the class. The two passes of a CUDA build compile one set, so the device takes the lane count of the host. A lane takes one cache line, so 64 lanes take 4 KiB, and an embedded target cannot give that to each set.
 
-| target          | `EMBED_TURNSTILE_LANES` | `EMBED_TURNSTILE_UNIT_SHIFT` |
-| --------------- | ----------------------- | ---------------------------- |
-| CPU host        | 64                      | 10                           |
-| CUDA device     | 64                      | 0                            |
-| microcontroller | 4                       | 0                            |
+| class    | `EMBED_TURNSTILE_LANES` | `EMBED_TURNSTILE_UNIT_SHIFT` |
+| -------- | ----------------------- | ---------------------------- |
+| host     | 64                      | 10                           |
+| device   | 64                      | 0                            |
+| embedded | 4                       | 0                            |
 
-`Widths.lean` states the selection as `turnstileLanes` and `unitShift`. `turnstile_lanes_hold` proves that each arm meets the assertion of `embed_turnstile.h`, from 1 to 64, and the assertion of `embed_ticket_ring.h`, at max 128. `targets_select` proves the table. `Config.lean` puts the values of each target into each model that reads them:
+`Widths.lean` states the class as `target`, and the selection as `turnstileLanes` and `unitShift`. `target_classes` proves the class of each target. `turnstile_lanes_hold` proves that each arm meets the assertion of `embed_turnstile.h`, from 1 to 64, and the assertion of `embed_ticket_ring.h`, at max 128. `targets_select` proves the table. `Config.lean` puts the values of each target into each model that reads them:
 
 - `open_configured`: the open count of Section 3.2 at the lane count of the target. Each pass and each held lane is below the open count, and the open count is from 1 to the lane count.
 - `backoff_configured`: the backoff of Section 3.5 at the unit shift of the target. The shift of the C is below the width of the word, and each limit is below `EMBED_WAIT_INFINITE` and at max $2^{30}$ ns.

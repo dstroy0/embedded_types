@@ -34,15 +34,15 @@ open Widths
 
 theorem lanes_pos (cuda : Bool) (v : Nat) : 1 ≤ turnstileLanes cuda v := by
   unfold turnstileLanes
-  split <;> decide
+  cases target cuda v <;> decide
 
 theorem lanes_le_64 (cuda : Bool) (v : Nat) : turnstileLanes cuda v ≤ 64 := by
   unfold turnstileLanes
-  split <;> decide
+  cases target cuda v <;> decide
 
 theorem shift_le (cuda : Bool) (v : Nat) : unitShift cuda v ≤ Manifold.Backoff.shiftMost := by
   unfold unitShift Manifold.Backoff.shiftMost
-  split <;> decide
+  cases target cuda v <;> decide
 
 /-- The open count with the lane count of the target. -/
 theorem open_configured (cuda : Bool) (v : Nat) {s : Manifold.Open.State}
@@ -96,7 +96,9 @@ theorem microcontroller_configured :
   have : Manifold.Backoff.kMost w ≤ 20 := by
     simp only [Manifold.Backoff.words, List.mem_cons, List.mem_nil_iff, or_false] at hw
     rcases hw with rfl | rfl | rfl <;> decide
-  simp only [unitShift, Manifold.Backoff.limitNs]
-  exact Nat.pow_le_pow_right (by decide) (by simp; omega)
+  have hs : unitShift false 0 = 0 := by decide
+  rw [hs]
+  simp only [Manifold.Backoff.limitNs]
+  exact Nat.pow_le_pow_right (by decide) (by omega)
 
 end EmbeddedTypes.Config
