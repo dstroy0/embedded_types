@@ -540,8 +540,8 @@ class Header:
             return Decl("type", name, joined, start, arms, members_in(body)), at + 1
         if macro in self.templates:
             return Decl("invocation", macro, joined, start, arms), at + 1
-        # A table layout asserts the slots of the type above it, and a table invocation defines a table that a block
-        # in the body of its macro documents
+        # A table layout asserts the slots of the type above it. A table invocation defines a table, and a block in
+        # the body of its macro documents that table.
         if macro in ("EMBED_BUILD_WARNING", "EMBED_TABLE_LAYOUT", "EMBED_ATOMIC_TABLE"):
             return None, at + 1
         self.fail(start, "a macro invocation the reader does not know: " + macro)

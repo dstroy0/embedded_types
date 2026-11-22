@@ -31,7 +31,7 @@ python test/harness.py test --tree build-tsan   # the same, under the thread san
 python test/harness.py test --tree build-asan   # the same, under the address and undefined behavior sanitizers
 python test/harness.py coverage --gaps          # the coverage of include/, and each line and branch that no suite reached
 python test/harness.py suites --strict          # each case registered, none behind a conditional
-python test/harness.py prove                    # each GenMC client under each memory model
+python test/harness.py prove                    # each CBMC harness, and each thread client under each memory model
 python test/harness.py ste                      # each document held to ASD-STE100
 ```
 

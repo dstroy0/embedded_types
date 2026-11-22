@@ -5,10 +5,10 @@
 # in include/. Each other page in docs/ is a hand-written page. The hook in tools/api_pages.py
 # stops the build where docs/api does not match the headers, and at an ASD-STE100 finding in a page.
 #
-#   pip install -r requirements-docs.txt
-#   python tools/api_pages.py           # docs/api written again after an edit to a header
-#   python test/harness.py site --serve # http://127.0.0.1:8000, and a new build at each edit
-#   python test/harness.py site         # the build that CI runs, into build/site
+#   `pip install -r requirements-docs.txt`
+#   `python tools/api_pages.py`           the pages of docs/api, written again after an edit to a header
+#   `python test/harness.py site --serve` the site at `http://127.0.0.1:8000`, built again at each edit
+#   `python test/harness.py site`         the build that CI runs, into build/site
 #
 # The workflow in .github/workflows/docs.yml builds each pull request and publishes main.
 

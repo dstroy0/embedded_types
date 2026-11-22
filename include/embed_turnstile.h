@@ -102,8 +102,12 @@ EMBED_STATIC_ASSERT(EMBED_TURNSTILE_UNIT_SHIFT + EMBED_TURNSTILE_EXPONENT_MAX < 
 #define EMBED_TURNSTILE_GENERATION_UNIT ((embed_atomic_word_value)8u)
 #define EMBED_TURNSTILE_GENERATION_SHIFT 3u
 
-/** @brief A sleep with no end, for embed_word_wait. */
-#define EMBED_WAIT_INFINITE (~(embed_word)0u)
+/**
+ * @brief A sleep with no end, for embed_word_wait: each bit of the word set.
+ * @note A word narrower than int promotes to int before the complement. The outer cast takes the complement back to
+ *       the word. So a limit of 16 bits compares equal to it.
+ */
+#define EMBED_WAIT_INFINITE ((embed_word) ~(embed_word)0u)
 
 /** @brief One lane: its word on a cache line of its own, so that no pass shares the line of another. */
 typedef struct

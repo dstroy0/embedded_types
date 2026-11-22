@@ -13,7 +13,7 @@
   harness.py cases <dir>...                   what Unity will register, and what it will walk past
   harness.py runners gen <dir>... --unity <rb>   write <dir>/unity_runner.c
   harness.py ste [--show [DOC ...]] [--lower]  every technical document checked against ASD-STE100 with the ratchet
-  harness.py prove [--client C] [--model M]   each GenMC client under test/prove, under each memory model
+  harness.py prove [--name N] [--arm A] [--model M]   each proof harness and thread client under test/prove, under its provers
   harness.py site [--serve]                   the site built into build/site, as the docs workflow builds it
 
 There are five build trees. Each carries its own flags here, and a run of one takes no remembered
@@ -624,9 +624,9 @@ def cmd_site(parsed):
 
 
 def cmd_prove(parsed):
-    """Run each GenMC client under test/prove under each memory model, or the clients and the models named.
+    """Run each proof harness and thread client under test/prove under each arm, or those named.
 
-    test/prove/prove.py does the work, and its docstring states what each run holds. The run's logs go under the
+    test/prove/prove.py does the work, and its docstring states what each arm holds. The run's logs go under the
     build root as prove-<stamp>.
     """
     sys.path.insert(0, os.path.join(ROOT, "test", "prove"))
@@ -634,7 +634,7 @@ def cmd_prove(parsed):
     import time  # noqa: PLC0415
 
     run_root = os.path.join(BUILD_ROOT, "build", "prove-" + time.strftime("%Y%m%d-%H%M%S"))
-    return prove.prove(ROOT, run_root, parsed.client, parsed.model)
+    return prove.prove(ROOT, run_root, parsed.name, parsed.model, parsed.arm)
 
 
 def main():
@@ -681,8 +681,10 @@ def main():
     parser.add_argument("--lower", action="store_true", help="write each document's count into the ratchet")
     parser.set_defaults(fn=cmd_ste)
 
-    parser = sub.add_parser("prove", help="each GenMC client under test/prove, under each memory model")
-    parser.add_argument("--client", action="append", help="a client by name, without _genmc.c, any number of times")
+    parser = sub.add_parser("prove", help="each proof harness and thread client under test/prove, under its provers")
+    parser.add_argument("--name", action="append",
+                        help="a harness or a client by name, without _prove.c or _threads.c, any number of times")
+    parser.add_argument("--arm", action="append", help="cbmc or genmc, any number of times")
     parser.add_argument("--model", action="append", help="a memory model by name, without its dashes, any number of times")
     parser.set_defaults(fn=cmd_prove)
 

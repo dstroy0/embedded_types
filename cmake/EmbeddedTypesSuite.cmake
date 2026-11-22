@@ -84,7 +84,7 @@ function(embedded_types_add_device_suite suite_name)
     target_compile_options(${suite_name} PRIVATE $<$<COMPILE_LANGUAGE:C>:${EMBEDDED_TYPES_TEST_WARNINGS}>)
     target_compile_features(${suite_name} PRIVATE cuda_std_17)
     # The host pass of nvcc under MSVC is C++, where cl keeps its old preprocessor unless told otherwise. The
-    # dispatch tables count their members through __VA_ARGS__, which only the conforming preprocessor counts right
+    # dispatch tables count their members through __VA_ARGS__, and only the new preprocessor of cl counts them right
     if(MSVC)
         target_compile_options(${suite_name} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/Zc:preprocessor>)
     endif()

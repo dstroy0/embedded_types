@@ -354,10 +354,12 @@ The fields of a lane word, and the unit of its generation.
 ### `EMBED_WAIT_INFINITE` { #EMBED_WAIT_INFINITE }
 
 ```c
-#define EMBED_WAIT_INFINITE (~(embed_word)0u)
+#define EMBED_WAIT_INFINITE ((embed_word) ~(embed_word)0u)
 ```
 
-A sleep with no end, for [`embed_word_wait`](#embed_word_wait).
+A sleep with no end, for [`embed_word_wait`](#embed_word_wait): each bit of the word set.
+
+> **Note:** A word narrower than int promotes to int before the complement. The outer cast takes the complement back to the word. So a limit of 16 bits compares equal to it.
 
 ### `EMBED_TURNSTILE_SPIN_PAUSE` { #EMBED_TURNSTILE_SPIN_PAUSE }
 

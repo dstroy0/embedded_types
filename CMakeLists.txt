@@ -29,9 +29,9 @@ set(EMBEDDED_TYPES_TEST_WARNINGS
     $<$<C_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic;-Wshadow;-Wcast-align;-Wcast-qual;-Wstrict-prototypes;-Wpointer-arith;-Wvla>
     $<$<AND:$<BOOL:${EMBEDDED_TYPES_WERROR}>,$<C_COMPILER_ID:GNU,Clang,AppleClang>>:-Werror>)
 
-# Link-time optimization for the targets of this project. Each header holds a static const dispatch table, and a
-# call through a table folds to a direct call where the optimizer sees the table and its target. LTO lets it see
-# both across translation units. A consumer sets the same for its own build, with -flto or this CMake property.
+# Link-time optimization for the targets of this project. Each header holds a static const dispatch table. A call
+# through a table folds to a direct call where the optimizer sees the table and its target. LTO lets it see both
+# across translation units. A consumer sets the same for its own build, with -flto or this CMake property.
 option(EMBEDDED_TYPES_LTO "Link the targets of this project with link-time optimization" ON)
 if(EMBEDDED_TYPES_LTO)
   include(CheckIPOSupported)

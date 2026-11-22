@@ -66,8 +66,10 @@ the stores by it. A build that supplies none of the four fails at the link, and 
 names them.
 
 The Lean proofs under [`theory/`](theory) hold the lane word, the backoff, the open count, the
-queue, the drain and the sleeps. The GenMC clients under [`test/prove/`](test/prove) run the drain
-and the resize under five memory models.
+queue, the drain and the sleeps. The CBMC harnesses under [`test/prove/`](test/prove) state these
+theorems on the C functions. They cover the stamp, the flags, the stored count, the lane word, the
+backoff and the atomics. The thread clients there run the drain and the resize under GenMC on five
+memory models.
 
 The ticket ring is the job queue of the scheduler. It has 2^shift slots, and a slot holds a stamp
 and a job pointer. The stamp is one atomic machine word: the epoch in the high bits, 16 flag bits,
@@ -320,7 +322,7 @@ python test/harness.py test --tree build-tsan   # the same, under the thread san
 python test/harness.py test --tree build-asan   # the same, under the address and undefined behavior sanitizers
 python test/harness.py coverage --gaps          # the coverage of include/, and each line and branch that no suite reached
 python test/harness.py suites --strict          # each case registered, none behind a conditional
-python test/harness.py prove                    # each GenMC client under each memory model
+python test/harness.py prove                    # each CBMC harness, and each thread client under each memory model
 python test/harness.py ste                      # each document held to ASD-STE100
 python test/harness.py site                     # the site, into build/site
 ```
@@ -338,8 +340,8 @@ host has. Where it finds none, the build leaves that suite out and says so.
 `build-cov/coverage.xml` with gcovr. On Windows, run it under WSL. The suites reach each line and
 each branch of `include/` that the build compiles.
 
-Four workflows run on each push. They run the suites on GCC, Clang and MSVC, the Lean and GenMC
-proofs, the site, and the SonarCloud analysis with the coverage. A line or a branch that no suite
+Four workflows run on each push. They run the suites on GCC, Clang and MSVC, the Lean, CBMC and
+GenMC proofs, the site, and the SonarCloud analysis with the coverage. A line or a branch that no suite
 reaches fails the analysis job.
 
 ## The documents
@@ -363,7 +365,7 @@ git config core.hooksPath .githooks
 | [`test/unit/`](test/unit)                            | one Unity suite for each header, and one for the device arm of the lane              |
 | [`test/headers/`](test/headers)                      | one translation unit for each header alone, which the build compiles and the SonarCloud scan reads the headers through |
 | [`test/support/`](test/support)                      | host threads for the contention cases, the host's sleep on the address of a word, and the inline policy of the coverage build |
-| [`test/prove/`](test/prove)                          | the GenMC clients of the turnstile and the ticket ring, and the host that they run on |
+| [`test/prove/`](test/prove)                          | the CBMC harnesses, the GenMC thread clients of the turnstile and the ticket ring, and the host that the clients run on |
 | [`test/harness.py`](test/harness.py)                 | suite discovery, Unity runner generation, the build trees, the coverage, the proofs, and the site |
 | [`theory/`](theory)                                  | the Lean proofs: the widths, the atomics, the lane, the manifold of the turnstile, the ticket ring, the flag matrix, the claim of a slot, the device arm, the configuration of each target and the integrated algorithm. Also the research paper on the two |
 | [`docs/`](docs)                                      | the site: the hand-written pages, and the API pages from the headers                 |

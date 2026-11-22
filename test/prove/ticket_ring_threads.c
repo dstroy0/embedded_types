@@ -5,7 +5,7 @@
  * negotiated commercial licensing contract or an educator's license issued to you personally.
  */
 /**
- * @file ticket_ring_genmc.c
+ * @file ticket_ring_threads.c
  * @brief The life of one slot under contention, in each execution that the memory model allows. Two workers pop one
  *        stamp inside passes, as a worker with a flipped ticket and the owner collide. One pop lands and reads the
  *        job that the push stored. A writer drains and releases the slot. At the end the word has every flag of
@@ -13,12 +13,12 @@
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-11-11
  *
- * @note A client for GenMC, run by harness.py prove. The waits are those of genmc_host.h.
+ * @note A client for GenMC, run by harness.py prove. The waits are those of thread_host.h.
  */
 // Two lanes: the start lane and the lane the second worker grows the set to
 #define EMBED_TURNSTILE_LANES 2u
 
-#include "genmc_host.h"
+#include "thread_host.h"
 
 #include "embed_ticket_ring.h"
 
@@ -36,6 +36,15 @@ static int s_job;
 static embed_atomic_u32 s_landed_pops;
 /** @brief 1 after the release lands. */
 static embed_atomic_u32 s_release_mark;
+/** @brief The count of the wakes of each lane word. */
+static embed_atomic_word s_wake_counts[EMBED_TURNSTILE_LANES];
+
+/** @brief The count of the wakes of word: a lane word of the set, the only word that a thread sleeps on. */
+static embed_atomic_word *thread_host_wake_count(const embed_atomic_word *word)
+{
+    assert((word == &s_set.lanes[0].word) || (word == &s_set.lanes[1].word));
+    return &s_wake_counts[word == &s_set.lanes[1].word];
+}
 
 /** @brief One worker: a pop of the stamp inside a pass at its own address, and the count of the pop in the pass. */
 static void *worker(void *unused)

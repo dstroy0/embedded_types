@@ -5,7 +5,7 @@
  * negotiated commercial licensing contract or an educator's license issued to you personally.
  */
 /**
- * @file turnstile_drain_genmc.c
+ * @file turnstile_drain_threads.c
  * @brief Two workers pass through a set of one lane on one start lane, while a writer swaps a published word and
  *        drains. GenMC runs each execution that the memory model allows. The second worker finds the lane busy and
  *        grows the set. A worker that reads the old word reads it before the writer releases it. No thread stays
@@ -13,13 +13,13 @@
  * @author dstroy0 (Douglas Quigg) <dquigg123@gmail.com>
  * @date 2026-11-07
  *
- * @note A client for GenMC, run by harness.py prove. The host's waits are those of genmc_host.h: a sleep that only
+ * @note A client for GenMC, run by harness.py prove. The host's waits are those of thread_host.h: a sleep that only
  *       a time limit ends leaves its thread blocked, and GenMC reports that execution.
  */
 // Two lanes: the start lane and the lane the second worker grows the set to
 #define EMBED_TURNSTILE_LANES 2u
 
-#include "genmc_host.h"
+#include "thread_host.h"
 
 #include <assert.h>
 #include <pthread.h>
@@ -30,6 +30,15 @@ static EmbedTurnstiles s_set;
 static embed_atomic_word s_published;
 /** @brief 1 after the writer releases the old word. */
 static embed_atomic_word s_released;
+/** @brief The count of the wakes of each lane word. */
+static embed_atomic_word s_wake_counts[EMBED_TURNSTILE_LANES];
+
+/** @brief The count of the wakes of word: a lane word of the set, the only word that a thread sleeps on. */
+static embed_atomic_word *thread_host_wake_count(const embed_atomic_word *word)
+{
+    assert((word == &s_set.lanes[0].word) || (word == &s_set.lanes[1].word));
+    return &s_wake_counts[word == &s_set.lanes[1].word];
+}
 
 /** @brief One worker's pass from start lane 0: enter, read the published word, and leave. */
 static void *worker(void *unused)

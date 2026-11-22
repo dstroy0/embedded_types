@@ -426,7 +426,7 @@ Detection is the read-back and the claim, Section 3.9. `flip_changes` proves tha
 
 ### 3.7 Model checks (`test/prove`)
 
-Three GenMC clients run under the sequentially consistent, TSO, RC11, IMM and ARMv8 models. GenMC exhausts every execution the model allows. It reports a failed assertion, a data race or a liveness violation.
+Four GenMC clients run under the sequentially consistent, TSO, RC11, IMM and ARMv8 models. GenMC exhausts every execution the model allows. It reports a failed assertion, a data race or a liveness violation. The host of the clients gives each word a count of wakes of its own, as a futex does, and each thread a clock of its own.
 
 The ticket ring client grants and pushes one slot. Then it runs two workers that pop the same stamp inside passes, while a writer drains and releases. The two workers collide as the owner and a worker with a flipped ticket do. The client asserts four facts:
 
@@ -441,13 +441,16 @@ The drain client runs two workers through a set of one lane on one start lane. M
 - no thread stays asleep with no wake to come
 - each lane is free or closed at the end
 
-The resize client runs two workers through two passes each while a writer drains, so each growth races each contraction. The client asserts three facts:
+The resize client runs two workers through two passes each, so each growth races each contraction. The client asserts two facts:
 
 - each pass holds a lane below the open count
-- the drain ends
 - at the end, each lane below the open count is free
 
-A client that passes under one model and fails under another names the order that the code needs. All three clients pass under all five.
+The resize drain client runs one worker through two passes and one worker through one pass while a writer drains. The second pass of the first worker races the growth and the contraction of the second worker, while the drain reads the lanes. The client asserts the facts of the resize client, and that the drain ends.
+
+A client that passes under one model and fails under another names the order that the code needs. All four clients pass under all five.
+
+Six CBMC harnesses state theorems of the Lean proofs on the C functions: the stamp, the flag matrix, the stored count, the lane word, the backoff and the atomics. CBMC checks each assertion on each input that the assumptions of the harness leave, on each word width that the harness names. A second run of each harness asserts that its end is unreachable, and that run must fail. So no harness holds on an empty set of inputs.
 
 ### 3.8 Coarse-grained refinement
 
