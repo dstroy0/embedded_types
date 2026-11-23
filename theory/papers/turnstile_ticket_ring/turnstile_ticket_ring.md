@@ -533,19 +533,32 @@ The transition systems of Sections 3.2 to 3.4, 3.9 and 3.12 take each operation 
 The proofs above take one brick at a time: a word, a lane, a slot. `Integrated.lean` composes them with the one actor that the bricks do not contain, the supervisor, and proves the whole. The state has three parts:
 
 - every lane word, as the state of `Drain.lean`
-- every slot, as empty, as pushed or as popped. A pushed slot has a stamp and whether its job pointer passes the check. A popped slot has the lane of the pass that popped and whether the job ran.
+- every slot, in the state sequence of `embed_ticket_ring.h`: empty, granted, pushed, popped, replayed or released. A granted slot has a stamp, and a pushed slot also has whether its job pointer passes the check. A popped slot has the lane of the pass that popped and whether the job ran, and a replay and a release retain that record.
 - every worker, as idle, in a pass on a lane, dead on a lane it still holds, or gone
+- the counter of the grantor, which holds the next ticket
 
-The steps are the five of the algorithm:
+The steps are the nine of the algorithm:
 
 ```
 inductive Step (n : Nat) : State → State → Prop where
   | enter {s : State} (w l : Nat) (hn : l < n) (hw : s.worker w = .idle) (hl : (s.lane l).busy = false)
       (fresh : (s.lane l).ended w = false) :
       Step n s ((s.setLane l (laneEntered (s.lane l) w)).setWorker w (.inPass l))
+  | grant {s : State} (w l at_ : Nat) (hw : s.worker w = .inPass l)
+      (hs : s.slot at_ = .empty ∨ ∃ st l' r, s.slot at_ = .released st l' r) :
+      Step n s { s.setSlot at_ (.granted s.next) with next := s.next + 1 }
+  | push {s : State} (w l at_ stamp : Nat) (intact : Bool) (hw : s.worker w = .inPass l)
+      (hs : s.slot at_ = .granted stamp) :
+      Step n s (s.setSlot at_ (.pushed stamp intact))
   | pop {s : State} (w l at_ stamp : Nat) (intact : Bool) (hw : s.worker w = .inPass l)
       (hs : s.slot at_ = .pushed stamp intact) :
       Step n s (s.setSlot at_ (.popped stamp l intact))
+  | replay {s : State} (w l at_ stamp l' : Nat) (ran : Bool) (hw : s.worker w = .inPass l)
+      (hs : s.slot at_ = .popped stamp l' ran) :
+      Step n s (s.setSlot at_ (.replayed stamp l' ran))
+  | release {s : State} (at_ stamp l : Nat) (ran : Bool)
+      (hs : s.slot at_ = .popped stamp l ran ∨ s.slot at_ = .replayed stamp l ran) :
+      Step n s (s.setSlot at_ (.released stamp l ran))
   | leave {s : State} (w l : Nat) (hw : s.worker w = .inPass l) :
       Step n s ((s.setLane l (laneLeft (s.lane l) w)).setWorker w .idle)
   | kill {s : State} (w l : Nat) (hw : s.worker w = .inPass l) : Step n s (s.setWorker w (.dead l))
@@ -555,19 +568,24 @@ inductive Step (n : Nat) : State → State → Prop where
 
 The model has $n$ lanes, with `EMBED_TURNSTILE_LANES` as $n$. An entry takes a lane below $n$, as the spill of `Open.lean` does.
 
-The entry and the two leaves are the entry and leave steps of `Drain.lean` on the lane word, by `entered_is_step` and `left_is_step`. Thus every lane of the integrated state gets `held_until_end` and `drain_lane_complete` (`lane_invariant`). The pop records the lane and sets `ran` to the check, so a job runs only where its pointer passed. The kill leaves the lane word alone, which is what a kill does to hardware state. The free is the supervisor's `embed_turnstile_leave` with the lane index that the popped word recorded.
+The entry and the two leaves are the entry and leave steps of `Drain.lean` on the lane word, by `entered_is_step` and `left_is_step`. Thus every lane of the integrated state gets `held_until_end` and `drain_lane_complete` (`lane_invariant`).
+
+The grant, the push, the pop and the replay each run inside a pass, as the functions `embed_ticket_ring_pass_*` run them. The grant gives the slot the next ticket of the counter, and the counter moves on. The writer releases after its drain. The pop records the lane and sets `ran` to the check, so a job runs only where its pointer passed. The kill leaves the lane word alone, which is what a kill does to hardware state. The free is the supervisor's `embed_turnstile_leave` with the lane index that the popped word recorded.
 
 The file proves an invariant `Inv` for every reachable state. A worker in a pass or dead holds the lane its state names. A lane with a holder has that holder in a pass or dead. A busy lane has a holder, and each lane word satisfies the drain invariant. From it:
 
 - `refused_never_runs`: where a pop gives $\mathrm{ran} = \mathrm{false}$, the push of that slot had a job that failed the check. The pop step is the only step that produces a popped slot, and it copies the check into $\mathrm{ran}$. `single_flip_never_runs` joins it to `job_flip_changes_check`: a single-bit error in the pointer is a failed check, and a failed check never runs.
-- `runs_at_max_once`: no step changes a popped slot, so a job runs at max once.
+- `popped_moves` and `replayed_moves`: a popped slot moves on only to its replay or its release, and a replayed slot only to its release. Each keeps its stamp, its lane and its check, so a pop has one replay at max.
+- `grant_once`: in each reachable state, the stamps of the slots are below the counter of the grantor and no two slots hold one. So a grantor that counts grants each ticket once, which is that part of Axiom A3 as a theorem.
+- `popped_never_pushed_again`: a ticket that a pop took is never granted or pushed again in any later state. So a pop takes the job of each ticket once at max.
+- `pop_reachable`: the steps reach a popped slot from rest, so the theorems on popped slots hold of reachable states.
 - `lane_identifies_worker`: $\forall w\, l,\; s.\mathrm{worker}(w) \in \{\mathrm{inPass}(l), \mathrm{dead}(l)\} \Rightarrow s.\mathrm{lane}(l).\mathrm{holder} = w \;\land\; \forall w',\; s.\mathrm{worker}(w') \in \{\mathrm{inPass}(l), \mathrm{dead}(l)\} \Rightarrow w' = w$. The lane names the worker and no two workers share a lane, which is the telemetry the supervisor reads from a popped word.
 - `popped_lane_was_held`: at the pop, the worker that popped held the lane that the popped slot records.
 - `free_ends_pass`: after the free of a dead worker on lane $l$, the lane reads free, and the worker is at its end. Also $\mathrm{over}(\mathit{before}, \mathit{after}) = \mathrm{true}$ for the lane word. A drain that read the lane held by the dead worker reads it over. The supervisor can recover from the kill because the slot records the lane index.
 - `drain_completes`: where every worker is idle or gone, no lane has a holder and none is busy. Thus a drain reads every lane over and ends.
 - `reach_below` and `busy_below_count`: each lane that a worker holds and each busy lane stays below $n$. So each lane that a drain reads over and each lane index that a pop records is below `EMBED_TURNSTILE_LANES`.
 
-This is the whole algorithm as deployed. Workers pass and pop, and the check refuses what it can see. The supervisor kills what misbehaves and frees its lane from the record in the slot. The drain always ends after the supervisor acts. The unbounded parts, how many workers and how long they run, are parameters of the state and never of a theorem.
+This is the whole algorithm as deployed. Workers grant, push and pop inside their passes, and the check refuses what it can see. The supervisor kills what misbehaves and frees its lane from the record in the slot. The drain always ends after the supervisor acts. The unbounded parts, how many workers and how long they run, are parameters of the state and never of a theorem.
 
 ### 3.13 The configuration of each target (`Config.lean`)
 
@@ -660,7 +678,7 @@ The trust boundary of the architecture is three axioms, one per source, and the 
 
 - **Axiom A1, the atomics of the target.** Each `embed_atomic_*` operation is one indivisible step with the memory order of its arm, and the sequentially consistent fence orders as C11 states. A target with none of the four arms fails the build at `#error`. The Lean model takes each operation as one step and does not model the compiler or the hardware.
 - **Axiom A2, the wait of the host.** `embed_word_wait` compares and sleeps as one step with respect to `embed_word_wake`, and a wake ends every sleep on the word. The Lean theorem `no_lost_wake` and the GenMC liveness check both assume this contract. A host whose wait is a timed sleep, the fallback arm, retains safety and loses the bound on the sleep.
-- **Axiom A3, the depth bound.** The grantor of tickets retains the number of tickets between the oldest unpopped and the newest granted below $2^{s}$, and grants each ticket once. `window_distinct` and `pop_pushes` are conditional on it. The ring detects a violation only through the stamp (below), and the turnstile does not detect it at all.
+- **Axiom A3, the depth bound.** The grantor of tickets retains the number of tickets between the oldest unpopped and the newest granted below $2^{s}$, and grants each ticket once. `window_distinct` and `pop_pushes` are conditional on it. The ring detects a violation only through the stamp (below), and the turnstile does not detect it at all. For a grantor that takes its tickets from a counter, the grant of each ticket once is a theorem, `grant_once` of Section 3.12. The depth bound stays an axiom.
 
 Three facts that read like limits are theorems, and the paper states them as such rather than as limits.
 
