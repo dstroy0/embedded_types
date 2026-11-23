@@ -551,6 +551,27 @@ Emits the alternate name of the linker for a weak default under MSVC without the
 
 > **Note:** A C symbol on 32-bit x86 has an underscore at its start, and the linker reads the decorated names. So the x86 arm adds one underscore to each side.
 
+### `EMBED_WEAK_ZERO` { #EMBED_WEAK_ZERO }
+
+```c
+#if defined(__MINGW32__) && !defined(__cplusplus) && EMBED_HAS_ATTRIBUTE(common)
+#define EMBED_WEAK_ZERO(type_, name_) __attribute__((common)) type_ name_;
+#else
+#define EMBED_WEAK_ZERO(type_, name_) EMBED_WEAK_DEFAULT(name_) EMBED_WEAK type_ EMBED_WEAK_NAME(name_) = 0;
+#endif
+```
+
+Defines an object of C that has zero as its default, and that a definition in another unit replaces.
+
+- `[in]`: `type_` The type of the object.
+- `[in]`: `name_` The name that callers read and that a program defines.
+
+> **Note:** MinGW GCC does not read a weak object correctly. At -O2 it folds the default into the read, or it reads a wrong address. So under MinGW the object is a common symbol. The linker gives the common symbol zero, and a definition in another unit replaces it.
+
+> **Note:** On other compilers the object is a weak default, as [`EMBED_WEAK_DEFAULT`](#EMBED_WEAK_DEFAULT) and [`EMBED_WEAK`](#EMBED_WEAK) give.
+
+> _**Warning:**_ A common symbol has no initializer. The default can only be zero.
+
 ### `EMBED_DIAGNOSTIC_STRING` { #EMBED_DIAGNOSTIC_STRING }
 
 ```c

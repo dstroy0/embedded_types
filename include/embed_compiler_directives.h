@@ -514,6 +514,24 @@ EMBED_STATIC_ASSERT((EMBED_TARGET == EMBED_TARGET_HOST) || (EMBED_TARGET == EMBE
 #endif
 
 /**
+ * @brief Defines an object of C that has zero as its default, and that a definition in another unit
+ *        replaces.
+ *
+ * @param[in] type_ The type of the object.
+ * @param[in] name_ The name that callers read and that a program defines.
+ * @note MinGW GCC does not read a weak object correctly. At -O2 it folds the default into the
+ *       read, or it reads a wrong address. So under MinGW the object is a common symbol. The
+ *       linker gives the common symbol zero, and a definition in another unit replaces it.
+ * @note On other compilers the object is a weak default, as EMBED_WEAK_DEFAULT and EMBED_WEAK give.
+ * @warning A common symbol has no initializer. The default can only be zero.
+ */
+#if defined(__MINGW32__) && !defined(__cplusplus) && EMBED_HAS_ATTRIBUTE(common)
+#define EMBED_WEAK_ZERO(type_, name_) __attribute__((common)) type_ name_;
+#else
+#define EMBED_WEAK_ZERO(type_, name_) EMBED_WEAK_DEFAULT(name_) EMBED_WEAK type_ EMBED_WEAK_NAME(name_) = 0;
+#endif
+
+/**
  * @brief Expands to `#text_`.
  *
  * @param[in] text_ The tokens to make into a string.
