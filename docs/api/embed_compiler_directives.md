@@ -551,6 +551,27 @@ Emits the alternate name of the linker for a weak default under MSVC without the
 
 > **Note:** A C symbol on 32-bit x86 has an underscore at its start, and the linker reads the decorated names. So the x86 arm adds one underscore to each side.
 
+### `EMBED_WEAK_ZERO` { #EMBED_WEAK_ZERO }
+
+```c
+#if defined(__MINGW32__) && !defined(__cplusplus) && EMBED_HAS_ATTRIBUTE(common)
+#define EMBED_WEAK_ZERO(type_, name_) __attribute__((common)) type_ name_;
+#else
+#define EMBED_WEAK_ZERO(type_, name_) EMBED_WEAK_DEFAULT(name_) EMBED_WEAK type_ EMBED_WEAK_NAME(name_) = 0;
+#endif
+```
+
+Defines an object of C that has zero as its default, and that a definition in another unit replaces.
+
+- `[in]`: `type_` The type of the object.
+- `[in]`: `name_` The name that callers read and that a program defines.
+
+> **Note:** MinGW GCC does not read a weak object correctly. At -O2 it folds the default into the read, or it reads a wrong address. So under MinGW the object is a common symbol. The linker gives the common symbol zero, and a definition in another unit replaces it.
+
+> **Note:** On other compilers the object is a weak default, as [`EMBED_WEAK_DEFAULT`](#EMBED_WEAK_DEFAULT) and [`EMBED_WEAK`](#EMBED_WEAK) give.
+
+> _**Warning:**_ A common symbol has no initializer. The default can only be zero.
+
 ### `EMBED_DIAGNOSTIC_STRING` { #EMBED_DIAGNOSTIC_STRING }
 
 ```c
@@ -750,3 +771,45 @@ Set to 1 where the target loads a word from any address in one instruction, 0 ot
 > **Note:** This macro names no target. The flag falls to 0 wherever that macro is absent, and 0 is the safe answer. A consumer that sees 0 takes the path one byte at a time, which is correct on each target.
 
 > _**Warning:**_ This header defines nothing where the build defines [`EMBED_FAST_UNALIGNED_LOAD`](#EMBED_FAST_UNALIGNED_LOAD) first. Nothing in this library reads this flag.
+
+### `EMBED_NULL` { #EMBED_NULL }
+
+```c
+#ifndef EMBED_NULL
+#define EMBED_NULL ((void *)0)
+#endif
+```
+
+The null pointer of the platform.
+
+> **Note:** A consumer writes [`EMBED_NULL`](#EMBED_NULL) where it means no address, and so the null pointer is the platform's, as each width here is.
+
+> _**Warning:**_ This header defines nothing where the build defines [`EMBED_NULL`](#EMBED_NULL) first. A port to a part whose null pointer is not the address 0 defines it on the command line, and [`EMBED_NULL_ZERO_BITS`](#EMBED_NULL_ZERO_BITS) with it.
+
+### `EMBED_NULL_ZERO_BITS` { #EMBED_NULL_ZERO_BITS }
+
+```c
+#ifndef EMBED_NULL_ZERO_BITS
+#define EMBED_NULL_ZERO_BITS 1
+#endif
+```
+
+Set to 1 where the null pointer is all zero bits, 0 otherwise.
+
+> **Note:** A fill of zero bytes over a pointer leaves it null only where this is 1. A consumer that zeroes a table of pointers with one fill branches on this macro, and writes [`EMBED_NULL`](#EMBED_NULL) to each pointer where it is 0.
+
+> **Note:** Each part that this library builds for has a null pointer of all zero bits.
+
+> **Note:** This macro always has a value, 0 or 1. Test it with `#if`. `#ifdef` is true either way.
+
+> _**Warning:**_ This header defines nothing where the build defines [`EMBED_NULL_ZERO_BITS`](#EMBED_NULL_ZERO_BITS) first.
+
+## Assertions
+
+### `(EMBED_NULL_ZERO_BITS == 0) || (EMBED_NULL_ZERO_BITS == 1)`
+
+```c
+EMBED_STATIC_ASSERT((EMBED_NULL_ZERO_BITS == 0) || (EMBED_NULL_ZERO_BITS == 1), "EMBED_NULL_ZERO_BITS must be 0 or 1");
+```
+
+Asserts that [`EMBED_NULL_ZERO_BITS`](#EMBED_NULL_ZERO_BITS) is 0 or 1, and so each test of it with `#if` has one of two answers.

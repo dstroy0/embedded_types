@@ -117,6 +117,8 @@ A build defines each of these ahead of the first header that it includes.
 | `EMBED_LANE_PORTABLE`          | 0                                              | 1 takes the portable arm of the lane on any target |
 | `EMBED_BIG_ENDIAN`             | 1 where `__BYTE_ORDER__` is big-endian, else 0 | the byte order                               |
 | `EMBED_FAST_UNALIGNED_LOAD`    | 1 where `__ARM_FEATURE_UNALIGNED` is defined, else 0 | whether one instruction loads a word from any address |
+| `EMBED_NULL`                   | `((void *)0)`                                  | the null pointer of the platform             |
+| `EMBED_NULL_ZERO_BITS`         | 1                                              | whether the null pointer is all zero bits    |
 | `EMBED_CLOCK_HZ`               | 1000000, with a build warning                  | the ticks of the clock in one second         |
 | `EMBED_CLOCK_SOURCE`           | `EMBED_CLOCK_OWN` where the architecture has a cycle counter, else `EMBED_CLOCK_CALLER`, with a build warning | the caller's clock, or a counter pinned to a core |
 | `EMBED_CLOCK_CORE`             | 0, with a build warning                        | the core of the pinned counter, under `EMBED_CLOCK_OWN` alone |

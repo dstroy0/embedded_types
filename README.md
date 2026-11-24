@@ -121,6 +121,10 @@ CUDA device pass is a device, a target with a vector register is a host, and a t
 an embedded target. `EMBED_HOST_DEVICE` is `__host__ __device__`
 under nvcc and nothing on another compiler.
 
+`EMBED_NULL` is the null pointer of the platform. `EMBED_NULL_ZERO_BITS` is 1 where that pointer is all
+zero bits, and so a fill of zero bytes leaves a table of pointers null. A port to a part with another
+null pointer defines both.
+
 Under nvcc, one definition of each atomic and lane function compiles into the host pass and the
 device pass. A kernel calls the same function that a host walk calls.
 
@@ -240,6 +244,8 @@ A build defines each of these ahead of the first header that it includes.
 | `EMBED_LANE_PORTABLE`          | 0                                                           | 1 takes the portable arm of the lane on any target    |
 | `EMBED_BIG_ENDIAN`             | 1 where `__BYTE_ORDER__` is big-endian, else 0              | the byte order                                        |
 | `EMBED_FAST_UNALIGNED_LOAD`    | 1 where `__ARM_FEATURE_UNALIGNED` is defined, else 0        | whether one instruction loads a word from any address |
+| `EMBED_NULL`                   | `((void *)0)`                                               | the null pointer of the platform                      |
+| `EMBED_NULL_ZERO_BITS`         | 1                                                           | whether the null pointer is all zero bits             |
 | `EMBED_TARGET`                 | device on CUDA, host with a vector register, else embedded  | the class of the target, which the defaults below read |
 | `EMBED_TURNSTILE_LANES`        | 4 on an embedded target, else 64                            | the lanes of a set, from 1 to 64                      |
 | `EMBED_TURNSTILE_UNIT_SHIFT`   | 10 on a host, else 0                                        | the unit of the backoff, 2^shift ns, 10 at max        |

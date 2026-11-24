@@ -514,6 +514,24 @@ EMBED_STATIC_ASSERT((EMBED_TARGET == EMBED_TARGET_HOST) || (EMBED_TARGET == EMBE
 #endif
 
 /**
+ * @brief Defines an object of C that has zero as its default, and that a definition in another unit
+ *        replaces.
+ *
+ * @param[in] type_ The type of the object.
+ * @param[in] name_ The name that callers read and that a program defines.
+ * @note MinGW GCC does not read a weak object correctly. At -O2 it folds the default into the
+ *       read, or it reads a wrong address. So under MinGW the object is a common symbol. The
+ *       linker gives the common symbol zero, and a definition in another unit replaces it.
+ * @note On other compilers the object is a weak default, as EMBED_WEAK_DEFAULT and EMBED_WEAK give.
+ * @warning A common symbol has no initializer. The default can only be zero.
+ */
+#if defined(__MINGW32__) && !defined(__cplusplus) && EMBED_HAS_ATTRIBUTE(common)
+#define EMBED_WEAK_ZERO(type_, name_) __attribute__((common)) type_ name_;
+#else
+#define EMBED_WEAK_ZERO(type_, name_) EMBED_WEAK_DEFAULT(name_) EMBED_WEAK type_ EMBED_WEAK_NAME(name_) = 0;
+#endif
+
+/**
  * @brief Expands to `#text_`.
  *
  * @param[in] text_ The tokens to make into a string.
@@ -698,5 +716,33 @@ EMBED_STATIC_ASSERT((EMBED_TARGET == EMBED_TARGET_HOST) || (EMBED_TARGET == EMBE
 #define EMBED_FAST_UNALIGNED_LOAD 0
 #endif
 #endif
+
+/**
+ * @brief The null pointer of the platform.
+ *
+ * @note A consumer writes EMBED_NULL where it means no address, and so the null pointer is the platform's, as each
+ *       width here is.
+ * @warning This header defines nothing where the build defines EMBED_NULL first. A port to a part whose null pointer
+ *          is not the address 0 defines it on the command line, and EMBED_NULL_ZERO_BITS with it.
+ */
+#ifndef EMBED_NULL
+#define EMBED_NULL ((void *)0)
+#endif
+
+/**
+ * @brief Set to 1 where the null pointer is all zero bits, 0 otherwise.
+ *
+ * @note A fill of zero bytes over a pointer leaves it null only where this is 1. A consumer that zeroes a table of
+ *       pointers with one fill branches on this macro, and writes EMBED_NULL to each pointer where it is 0.
+ * @note Each part that this library builds for has a null pointer of all zero bits.
+ * @note This macro always has a value, 0 or 1. Test it with #if. #ifdef is true either way.
+ * @warning This header defines nothing where the build defines EMBED_NULL_ZERO_BITS first.
+ */
+#ifndef EMBED_NULL_ZERO_BITS
+#define EMBED_NULL_ZERO_BITS 1
+#endif
+
+/** @brief Asserts that EMBED_NULL_ZERO_BITS is 0 or 1, and so each test of it with #if has one of two answers. */
+EMBED_STATIC_ASSERT((EMBED_NULL_ZERO_BITS == 0) || (EMBED_NULL_ZERO_BITS == 1), "EMBED_NULL_ZERO_BITS must be 0 or 1");
 
 #endif
