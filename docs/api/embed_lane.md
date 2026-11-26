@@ -800,29 +800,27 @@ Which bytes two lanes differ in, one bit a byte, the lowest byte the lowest bit.
 ### `embed_lane_table` { #embed_lane_table }
 
 ```c
-#if !defined(__CUDA_ARCH__)
-static const EmbedLaneNs embed_lane_table = {embed_lane_mask_first,
-                                             embed_lane_mask_before,
-                                             embed_lane_load,
-                                             embed_lane_load_aligned,
-                                             embed_lane_put,
-                                             embed_lane_put_aligned,
-                                             embed_lane_fill_u32,
-                                             embed_lane_fill_byte,
-                                             embed_lane_and,
-                                             embed_lane_or,
-                                             embed_lane_xor,
-                                             embed_lane_add_u32,
-                                             embed_lane_sub_u32,
-                                             embed_lane_mul_u32,
-                                             embed_lane_shift_right_u32,
-                                             embed_lane_shift_left_u32,
-                                             embed_lane_bytes_equal,
-                                             embed_lane_bytes_zero,
-                                             embed_lane_bytes_differ};
-#endif
+EMBED_TABLE_STORAGE EmbedLaneNs embed_lane_table EMBED_UNUSED = {embed_lane_mask_first,
+                                                                 embed_lane_mask_before,
+                                                                 embed_lane_load,
+                                                                 embed_lane_load_aligned,
+                                                                 embed_lane_put,
+                                                                 embed_lane_put_aligned,
+                                                                 embed_lane_fill_u32,
+                                                                 embed_lane_fill_byte,
+                                                                 embed_lane_and,
+                                                                 embed_lane_or,
+                                                                 embed_lane_xor,
+                                                                 embed_lane_add_u32,
+                                                                 embed_lane_sub_u32,
+                                                                 embed_lane_mul_u32,
+                                                                 embed_lane_shift_right_u32,
+                                                                 embed_lane_shift_left_u32,
+                                                                 embed_lane_bytes_equal,
+                                                                 embed_lane_bytes_zero,
+                                                                 embed_lane_bytes_differ};
 ```
 
 The table of [`embed_lane`](#embed_lane).h. A call through it folds to a direct call under the optimizer and LTO.
 
-> **Note:** The device pass of CUDA has no table, because a kernel cannot read the address of a host function. A kernel calls each function by its name.
+> **Note:** [`EMBED_TABLE_STORAGE`](embed_dispatch_layout.md#EMBED_TABLE_STORAGE) holds the table. Under nvcc each pass gets its own copy, and a kernel calls through it.

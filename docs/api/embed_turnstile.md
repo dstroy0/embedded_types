@@ -392,7 +392,7 @@ The place of no lane: the answer of a growth or a spill that took none.
 ### `embed_word_wait` { #embed_word_wait }
 
 ```c
-int embed_word_wait(const EmbedWordWaitCfg *args);
+EMBED_HOST_DEVICE int embed_word_wait(const EmbedWordWaitCfg *args);
 ```
 
 A sleep on word while it holds `old_value`, at max nanoseconds, [`EMBED_WAIT_INFINITE`](#EMBED_WAIT_INFINITE) for no end, and none at all for 0.
@@ -403,22 +403,24 @@ A sleep on word while it holds `old_value`, at max nanoseconds, [`EMBED_WAIT_INF
 
 > **Note:** The host defines this function on its address wait. That is a futex on Linux, WaitOnAddress on Windows, and `__ulock_wait` on macOS. Where the system has none, it is a timed sleep.
 
+> **Note:** The declaration has [`EMBED_HOST_DEVICE`](embed_compiler_directives.md#EMBED_HOST_DEVICE). A CUDA program defines it in a unit that nvcc compiles. The host pass has the address wait, and the device pass has a timed spin on the word. A device has no address wait.
+
 ### `embed_word_wake` { #embed_word_wake }
 
 ```c
-void embed_word_wake(const EmbedWordWakeCfg *args);
+EMBED_HOST_DEVICE void embed_word_wake(const EmbedWordWakeCfg *args);
 ```
 
 Every thread asleep on word woken.
 
 - `[in]`: args The parameters, as EmbedWordWakeCfg holds them \[BORROWS\].
 
-> **Note:** The host defines this beside [`embed_word_wait`](#embed_word_wait).
+> **Note:** The host defines this beside [`embed_word_wait`](#embed_word_wait), with the same mark. In the device pass a spin sees the change of the word, and the wake has nothing to do.
 
 ### `embed_clock_ns` { #embed_clock_ns }
 
 ```c
-embed_word embed_clock_ns(void);
+EMBED_HOST_DEVICE embed_word embed_clock_ns(void);
 ```
 
 The host's clock in nanoseconds, which the backoff measures its time on.
@@ -429,10 +431,12 @@ The host's clock in nanoseconds, which the backoff measures its time on.
 
 > _**Warning:**_ The clock rolls at the width of the word: after about 4.29 s on a word of 32 bits, and 65.5 us on a word of 16 bits. The backoff takes the difference of two reads, and that difference is correct across the roll. A step one roll or more after its start reads the time modulo the roll. Where that is below one unit, the step pauses and makes no call.
 
+> **Note:** The declaration has [`EMBED_HOST_DEVICE`](embed_compiler_directives.md#EMBED_HOST_DEVICE), as [`embed_word_wait`](#embed_word_wait) has.
+
 ### `embed_thread_place` { #embed_thread_place }
 
 ```c
-embed_u32 embed_thread_place(void);
+EMBED_HOST_DEVICE embed_u32 embed_thread_place(void);
 ```
 
 The place of the thread that calls: a count that names it among the threads of the program.
@@ -443,10 +447,12 @@ The place of the thread that calls: a count that names it among the threads of t
 
 > **Note:** A consumer that holds a store for each thread indexes the stores by this place, modulo the count of its stores. Two threads whose places meet modulo that count then share one store, which is correct and slower.
 
+> **Note:** The declaration has [`EMBED_HOST_DEVICE`](embed_compiler_directives.md#EMBED_HOST_DEVICE), as [`embed_word_wait`](#embed_word_wait) has. In the device pass, the place of a thread is its index in the grid. No two live threads of a grid have one index.
+
 ### `embed_turnstile_backoff_begin` { #embed_turnstile_backoff_begin }
 
 ```c
-EMBED_INLINE void embed_turnstile_backoff_begin(const EmbedTurnstileBackoffBeginCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_turnstile_backoff_begin(const EmbedTurnstileBackoffBeginCfg *args);
 ```
 
 The start of a backoff: the clock read, and the exponent at 0.
@@ -456,7 +462,7 @@ The start of a backoff: the clock read, and the exponent at 0.
 ### `embed_turnstile_backoff_step` { #embed_turnstile_backoff_step }
 
 ```c
-EMBED_INLINE void embed_turnstile_backoff_step(const EmbedTurnstileBackoffStepCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_turnstile_backoff_step(const EmbedTurnstileBackoffStepCfg *args);
 ```
 
 One step of a backoff on word, which the caller last read as `old_value`.
@@ -470,7 +476,7 @@ The step does one pause. Where the time since the start is less than one unit, o
 ### `embed_turnstile_open_lane_count` { #embed_turnstile_open_lane_count }
 
 ```c
-EMBED_INLINE unsigned int embed_turnstile_open_lane_count(const EmbedTurnstileOpenLaneCountCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE unsigned int embed_turnstile_open_lane_count(const EmbedTurnstileOpenLaneCountCfg *args);
 ```
 
 The lanes a set has open.
@@ -482,7 +488,7 @@ The lanes a set has open.
 ### `embed_turnstile_lane_add` { #embed_turnstile_lane_add }
 
 ```c
-EMBED_INLINE void embed_turnstile_lane_add(const EmbedTurnstileLaneAddCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_turnstile_lane_add(const EmbedTurnstileLaneAddCfg *args);
 ```
 
 A fetch-add on a lane word that the caller holds, and the wake of its sleepers where the old value had the sleeper bit.
@@ -492,7 +498,7 @@ A fetch-add on a lane word that the caller holds, and the wake of its sleepers w
 ### `embed_turnstile_grow` { #embed_turnstile_grow }
 
 ```c
-EMBED_INLINE unsigned int embed_turnstile_grow(const EmbedTurnstileGrowCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE unsigned int embed_turnstile_grow(const EmbedTurnstileGrowCfg *args);
 ```
 
 The growth from `open_lane_count` lanes to one more, which gives the caller lane `open_lane_count` as its pass.
@@ -510,7 +516,7 @@ Where that swap lands, the lane is the caller's pass. Where it fails, the growth
 ### `embed_turnstile_contract` { #embed_turnstile_contract }
 
 ```c
-EMBED_INLINE embed_bool embed_turnstile_contract(const EmbedTurnstileContractCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_turnstile_contract(const EmbedTurnstileContractCfg *args);
 ```
 
 The contraction from `open_lane_count` lanes to one less.
@@ -526,7 +532,7 @@ The contraction claims the top open lane as an entry does. Then one compare-and-
 ### `embed_turnstile_spill` { #embed_turnstile_spill }
 
 ```c
-EMBED_INLINE unsigned int embed_turnstile_spill(const EmbedTurnstileSpillCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE unsigned int embed_turnstile_spill(const EmbedTurnstileSpillCfg *args);
 ```
 
 The spill of an entry over the open lanes: a fetch-or of busy on each lane from `start_lane`, mod `open_lane_count`.
@@ -540,7 +546,7 @@ The spill of an entry over the open lanes: a fetch-or of busy on each lane from 
 ### `embed_turnstile_enter` { #embed_turnstile_enter }
 
 ```c
-EMBED_INLINE unsigned int embed_turnstile_enter(const EmbedTurnstileEnterCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE unsigned int embed_turnstile_enter(const EmbedTurnstileEnterCfg *args);
 ```
 
 An entry by the worker at address: a lane taken, which the end of the pass takes back.
@@ -556,7 +562,7 @@ The entry reads the open count and starts at the lane of the address's cache lin
 ### `embed_turnstile_leave` { #embed_turnstile_leave }
 
 ```c
-EMBED_INLINE void embed_turnstile_leave(const EmbedTurnstileLeaveCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_turnstile_leave(const EmbedTurnstileLeaveCfg *args);
 ```
 
 The end of the pass through the lane at `place` of set.
@@ -570,7 +576,7 @@ One fetch-add clears busy and counts the pass in the generation. Where the old v
 ### `embed_turnstiles_drain` { #embed_turnstiles_drain }
 
 ```c
-EMBED_INLINE void embed_turnstiles_drain(const EmbedTurnstilesDrainCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_turnstiles_drain(const EmbedTurnstilesDrainCfg *args);
 ```
 
 Every pass through set begun before this call waited out.
@@ -588,20 +594,18 @@ Every pass through set begun before this call waited out.
 ### `embed_turnstile_table` { #embed_turnstile_table }
 
 ```c
-#if !defined(__CUDA_ARCH__)
-static const EmbedTurnstileNs embed_turnstile_table = {embed_word_wait,
-                                                       embed_word_wake,
-                                                       embed_clock_ns,
-                                                       embed_thread_place,
-                                                       embed_turnstile_backoff_begin,
-                                                       embed_turnstile_backoff_step,
-                                                       embed_turnstile_open_lane_count,
-                                                       embed_turnstile_enter,
-                                                       embed_turnstile_leave,
-                                                       embed_turnstiles_drain};
-#endif
+EMBED_TABLE_STORAGE EmbedTurnstileNs embed_turnstile_table EMBED_UNUSED = {embed_word_wait,
+                                                                           embed_word_wake,
+                                                                           embed_clock_ns,
+                                                                           embed_thread_place,
+                                                                           embed_turnstile_backoff_begin,
+                                                                           embed_turnstile_backoff_step,
+                                                                           embed_turnstile_open_lane_count,
+                                                                           embed_turnstile_enter,
+                                                                           embed_turnstile_leave,
+                                                                           embed_turnstiles_drain};
 ```
 
 The table of `embed_turnstile`.h. A call through it folds to a direct call under the optimizer and LTO.
 
-> **Note:** The device pass of CUDA has no table, because a kernel cannot read the address of a host function. A kernel calls each function by its name.
+> **Note:** [`EMBED_TABLE_STORAGE`](embed_dispatch_layout.md#EMBED_TABLE_STORAGE) holds the table. Under nvcc each pass gets its own copy, and a kernel calls through it.

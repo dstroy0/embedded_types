@@ -26,10 +26,25 @@
 /** @brief The threads of a block, the lanes one block takes. */
 #define LANE_BLOCK_THREADS 128u
 
-/** @brief The lanes `bytes` hold at the device's width. */
-__host__ __device__ static embed_u32 lanes_of(embed_u32 bytes)
+/**
+ * @brief The lanes `bytes` hold at the width of the pass that calls.
+ *
+ * @note Only a kernel calls this. The host pass has the lane width of the host, which is not the width of the device.
+ */
+__device__ static embed_u32 lanes_of(embed_u32 bytes)
 {
     return bytes / EMBED_LANE_BYTES;
+}
+
+/**
+ * @brief The most lanes `bytes` hold at any width: one for each 32 bits, the narrowest lane.
+ *
+ * @note The launchers size the grid and each span of answers to this. Each kernel then counts its own lanes in the
+ *       device pass, and each thread past them does nothing.
+ */
+__host__ static embed_u32 most_lanes_of(embed_u32 bytes)
+{
+    return bytes / 4u;
 }
 
 __global__ static void lane_bits_kernel(embed_u32 *bits)
@@ -37,30 +52,30 @@ __global__ static void lane_bits_kernel(embed_u32 *bits)
     *bits = EMBED_LANE_BITS;
 }
 
-__global__ static void lane_copy_kernel(const embed_u8 *from, embed_u8 *to, embed_u32 lanes)
+__global__ static void lane_copy_kernel(const embed_u8 *from, embed_u8 *to, embed_u32 bytes)
 {
     const embed_u32 lane = (blockIdx.x * blockDim.x) + threadIdx.x;
-    if (lane < lanes)
+    if (lane < lanes_of(bytes))
     {
         EMBED_CALL(embed_lane_put, EmbedLanePutCfg, to + (lane * EMBED_LANE_BYTES),
                    EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, from + (lane * EMBED_LANE_BYTES)));
     }
 }
 
-__global__ static void lane_fill_kernel(embed_u8 val, embed_u8 *to, embed_u32 lanes)
+__global__ static void lane_fill_kernel(embed_u8 val, embed_u8 *to, embed_u32 bytes)
 {
     const embed_u32 lane = (blockIdx.x * blockDim.x) + threadIdx.x;
-    if (lane < lanes)
+    if (lane < lanes_of(bytes))
     {
         EMBED_CALL(embed_lane_put, EmbedLanePutCfg, to + (lane * EMBED_LANE_BYTES),
                    EMBED_CALL(embed_lane_fill_byte, EmbedLaneFillByteCfg, val));
     }
 }
 
-__global__ static void lane_divide_kernel(const embed_u32 *x, embed_u32 *divided, embed_u32 lanes)
+__global__ static void lane_divide_kernel(const embed_u32 *x, embed_u32 *divided, embed_u32 bytes)
 {
     const embed_u32 lane = (blockIdx.x * blockDim.x) + threadIdx.x;
-    if (lane < lanes)
+    if (lane < lanes_of(bytes))
     {
         const embed_lane loaded = EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, x + (lane * EMBED_LANE_U32S));
         const embed_lane biased =
@@ -74,10 +89,10 @@ __global__ static void lane_divide_kernel(const embed_u32 *x, embed_u32 *divided
 __global__ static void lane_arithmetic_kernel(const embed_u32 *one, const embed_u32 *other, embed_u32 count,
                                               embed_u32 *out_and, embed_u32 *out_or, embed_u32 *out_xor,
                                               embed_u32 *out_add, embed_u32 *out_sub, embed_u32 *out_mul,
-                                              embed_u32 *out_left, embed_u32 *out_right, embed_u32 lanes)
+                                              embed_u32 *out_left, embed_u32 *out_right, embed_u32 bytes)
 {
     const embed_u32 lane = (blockIdx.x * blockDim.x) + threadIdx.x;
-    if (lane < lanes)
+    if (lane < lanes_of(bytes))
     {
         const embed_u32 at = lane * EMBED_LANE_U32S;
         const embed_lane a = EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, one + at);
@@ -99,10 +114,10 @@ __global__ static void lane_arithmetic_kernel(const embed_u32 *one, const embed_
 }
 
 __global__ static void lane_masks_kernel(const embed_u8 *one, const embed_u8 *other, embed_u64 *equal, embed_u64 *zero,
-                                         embed_u32 *first_zero, embed_u32 lanes)
+                                         embed_u32 *first_zero, embed_u32 bytes)
 {
     const embed_u32 lane = (blockIdx.x * blockDim.x) + threadIdx.x;
-    if (lane < lanes)
+    if (lane < lanes_of(bytes))
     {
         const embed_lane a = EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, one + (lane * EMBED_LANE_BYTES));
         const embed_lane b = EMBED_CALL(embed_lane_load, EmbedLaneLoadCfg, other + (lane * EMBED_LANE_BYTES));
@@ -127,7 +142,12 @@ struct DeviceSpan
     size_t bytes;
 };
 
-/** @brief Takes `bytes` on the device, and copies `from` in where the caller gives one. */
+/**
+ * @brief Takes `bytes` on the device, and copies `from` in where the caller gives one.
+ *
+ * @note A span with no source starts at zero. A span of answers holds an entry for each of the most lanes, and the
+ *       device fills the first of them. The copy back then reads no byte that nothing wrote.
+ */
 static cudaError_t span_take(DeviceSpan *span, const void *from, size_t bytes)
 {
     span->at = nullptr;
@@ -136,6 +156,10 @@ static cudaError_t span_take(DeviceSpan *span, const void *from, size_t bytes)
     if ((status == cudaSuccess) && (from != nullptr))
     {
         status = cudaMemcpy(span->at, from, bytes, cudaMemcpyHostToDevice);
+    }
+    else if (status == cudaSuccess)
+    {
+        status = cudaMemset(span->at, 0, bytes);
     }
     return status;
 }
@@ -194,9 +218,8 @@ extern "C" int embed_lane_device_copy(const embed_u8 *from, embed_u8 *to, embed_
     }
     if (status == cudaSuccess)
     {
-        const embed_u32 lanes = lanes_of(bytes);
-        lane_copy_kernel<<<blocks_of(lanes), LANE_BLOCK_THREADS>>>(static_cast<const embed_u8 *>(in.at),
-                                                                  static_cast<embed_u8 *>(out.at), lanes);
+        lane_copy_kernel<<<blocks_of(most_lanes_of(bytes)), LANE_BLOCK_THREADS>>>(
+            static_cast<const embed_u8 *>(in.at), static_cast<embed_u8 *>(out.at), bytes);
         status = launched();
     }
     const cudaError_t given = span_give(&out, to);
@@ -210,8 +233,8 @@ extern "C" int embed_lane_device_fill(embed_u8 val, embed_u8 *to, embed_u32 byte
     cudaError_t status = span_take(&out, nullptr, bytes);
     if (status == cudaSuccess)
     {
-        const embed_u32 lanes = lanes_of(bytes);
-        lane_fill_kernel<<<blocks_of(lanes), LANE_BLOCK_THREADS>>>(val, static_cast<embed_u8 *>(out.at), lanes);
+        lane_fill_kernel<<<blocks_of(most_lanes_of(bytes)), LANE_BLOCK_THREADS>>>(
+            val, static_cast<embed_u8 *>(out.at), bytes);
         status = launched();
     }
     const cudaError_t given = span_give(&out, to);
@@ -229,9 +252,8 @@ extern "C" int embed_lane_device_divide(const embed_u32 *x, embed_u32 *divided, 
     }
     if (status == cudaSuccess)
     {
-        const embed_u32 lanes = lanes_of(bytes);
-        lane_divide_kernel<<<blocks_of(lanes), LANE_BLOCK_THREADS>>>(static_cast<const embed_u32 *>(in.at),
-                                                                    static_cast<embed_u32 *>(out.at), lanes);
+        lane_divide_kernel<<<blocks_of(most_lanes_of(bytes)), LANE_BLOCK_THREADS>>>(
+            static_cast<const embed_u32 *>(in.at), static_cast<embed_u32 *>(out.at), bytes);
         status = launched();
     }
     const cudaError_t given = span_give(&out, divided);
@@ -264,13 +286,12 @@ extern "C" int embed_lane_device_arithmetic(const embed_u32 *one, const embed_u3
     }
     if (status == cudaSuccess)
     {
-        const embed_u32 lanes = lanes_of(bytes);
-        lane_arithmetic_kernel<<<blocks_of(lanes), LANE_BLOCK_THREADS>>>(
+        lane_arithmetic_kernel<<<blocks_of(most_lanes_of(bytes)), LANE_BLOCK_THREADS>>>(
             static_cast<const embed_u32 *>(in_one.at), static_cast<const embed_u32 *>(in_other.at), count,
             static_cast<embed_u32 *>(spans[0].at), static_cast<embed_u32 *>(spans[1].at),
             static_cast<embed_u32 *>(spans[2].at), static_cast<embed_u32 *>(spans[3].at),
             static_cast<embed_u32 *>(spans[4].at), static_cast<embed_u32 *>(spans[5].at),
-            static_cast<embed_u32 *>(spans[6].at), static_cast<embed_u32 *>(spans[7].at), lanes);
+            static_cast<embed_u32 *>(spans[6].at), static_cast<embed_u32 *>(spans[7].at), bytes);
         status = launched();
     }
     for (unsigned int at = 0u; at < 8u; at += 1u)
@@ -286,7 +307,8 @@ extern "C" int embed_lane_device_arithmetic(const embed_u32 *one, const embed_u3
 extern "C" int embed_lane_device_masks(const embed_u8 *one, const embed_u8 *other, embed_u64 *equal, embed_u64 *zero,
                                        embed_u32 *first_zero, embed_u32 bytes)
 {
-    const embed_u32 lanes = lanes_of(bytes);
+    // The spans of answers hold one entry for each of the most lanes, and the device fills the first of them
+    const embed_u32 lanes = most_lanes_of(bytes);
     DeviceSpan in_one;
     DeviceSpan in_other;
     DeviceSpan out_equal;
@@ -314,7 +336,7 @@ extern "C" int embed_lane_device_masks(const embed_u8 *one, const embed_u8 *othe
         lane_masks_kernel<<<blocks_of(lanes), LANE_BLOCK_THREADS>>>(
             static_cast<const embed_u8 *>(in_one.at), static_cast<const embed_u8 *>(in_other.at),
             static_cast<embed_u64 *>(out_equal.at), static_cast<embed_u64 *>(out_zero.at),
-            static_cast<embed_u32 *>(out_first.at), lanes);
+            static_cast<embed_u32 *>(out_first.at), bytes);
         status = launched();
     }
     const bool ran = (status == cudaSuccess);

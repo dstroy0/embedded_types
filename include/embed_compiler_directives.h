@@ -275,6 +275,37 @@
 #endif
 
 /**
+ * @brief Defines name_ as a type of type_ that reads and writes at any address.
+ *
+ * @param[in] type_ The value type: an integer or the word.
+ * @param[in] name_ The name of the new type.
+ * @note In C and in the host pass of nvcc, name_ is type_ with EMBED_RAW.
+ * @note In the device pass of nvcc, name_ is a struct packed to 1 that holds one type_. The device faults on a word
+ *       access at an address that is not a multiple of the word. Under cl, EMBED_RAW has no attribute there. The
+ *       device pass reads and writes the packed struct a byte at a time. Its conversion gives the value, and its
+ *       assignment takes one. So `*(const name_ *)at` and `*(name_ *)at = value` read and write as they do in C.
+ */
+#if defined(__CUDA_ARCH__)
+#define EMBED_RAW_TYPE(type_, name_)                                                                                   \
+    _Pragma("pack(push, 1)") struct name_##_packed                                                                     \
+    {                                                                                                                  \
+        type_ value;                                                                                                   \
+        __device__ operator type_() const                                                                              \
+        {                                                                                                              \
+            return value;                                                                                              \
+        }                                                                                                              \
+        __device__ name_##_packed &operator=(type_ next)                                                               \
+        {                                                                                                              \
+            value = next;                                                                                              \
+            return *this;                                                                                              \
+        }                                                                                                              \
+    };                                                                                                                 \
+    _Pragma("pack(pop)") typedef struct name_##_packed name_
+#else
+#define EMBED_RAW_TYPE(type_, name_) typedef type_ name_ EMBED_RAW
+#endif
+
+/**
  * @brief Expands to `__host__ __device__` under nvcc, and to nothing on other compilers.
  *
  * @note A function with this macro compiles into each of the two passes of nvcc from one definition.
@@ -286,6 +317,125 @@
 #define EMBED_HOST_DEVICE __host__ __device__
 #else
 #define EMBED_HOST_DEVICE
+#endif
+
+/**
+ * @brief Expands to `__device__` in the device pass of nvcc, and to nothing in each other pass and on each other
+ *        compiler.
+ *
+ * @note An object at file scope with this macro lives in the memory of the pass that compiles it. The host pass
+ *       gives it host memory, and the device pass gives it device memory. Host code reads the host copy, and a
+ *       kernel reads the device copy, and each copy starts from the same initializer.
+ * @note Write it on an object with internal linkage alone, after static. Under nvcc, the presence of a definition
+ *       with external linkage must not depend on the pass. EMBED_PASS_OBJECT gives such an object a twin.
+ * @note Both arms define this macro.
+ * @warning The two copies are two objects. A write in a kernel changes the device copy, and the host copy does not
+ *          see it.
+ */
+#if defined(__CUDA_ARCH__)
+#define EMBED_PASS_MEMORY __device__
+#else
+#define EMBED_PASS_MEMORY
+#endif
+
+/**
+ * @brief The name of the twin of name_ that the pass reads. It is name_ in the host pass and on each other compiler.
+ *        In the device pass of nvcc, it is name_ with `_device` after it.
+ *
+ * @param[in] name_ The name of the object as the host reads it.
+ * @return          The name of the copy in the memory of the pass.
+ * @note EMBED_PASS_OBJECT defines the two twins, and EMBED_PASS_DECLARE declares them. Each read of the object goes
+ *       through this macro, and so a kernel reads the device twin.
+ */
+#if defined(__CUDA_ARCH__)
+#define EMBED_PASS_NAME(name_) name_##_device
+#else
+#define EMBED_PASS_NAME(name_) name_
+#endif
+
+/**
+ * @brief Declares an object with external linkage, and under nvcc its device twin with it.
+ *
+ * @param[in] type_   The type of the object, its qualifiers with it.
+ * @param[in] name_   The name of the object as the host reads it.
+ * @param[in] extent_ The array extent in brackets, or nothing for an object that is not an array.
+ * @note Under nvcc the twin is `__device__`, with `_device` after name_. Both twins exist in both passes, as nvcc
+ *       needs of a name with external linkage. Each other compiler declares name_ alone.
+ */
+#if defined(__CUDACC__)
+#define EMBED_PASS_DECLARE(type_, name_, extent_)                                                                      \
+    extern type_ name_ extent_;                                                                                        \
+    extern __device__ type_ name_##_device extent_
+#else
+#define EMBED_PASS_DECLARE(type_, name_, extent_) extern type_ name_ extent_
+#endif
+
+/**
+ * @brief Defines an object with external linkage from one initializer, and under nvcc its device twin from the
+ *        same initializer.
+ *
+ * @param[in] type_   The type of the object, its qualifiers with it.
+ * @param[in] name_   The name of the object as the host reads it.
+ * @param[in] extent_ The array extent in brackets, or nothing for an object that is not an array.
+ * @param[in] ...     The initializer.
+ * @note The initializer appears once at the definition, and so the two twins cannot differ.
+ * @note Each other compiler defines name_ alone.
+ */
+#if defined(__CUDACC__)
+#define EMBED_PASS_OBJECT(type_, name_, extent_, ...)                                                                  \
+    type_ name_ extent_ = __VA_ARGS__;                                                                                 \
+    __device__ type_ name_##_device extent_ = __VA_ARGS__
+#else
+#define EMBED_PASS_OBJECT(type_, name_, extent_, ...) type_ name_ extent_ = __VA_ARGS__
+#endif
+
+/**
+ * @brief Defines an object at file scope whose initializer names an object of the pass that reads it.
+ *
+ * @param[in] type_ The type of the object, its qualifiers with it.
+ * @param[in] name_ The name of the object, which host code and a kernel both read.
+ * @param[in] ...   The initializer, which names other objects through EMBED_PASS_NAME.
+ * @note Under nvcc the object is static, with EMBED_PASS_MEMORY, and so each pass has its own copy with its own
+ *       initializer. Host code and a kernel then read the object by one name.
+ * @note Each other compiler defines the object with external linkage, as a plain definition does.
+ * @warning Under nvcc the object is local to its unit, and a declaration of it in another unit names no definition.
+ */
+#if defined(__CUDACC__)
+#define EMBED_PASS_LOCAL(type_, name_, ...) static EMBED_PASS_MEMORY type_ name_ = __VA_ARGS__
+#else
+#define EMBED_PASS_LOCAL(type_, name_, ...) type_ name_ = __VA_ARGS__
+#endif
+
+/**
+ * @brief Expands to the restrict qualifier of the language: `restrict` in C, `__restrict__` under nvcc, and
+ *        `__restrict` in other C++.
+ *
+ * @note No revision of C++ has restrict. nvcc reads a bare restrict as a name, and the declaration of the
+ *       pointer then fails. Each C++ compiler here has its own form of the qualifier, with the effect it has in C.
+ * @note All three arms define this macro.
+ * @warning A pointer with this macro must be the only path to the memory that it reaches while it lives. Nothing
+ *          diagnoses a second path, and the compiler can then reorder the accesses of the two.
+ */
+#if defined(__CUDACC__)
+#define EMBED_RESTRICT __restrict__
+#elif defined(__cplusplus)
+#define EMBED_RESTRICT __restrict
+#else
+#define EMBED_RESTRICT restrict
+#endif
+
+/**
+ * @brief Expands to the alignment of type_: `_Alignof(type_)` in C, and `alignof(type_)` in C++.
+ *
+ * @param[in] type_ The type.
+ * @return          The alignment of type_ in bytes, a constant expression of type size_t.
+ * @note C++ has no _Alignof. Its alignof gives the same value.
+ * @note Both arms define this macro.
+ */
+#if defined(__cplusplus)
+#define EMBED_ALIGNOF(type_) alignof(type_)
+#else
+#define EMBED_ALIGNOF(type_) _Alignof(type_)
 #endif
 
 /**
@@ -461,19 +611,41 @@ EMBED_STATIC_ASSERT((EMBED_TARGET == EMBED_TARGET_HOST) || (EMBED_TARGET == EMBE
 #endif
 
 /**
- * @brief Expands to `__attribute__((weak))` where `EMBED_HAS_ATTRIBUTE(weak)` is not zero.
+ * @brief Expands to `extern "C"` where the compiler defines __cplusplus, and to nothing in C.
+ *
+ * @note A weak default has the name of C in each language. The alternate name of the MSVC linker is a name of C,
+ *       and so is the name that a C unit calls. A C++ compiler mangles a name that has no C linkage.
+ * @note A const object at file scope of C++ has internal linkage where no declaration of it comes first. C linkage
+ *       gives it external linkage, as C gives it.
+ * @note Both arms define this macro.
+ */
+#if defined(__cplusplus)
+#define EMBED_WEAK_LINKAGE extern "C"
+#else
+#define EMBED_WEAK_LINKAGE
+#endif
+
+/**
+ * @brief Expands to `__attribute__((weak))` where `EMBED_HAS_ATTRIBUTE(weak)` is not zero, with EMBED_WEAK_LINKAGE
+ *        ahead of it on each arm.
  *
  * @note The linker takes a strong definition of a name before a weak one. With no strong definition,
  *       the weak one links. So a default can ship here, and a port can replace it with no edit to
  *       this file.
- * @warning Expands to nothing where `EMBED_HAS_ATTRIBUTE(weak)` is 0. The default then has ordinary
+ * @note EMBED_WEAK_LINKAGE gives the default C linkage in C++, the language nvcc compiles. In C it expands to nothing.
+ * @note Expands to EMBED_WEAK_LINKAGE alone in the device pass of nvcc. Device code has no weak symbol, and the
+ *       device linker reads each member of a library. EMBED_WEAK_NAME gives the default a name of its own there, and
+ *       a program that reaches the name from a kernel defines it for the device.
+ * @warning Expands to EMBED_WEAK_LINKAGE alone where `EMBED_HAS_ATTRIBUTE(weak)` is 0. The default then has ordinary
  *          external linkage. A replacement becomes a duplicate symbol, and the link fails.
  */
-#if EMBED_HAS_ATTRIBUTE(weak)
-#define EMBED_WEAK __attribute__((weak))
+#if defined(__CUDA_ARCH__)
+#define EMBED_WEAK EMBED_WEAK_LINKAGE
+#elif EMBED_HAS_ATTRIBUTE(weak)
+#define EMBED_WEAK EMBED_WEAK_LINKAGE __attribute__((weak))
 #else
 
-#define EMBED_WEAK
+#define EMBED_WEAK EMBED_WEAK_LINKAGE
 #endif
 
 /**
@@ -488,10 +660,17 @@ EMBED_STATIC_ASSERT((EMBED_TARGET == EMBED_TARGET_HOST) || (EMBED_TARGET == EMBE
  *       name_ then wins, with no duplicate. EMBED_WEAK_DEFAULT emits that alternate name.
  * @note Write both at the default: `EMBED_WEAK_DEFAULT(name_)` at file scope, then the definition
  *       with EMBED_WEAK and `EMBED_WEAK_NAME(name_)`.
+ * @note In the device pass of nvcc the default is name_ with `_default` after it, on each host compiler. A call by
+ *       name_ in device code then reaches the definition of the program alone. A program that calls name_ from a
+ *       kernel defines it with EMBED_HOST_DEVICE, as it defines the hooks of embed_turnstile.h. A build with no
+ *       definition fails at the device link, which names it.
  * @warning Under MSVC, a call to the default by name_ in the unit that defines it goes through the
  *          linker, and never in line.
+ * @warning Where the host compiler of nvcc has the weak attribute, the two passes give the default two names. The
+ *          host pass names it name_, and the device pass names it name_ with `_default` after it. Under cl, the host
+ *          compiler of nvcc on Windows, the two passes give the same name.
  */
-#if !EMBED_HAS_ATTRIBUTE(weak) && defined(_MSC_VER)
+#if defined(__CUDA_ARCH__) || (!EMBED_HAS_ATTRIBUTE(weak) && defined(_MSC_VER))
 #define EMBED_WEAK_NAME(name_) name_##_default
 #else
 #define EMBED_WEAK_NAME(name_) name_
@@ -504,8 +683,12 @@ EMBED_STATIC_ASSERT((EMBED_TARGET == EMBED_TARGET_HOST) || (EMBED_TARGET == EMBE
  * @param[in] name_ The name that callers reach and that a port defines.
  * @note A C symbol on 32-bit x86 has an underscore at its start, and the linker reads the decorated
  *       names. So the x86 arm adds one underscore to each side.
+ * @note Expands to nothing in the device pass of nvcc. The device linker has no alternate name, and the device form
+ *       of name_ is the program's to define, as EMBED_WEAK_NAME states.
  */
-#if !EMBED_HAS_ATTRIBUTE(weak) && defined(_MSC_VER) && defined(_M_IX86)
+#if defined(__CUDA_ARCH__)
+#define EMBED_WEAK_DEFAULT(name_)
+#elif !EMBED_HAS_ATTRIBUTE(weak) && defined(_MSC_VER) && defined(_M_IX86)
 #define EMBED_WEAK_DEFAULT(name_) __pragma(comment(linker, "/alternatename:_" #name_ "=_" #name_ "_default"))
 #elif !EMBED_HAS_ATTRIBUTE(weak) && defined(_MSC_VER)
 #define EMBED_WEAK_DEFAULT(name_) __pragma(comment(linker, "/alternatename:" #name_ "=" #name_ "_default"))
@@ -722,11 +905,17 @@ EMBED_STATIC_ASSERT((EMBED_TARGET == EMBED_TARGET_HOST) || (EMBED_TARGET == EMBE
  *
  * @note A consumer writes EMBED_NULL where it means no address, and so the null pointer is the platform's, as each
  *       width here is.
+ * @note C++ gives a pointer to void to no other pointer type. So the C++ arm, the one nvcc compiles, is nullptr.
+ *       nullptr converts to each pointer type, as the C arm does in C.
  * @warning This header defines nothing where the build defines EMBED_NULL first. A port to a part whose null pointer
  *          is not the address 0 defines it on the command line, and EMBED_NULL_ZERO_BITS with it.
  */
 #ifndef EMBED_NULL
+#if defined(__cplusplus)
+#define EMBED_NULL nullptr
+#else
 #define EMBED_NULL ((void *)0)
+#endif
 #endif
 
 /**

@@ -200,7 +200,7 @@ typedef EMBED_CAT(embed_u, EMBED_INDEX_BITS) embed_index;
  *          through it undefined. Nothing diagnoses that. The warnings on EMBED_ALIGN and EMBED_ALIAS
  *          in embed_compiler_directives.h cover the same failure.
  */
-typedef embed_word embed_raw_word EMBED_RAW;
+EMBED_RAW_TYPE(embed_word, embed_raw_word);
 
 /**
  * @brief The stored form of a 64-bit count: one embed_u64 on a host and on a device, and two embed_u32 halves on an
@@ -234,7 +234,7 @@ typedef struct
  * @param[in] args The parameters, as EmbedStoredU64GetCfg holds them [BORROWS].
  * @return         The count.
  */
-EMBED_INLINE embed_u64 embed_stored_u64_get(const EmbedStoredU64GetCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_stored_u64_get(const EmbedStoredU64GetCfg *args)
 {
 #if EMBED_TARGET == EMBED_TARGET_EMBEDDED
     // Explicit casts widen each half to the count before the upper half moves to bits 32 to 63
@@ -257,7 +257,7 @@ typedef struct
  * @param[in] args The parameters, as EmbedStoredU64SetCfg holds them [BORROWS].
  * @note On an embedded target the write stores the upper word only where it changes.
  */
-EMBED_INLINE void embed_stored_u64_set(const EmbedStoredU64SetCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_stored_u64_set(const EmbedStoredU64SetCfg *args)
 {
 #if EMBED_TARGET == EMBED_TARGET_EMBEDDED
     // Explicit casts narrow the count to its two halves, each of which fits an embed_u32
@@ -338,15 +338,13 @@ typedef struct
 } EmbedStoredU64Ns;
 EMBED_TABLE_LAYOUT(EmbedStoredU64Ns, get, set);
 
-#if !defined(__CUDA_ARCH__)
 /**
  * @brief The table of embed_types.h. A call through it folds to a direct call under the optimizer and LTO.
  *
- * @note The device pass of CUDA has no table, because a kernel cannot read the address of a host function. A
- *       kernel calls each function by its name.
+ * @note EMBED_TABLE_STORAGE holds the table. Under nvcc each pass gets its own copy, and a kernel calls through it.
  */
-static const EmbedStoredU64Ns embed_stored_u64_table = {embed_stored_u64_get, embed_stored_u64_set};
-#endif
+EMBED_TABLE_STORAGE EmbedStoredU64Ns embed_stored_u64_table EMBED_UNUSED = {embed_stored_u64_get,
+                                                                            embed_stored_u64_set};
 
 EMBED_END_DECLS
 

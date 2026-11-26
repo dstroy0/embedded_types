@@ -135,7 +135,7 @@ The index type, [`EMBED_INDEX_BITS`](#EMBED_INDEX_BITS) wide, for every offset a
 ### `embed_raw_word` { #embed_raw_word }
 
 ```c
-typedef embed_word embed_raw_word EMBED_RAW;
+EMBED_RAW_TYPE(embed_word, embed_raw_word);
 ```
 
 The word again, readable from an address that is not a multiple of its width.
@@ -318,7 +318,7 @@ The width of an offset or a length in bits.
 ### `embed_stored_u64_get` { #embed_stored_u64_get }
 
 ```c
-EMBED_INLINE embed_u64 embed_stored_u64_get(const EmbedStoredU64GetCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE embed_u64 embed_stored_u64_get(const EmbedStoredU64GetCfg *args);
 ```
 
 The count that a stored form holds.
@@ -330,7 +330,7 @@ The count that a stored form holds.
 ### `embed_stored_u64_set` { #embed_stored_u64_set }
 
 ```c
-EMBED_INLINE void embed_stored_u64_set(const EmbedStoredU64SetCfg *args);
+EMBED_HOST_DEVICE EMBED_INLINE void embed_stored_u64_set(const EmbedStoredU64SetCfg *args);
 ```
 
 Writes a count into a stored form.
@@ -344,14 +344,13 @@ Writes a count into a stored form.
 ### `embed_stored_u64_table` { #embed_stored_u64_table }
 
 ```c
-#if !defined(__CUDA_ARCH__)
-static const EmbedStoredU64Ns embed_stored_u64_table = {embed_stored_u64_get, embed_stored_u64_set};
-#endif
+EMBED_TABLE_STORAGE EmbedStoredU64Ns embed_stored_u64_table EMBED_UNUSED = {embed_stored_u64_get,
+                                                                            embed_stored_u64_set};
 ```
 
 The table of `embed_types`.h. A call through it folds to a direct call under the optimizer and LTO.
 
-> **Note:** The device pass of CUDA has no table, because a kernel cannot read the address of a host function. A kernel calls each function by its name.
+> **Note:** [`EMBED_TABLE_STORAGE`](embed_dispatch_layout.md#EMBED_TABLE_STORAGE) holds the table. Under nvcc each pass gets its own copy, and a kernel calls through it.
 
 ## Assertions
 

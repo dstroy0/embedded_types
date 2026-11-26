@@ -153,8 +153,10 @@ typedef struct
  *                 a sleeper tests what it waits for in a loop.
  * @note The host defines this function on its address wait. That is a futex on Linux, WaitOnAddress on Windows, and
  *       __ulock_wait on macOS. Where the system has none, it is a timed sleep.
+ * @note The declaration has EMBED_HOST_DEVICE. A CUDA program defines it in a unit that nvcc compiles. The host pass
+ *       has the address wait, and the device pass has a timed spin on the word. A device has no address wait.
  */
-int embed_word_wait(const EmbedWordWaitCfg *args);
+EMBED_HOST_DEVICE int embed_word_wait(const EmbedWordWaitCfg *args);
 
 /** @brief The parameters of embed_word_wake. */
 typedef struct
@@ -166,9 +168,10 @@ typedef struct
  * @brief Every thread asleep on word woken.
  *
  * @param[in] args The parameters, as EmbedWordWakeCfg holds them [BORROWS].
- * @note The host defines this beside embed_word_wait.
+ * @note The host defines this beside embed_word_wait, with the same mark. In the device pass a spin sees the change
+ *       of the word, and the wake has nothing to do.
  */
-void embed_word_wake(const EmbedWordWakeCfg *args);
+EMBED_HOST_DEVICE void embed_word_wake(const EmbedWordWakeCfg *args);
 
 /**
  * @brief The host's clock in nanoseconds, which the backoff measures its time on.
@@ -179,8 +182,9 @@ void embed_word_wake(const EmbedWordWakeCfg *args);
  *          of 16 bits. The backoff takes the difference of two reads, and that difference is correct across the roll.
  *          A step one roll or more after its start reads the time modulo the roll. Where that is below one unit, the
  *          step pauses and makes no call.
+ * @note The declaration has EMBED_HOST_DEVICE, as embed_word_wait has.
  */
-embed_word embed_clock_ns(void);
+EMBED_HOST_DEVICE embed_word embed_clock_ns(void);
 
 /**
  * @brief The place of the thread that calls: a count that names it among the threads of the program.
@@ -190,8 +194,10 @@ embed_word embed_clock_ns(void);
  * @note The host defines this beside embed_word_wait. A host with one thread answers 0.
  * @note A consumer that holds a store for each thread indexes the stores by this place, modulo the count of its stores.
  *       Two threads whose places meet modulo that count then share one store, which is correct and slower.
+ * @note The declaration has EMBED_HOST_DEVICE, as embed_word_wait has. In the device pass, the place of a thread is
+ *       its index in the grid. No two live threads of a grid have one index.
  */
-embed_u32 embed_thread_place(void);
+EMBED_HOST_DEVICE embed_u32 embed_thread_place(void);
 
 /**
  * @brief The processor's pause in a spin, a compiler barrier alone where the processor has none the compiler reaches.
@@ -218,7 +224,7 @@ typedef struct
  *
  * @param[in] args The parameters, as EmbedTurnstileBackoffBeginCfg holds them [BORROWS].
  */
-EMBED_INLINE void embed_turnstile_backoff_begin(const EmbedTurnstileBackoffBeginCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_turnstile_backoff_begin(const EmbedTurnstileBackoffBeginCfg *args)
 {
     args->backoff->start_ns = embed_clock_ns();
     args->backoff->exponent = 0u;
@@ -245,7 +251,7 @@ typedef struct
  * @note The sleep needs a value that a later change ends. A caller sleeps only on a value whose change comes with a
  *       wake, such as a lane word that has the busy bit.
  */
-EMBED_INLINE void embed_turnstile_backoff_step(const EmbedTurnstileBackoffStepCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_turnstile_backoff_step(const EmbedTurnstileBackoffStepCfg *args)
 {
     EMBED_TURNSTILE_SPIN_PAUSE();
     // Explicit cast takes the difference modulo the word, because a word narrower than int promotes to int
@@ -275,7 +281,7 @@ typedef struct
  * @param[in] args The parameters, as EmbedTurnstileOpenLaneCountCfg holds them [BORROWS].
  * @return         The lanes open, from 1 to EMBED_TURNSTILE_LANES.
  */
-EMBED_INLINE unsigned int embed_turnstile_open_lane_count(const EmbedTurnstileOpenLaneCountCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE unsigned int embed_turnstile_open_lane_count(const EmbedTurnstileOpenLaneCountCfg *args)
 {
     // Explicit cast takes the place of the top open lane from the word, which EMBED_TURNSTILE_LANES bounds
     return (unsigned int)EMBED_CALL(embed_atomic_word_load, EmbedAtomicWordLoadCfg, &args->set->top_open_lane) + 1u;
@@ -294,7 +300,7 @@ typedef struct
  *
  * @param[in] args The parameters, as EmbedTurnstileLaneAddCfg holds them [BORROWS].
  */
-EMBED_INLINE void embed_turnstile_lane_add(const EmbedTurnstileLaneAddCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_turnstile_lane_add(const EmbedTurnstileLaneAddCfg *args)
 {
     const embed_atomic_word_value previous_word =
         EMBED_CALL(embed_atomic_word_fetch_add, EmbedAtomicWordFetchAddCfg, &args->lane->word, args->addend);
@@ -337,7 +343,7 @@ typedef struct
  *       contraction's swap and its close. The caller sleeps on `held_word`: the end of that hold changes the word
  *       and wakes it.
  */
-EMBED_INLINE unsigned int embed_turnstile_grow(const EmbedTurnstileGrowCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE unsigned int embed_turnstile_grow(const EmbedTurnstileGrowCfg *args)
 {
     *args->held_word = 0u;
     if (args->open_lane_count >= EMBED_TURNSTILE_LANES)
@@ -401,7 +407,7 @@ typedef struct
  *                 failed.
  * @note A lane that a pass holds refuses the claim, and nothing changes. So each pass stays below the open count.
  */
-EMBED_INLINE embed_bool embed_turnstile_contract(const EmbedTurnstileContractCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE embed_bool embed_turnstile_contract(const EmbedTurnstileContractCfg *args)
 {
     EmbedTurnstileLane *const lane = &args->set->lanes[args->open_lane_count - 1u];
     const embed_atomic_word_value previous_word =
@@ -440,7 +446,7 @@ typedef struct
  * @note A lane with busy in the old value refuses the fetch-or, and nothing changes. The spill writes no word but
  *       the lane words.
  */
-EMBED_INLINE unsigned int embed_turnstile_spill(const EmbedTurnstileSpillCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE unsigned int embed_turnstile_spill(const EmbedTurnstileSpillCfg *args)
 {
     unsigned int place = args->start_lane;
 
@@ -480,7 +486,7 @@ typedef struct
  * @return         The lane's place, which the end of the pass takes.
  * @note The pass reads the data of a published pointer only after the entry returns, and none of it after the leave.
  */
-EMBED_INLINE unsigned int embed_turnstile_enter(const EmbedTurnstileEnterCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE unsigned int embed_turnstile_enter(const EmbedTurnstileEnterCfg *args)
 {
     EmbedTurnstileBackoff backoff;
     embed_bool queue_member = EMBED_FALSE;
@@ -565,7 +571,7 @@ typedef struct
  * @note Only the end of a pass on the top lane contracts. So the end of a pass on a lower lane reads and writes no
  *       word but its own lane word and `top_open_lane`.
  */
-EMBED_INLINE void embed_turnstile_leave(const EmbedTurnstileLeaveCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_turnstile_leave(const EmbedTurnstileLeaveCfg *args)
 {
     EMBED_CALL(embed_turnstile_lane_add, EmbedTurnstileLaneAddCfg, &args->set->lanes[args->place],
                EMBED_TURNSTILE_GENERATION_UNIT - EMBED_TURNSTILE_BUSY_BIT);
@@ -605,7 +611,7 @@ typedef struct
  * @note A round that finds the lane still held backs off on that lane word, with the sleeper bit. The end of the pass
  *       changes the word and wakes it.
  */
-EMBED_INLINE void embed_turnstiles_drain(const EmbedTurnstilesDrainCfg *args)
+EMBED_HOST_DEVICE EMBED_INLINE void embed_turnstiles_drain(const EmbedTurnstilesDrainCfg *args)
 {
     embed_atomic_word_value snapshot[EMBED_TURNSTILE_LANES];
 
@@ -660,24 +666,21 @@ typedef struct
 EMBED_TABLE_LAYOUT(EmbedTurnstileNs, word_wait, word_wake, clock_ns, thread_place, backoff_begin, backoff_step,
                    open_lane_count, enter, leave, drain);
 
-#if !defined(__CUDA_ARCH__)
 /**
  * @brief The table of embed_turnstile.h. A call through it folds to a direct call under the optimizer and LTO.
  *
- * @note The device pass of CUDA has no table, because a kernel cannot read the address of a host function. A
- *       kernel calls each function by its name.
+ * @note EMBED_TABLE_STORAGE holds the table. Under nvcc each pass gets its own copy, and a kernel calls through it.
  */
-static const EmbedTurnstileNs embed_turnstile_table = {embed_word_wait,
-                                                       embed_word_wake,
-                                                       embed_clock_ns,
-                                                       embed_thread_place,
-                                                       embed_turnstile_backoff_begin,
-                                                       embed_turnstile_backoff_step,
-                                                       embed_turnstile_open_lane_count,
-                                                       embed_turnstile_enter,
-                                                       embed_turnstile_leave,
-                                                       embed_turnstiles_drain};
-#endif
+EMBED_TABLE_STORAGE EmbedTurnstileNs embed_turnstile_table EMBED_UNUSED = {embed_word_wait,
+                                                                           embed_word_wake,
+                                                                           embed_clock_ns,
+                                                                           embed_thread_place,
+                                                                           embed_turnstile_backoff_begin,
+                                                                           embed_turnstile_backoff_step,
+                                                                           embed_turnstile_open_lane_count,
+                                                                           embed_turnstile_enter,
+                                                                           embed_turnstile_leave,
+                                                                           embed_turnstiles_drain};
 
 EMBED_END_DECLS
 

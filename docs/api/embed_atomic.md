@@ -731,7 +731,7 @@ Defines the operations over one atomic width, the Cfg of each and the dispatch t
 
 ```c
 #define EMBED_ATOMIC_TABLE(name_, Width_) \
-    static const EmbedAtomic##Width_##Ns embed_atomic_##name_##_table = { \
+    EMBED_TABLE_STORAGE EmbedAtomic##Width_##Ns embed_atomic_##name_##_table EMBED_UNUSED = { \
         embed_atomic_##name_##_load,     embed_atomic_##name_##_store,     embed_atomic_##name_##_exchange, \
         embed_atomic_##name_##_swap_if,  embed_atomic_##name_##_fetch_add, embed_atomic_##name_##_fetch_sub, \
         embed_atomic_##name_##_fetch_or, embed_atomic_##name_##_fetch_and, embed_atomic_##name_##_raise}
@@ -741,6 +741,8 @@ Defines the dispatch table of one atomic width. A call through it folds to a dir
 
 - `[in]`: `name_` The suffix of the width.
 - `[in]`: `Width_` The same suffix in the case of a type.
+
+> **Note:** [`EMBED_TABLE_STORAGE`](embed_dispatch_layout.md#EMBED_TABLE_STORAGE) holds the table. Under nvcc each pass gets its own copy, and a kernel calls through it.
 
 ### `EMBED_ATOMIC_CAS_32` { #EMBED_ATOMIC_CAS_32 }
 

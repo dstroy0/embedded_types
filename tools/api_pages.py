@@ -471,7 +471,7 @@ class Header:
             return self.record(at, arms)
         if text.startswith("typedef"):
             return self.typedef(at, arms)
-        if text.startswith("static const"):
+        if text.startswith(("static const", "EMBED_TABLE_STORAGE")):
             return self.table(at, arms)
         head = re.match(r"([A-Z][A-Z0-9_]*)\s*\(", text)
         body, end = self.parenthesized(at)
@@ -514,7 +514,8 @@ class Header:
         while "};" not in code_only(body[-1]):
             at += 1
             body.append(self.lines[at])
-        name = IDENT.findall(code_only(body[0]).split("=")[0])[-1]
+        # EMBED_UNUSED follows the name of a table, and so the name is the last identifier before it
+        name = [word for word in IDENT.findall(code_only(body[0]).split("=")[0]) if word != "EMBED_UNUSED"][-1]
         return Decl("table", name, "\n".join(part.rstrip() for part in body), start, arms), at + 1
 
     def parenthesized(self, at):
@@ -538,6 +539,10 @@ class Header:
         if macro == "EMBED_ENUM_BYTE":
             name = split_args(code_only(joined))[0]
             return Decl("type", name, joined, start, arms, members_in(body)), at + 1
+        # EMBED_RAW_TYPE defines the type that its second argument names
+        if macro == "EMBED_RAW_TYPE":
+            name = split_args(code_only(joined))[1].strip()
+            return Decl("type", name, joined, start, arms), at + 1
         if macro in self.templates:
             return Decl("invocation", macro, joined, start, arms), at + 1
         # A table layout asserts the slots of the type above it. A table invocation defines a table, and a block in

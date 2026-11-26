@@ -743,16 +743,22 @@ Asserts a table's members sit at consecutive slots and that nothing else is in i
 ### `EMBED_TABLE_STORAGE` { #EMBED_TABLE_STORAGE }
 
 ```c
-#define EMBED_TABLE_STORAGE static const
+#define EMBED_TABLE_STORAGE static EMBED_PASS_MEMORY const
 ```
 
-Expands to static const.
+Expands to static const, and to `static __device__ const` in the device pass of nvcc.
 
 > **Note:** Declares a dispatch table. static gives internal linkage. Each translation unit that includes the header gets its own copy. The copies do not collide at link time.
 
 > **Note:** const lets the compiler resolve a call through a table entry to the function directly. That needs a table no other translation unit can reach and no code assigns to.
 
+> **Note:** nvcc reads each translation unit twice, once for the host and once for the device. Each pass gets its own copy of the table. The host copy holds the host address of each function, and the device copy holds the device address. A function with [`EMBED_HOST_DEVICE`](embed_compiler_directives.md#EMBED_HOST_DEVICE) has both, and so one initializer fills both copies. A kernel then calls through the table as a host function does.
+
+> **Note:** The type of the table is the same in both passes. Only the memory that holds it changes. The copy is static, and so no other translation unit and no host code reaches the device copy.
+
 > **Note:** This macro does not supply [`EMBED_UNUSED`](embed_compiler_directives.md#EMBED_UNUSED). Write it on the table as well. A translation unit that calls nothing through the table warns without it.
+
+> _**Warning:**_ Each member of a table with this macro must point at a function with [`EMBED_HOST_DEVICE`](embed_compiler_directives.md#EMBED_HOST_DEVICE). In the device pass, nvcc refuses the address of a function that has no device form.
 
 ### `EMBED_NARG` { #EMBED_NARG }
 
@@ -834,7 +840,7 @@ Expands to `entry_`(&(`ArgsType_`){`__VA_ARGS__`}).
 
 > **Note:** A call in C++ before C++20 gives the initializers in the order of the members, with no designators. Each call in these headers does so, and so each header compiles as C++11.
 
-> **Note:** [`EMBED_ENTRY`](#EMBED_ENTRY) and [`EMBED_ENTRY_V`](#EMBED_ENTRY_V) expand this macro at a definition site, which is a .c file that compiles as C. A C++ translation unit sees the prototype under [`EMBED_BEGIN_DECLS`](embed_compiler_directives.md#EMBED_BEGIN_DECLS) and never the expansion.
+> **Note:** [`EMBED_ENTRY`](#EMBED_ENTRY) and [`EMBED_ENTRY_V`](#EMBED_ENTRY_V) expand this macro at a definition site, which is a .c file. That file compiles as C, or as CUDA under nvcc. A C++ translation unit that is not CUDA sees the prototype under [`EMBED_BEGIN_DECLS`](embed_compiler_directives.md#EMBED_BEGIN_DECLS) and never the expansion.
 
 > _**Warning:**_ `entry_` receives the address of the literal \[BORROWS\]. In C++ the address is good for the call alone, so `entry_` must not retain it.
 
@@ -842,7 +848,7 @@ Expands to `entry_`(&(`ArgsType_`){`__VA_ARGS__`}).
 
 ```c
 #define EMBED_ENTRY(entry_prefix_, backend_prefix_, CtxType_, CfgType_, ReturnType_, name_, ...) \
-    ReturnType_ entry_prefix_##name_(const CfgType_ *args) \
+    EMBED_HOST_DEVICE ReturnType_ entry_prefix_##name_(const CfgType_ *args) \
     { \
         return EMBED_CALL(backend_prefix_##name_, CtxType_, __VA_ARGS__); \
     }
@@ -862,13 +868,15 @@ Defines an entry point that returns a value and forwards an argument pack.
 
 > **Note:** One shape for each entry in the library. A caller writes the same call at each module. The entry tests nothing. The backend that it names does each check that an operation needs.
 
+> **Note:** The entry has [`EMBED_HOST_DEVICE`](embed_compiler_directives.md#EMBED_HOST_DEVICE). Under nvcc it compiles into the host pass and the device pass, and its prototype and its backend must have the same mark.
+
 > _**Warning:**_ The initializers dereference args, so it must not be NULL \[BORROWS\].
 
 ### `EMBED_ENTRY_V` { #EMBED_ENTRY_V }
 
 ```c
 #define EMBED_ENTRY_V(entry_prefix_, backend_prefix_, CtxType_, CfgType_, name_, ...) \
-    void entry_prefix_##name_(const CfgType_ *args) \
+    EMBED_HOST_DEVICE void entry_prefix_##name_(const CfgType_ *args) \
     { \
         EMBED_CALL(backend_prefix_##name_, CtxType_, __VA_ARGS__); \
     }
@@ -885,6 +893,8 @@ Defines a void entry point that forwards an argument pack.
 
 > **Note:** The same body as [`EMBED_ENTRY`](#EMBED_ENTRY), without the return. Two macros exist because void does not work as `ReturnType_`. With `void` there, the macro still emits `return backend(...)`, and C forbids a return with an expression in a function that returns void.
 
+> **Note:** The entry has [`EMBED_HOST_DEVICE`](embed_compiler_directives.md#EMBED_HOST_DEVICE), as [`EMBED_ENTRY`](#EMBED_ENTRY) gives.
+
 > _**Warning:**_ The initializers dereference args, so it must not be NULL \[BORROWS\].
 
 ## Functions
@@ -893,7 +903,7 @@ Defines a void entry point that forwards an argument pack.
 
 ```c
 #if defined(__cplusplus)
-extern "C++" template <typename Cfg_> EMBED_HOST_DEVICE inline const Cfg_ *embed_cfg_address(const Cfg_ &cfg);
+extern "C++" template <typename Cfg_> EMBED_HOST_DEVICE inline Cfg_ *embed_cfg_address(Cfg_ &&cfg);
 #endif
 ```
 
@@ -904,3 +914,7 @@ The address of a Cfg, for [`EMBED_CALL`](#EMBED_CALL) in C++, where a braced tem
 \*\*Returns:\*\* The address of cfg, good to the end of the full-expression of the call.
 
 > **Note:** `Cfg_` is the type of the Cfg. The template has C++ linkage, inside the C guard of this header.
+
+> **Note:** The address is not const, as the address of a compound literal of C is not. A backend that takes a pointer to a Ctx that it can write to then takes the same call in C and in C++.
+
+> **Note:** [`EMBED_CALL`](#EMBED_CALL) gives a braced temporary, which binds to the reference of a temporary. An object with a name does not bind, and so this template takes no address of an object that outlives the call.

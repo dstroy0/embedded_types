@@ -370,9 +370,10 @@ EMBED_STATIC_ASSERT(sizeof(embed_atomic_u64) == 8u, "embed_atomic_u64 must be on
  *
  * @param[in] name_  The suffix of the width.
  * @param[in] Width_ The same suffix in the case of a type.
+ * @note EMBED_TABLE_STORAGE holds the table. Under nvcc each pass gets its own copy, and a kernel calls through it.
  */
 #define EMBED_ATOMIC_TABLE(name_, Width_)                                                                              \
-    static const EmbedAtomic##Width_##Ns embed_atomic_##name_##_table = {                                              \
+    EMBED_TABLE_STORAGE EmbedAtomic##Width_##Ns embed_atomic_##name_##_table EMBED_UNUSED = {                          \
         embed_atomic_##name_##_load,     embed_atomic_##name_##_store,     embed_atomic_##name_##_exchange,            \
         embed_atomic_##name_##_swap_if,  embed_atomic_##name_##_fetch_add, embed_atomic_##name_##_fetch_sub,           \
         embed_atomic_##name_##_fetch_or, embed_atomic_##name_##_fetch_and, embed_atomic_##name_##_raise}
@@ -479,13 +480,10 @@ EMBED_ATOMIC_OPERATIONS(u64, U64, embed_u64, EMBED_ATOMIC_EXCHANGE_64, EMBED_ATO
                         EMBED_ATOMIC_OR_64, EMBED_ATOMIC_AND_64)
 #endif
 
-#if !defined(__CUDA_ARCH__)
-// The table of each width. The device pass of CUDA has no table, because a kernel cannot read the address of a
-// host function. A kernel calls each operation by its name
+// The table of each width, in each pass of nvcc
 EMBED_ATOMIC_TABLE(u32, U32);
 #if EMBED_ATOMIC_HAS_64
 EMBED_ATOMIC_TABLE(u64, U64);
-#endif
 #endif
 
 /**
