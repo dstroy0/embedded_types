@@ -60,6 +60,22 @@ NOT_VERB_ING = {"anything", "bring", "ceiling", "during", "everything", "king", 
 WORD = re.compile(r"[A-Za-z][A-Za-z0-9_'-]*")
 # An emphasis mark: a run of stars, or a run of underscores at the edge of a word and never inside one
 EMPHASIS = re.compile(r"\*{1,3}|(?<![A-Za-z0-9])_{1,3}|_{1,3}(?![A-Za-z0-9])")
+# A file name, with its path where it has one: listing.c, sass.krs, scaffolding/mmio_read.h. It is a technical name,
+# and Rule 3.6 lets a technical name keep its -ing. WORD splits a word at a dot and a slash, thus without this rule
+# ruling.c reads as the verb form "ruling" and sass.krs as two words. The extensions are those of the files of the
+# trees that carry this checker.
+FILE_NAME = re.compile(
+    r"(?<![\w./-])(?:[\w.-]+/)*[A-Za-z_][\w-]*(?:\.[\w-]+)*"
+    r"\.(?:c|h|cu|cuh|cpp|hpp|cc|inl|py|sh|ps1|js|ts|rs|md|tex|txt|tsv|csv|json|html|css|toml|yml|yaml|cfg|lean|"
+    r"krs|ksc|ksg|kdm|klm|qry|ptx|qasm|sql)(?![\w-])")
+
+
+def file_word(found):
+    """The file name found, as one word: each dot and slash of it an underscore, as in ruling_c.
+
+    A word with an underscore is a technical name to is_name. The word keeps the letters and the case of the name.
+    Thus a finding still quotes a name that a reader knows, and a sentence starts where it started before."""
+    return found.group(0).replace(".", "_").replace("/", "_")
 
 
 def documents(paths):
@@ -117,6 +133,8 @@ def prose_lines(text):
         prose = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", prose)
         prose = re.sub(r"https?://\S+", CODE_SPAN, prose)
         prose = re.sub(r"\$[^$]*\$", CODE_SPAN, prose)
+        # a file name counts as one word, a technical name: a code span or a link target holds none here any more
+        prose = FILE_NAME.sub(file_word, prose)
         prose = EMPHASIS.sub("", prose)
         out.append((number, prose))
     return out
