@@ -61,9 +61,9 @@ WORD = re.compile(r"[A-Za-z][A-Za-z0-9_'-]*")
 # An emphasis mark: a run of stars, or a run of underscores at the edge of a word and never inside one
 EMPHASIS = re.compile(r"\*{1,3}|(?<![A-Za-z0-9])_{1,3}|_{1,3}(?![A-Za-z0-9])")
 # A file name, with its path where it has one: listing.c, sass.krs, scaffolding/mmio_read.h. It is a technical name,
-# and Rule 3.6 lets a technical name keep its -ing. WORD splits a word at a dot and a slash, thus without this rule
-# ruling.c reads as the verb form "ruling" and sass.krs as two words. The extensions are those of the files of the
-# trees that carry this checker.
+# and Rule 3.6 lets a technical name keep its -ing. WORD splits a word at a dot and a slash. Without this rule, the
+# checker reads the name ruling.c as a verb form, and sass.krs as two words. The extensions are those of the files of
+# the trees that carry this checker.
 FILE_NAME = re.compile(
     r"(?<![\w./-])(?:[\w.-]+/)*[A-Za-z_][\w-]*(?:\.[\w-]+)*"
     r"\.(?:c|h|cu|cuh|cpp|hpp|cc|inl|py|sh|ps1|js|ts|rs|md|tex|txt|tsv|csv|json|html|css|toml|yml|yaml|cfg|lean|"
